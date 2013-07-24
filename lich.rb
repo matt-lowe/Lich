@@ -1,7 +1,4 @@
 #!/usr/bin/env ruby
-=begin
- version 3.96
-=end
 #####
 # Copyright (C) 2005-2006 Murray Miron
 # All rights reserved.
@@ -33,12 +30,6 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
-
-if $version
-	# This file is in the repository as lich-update.lic.  Someone will probably try to run it from within Lich.
-	echo "Don't do that."
-	exit
-end
 
 require 'time'
 require 'socket'
@@ -478,39 +469,9 @@ at_exit { $gtk.do "Gtk.main_quit" rescue(); Process.waitall }
 # fixme: terminal mode
 # fixme: $_TA_BUFFER_
 # fixme: signs3 uses Script.self.io
-
-$injuries = Hash.new
-['nsys','leftArm','rightArm','rightLeg','leftLeg','head','rightFoot','leftFoot','rightHand','leftHand','rightEye','leftEye','back','neck','chest','abdomen'].each { |area| $injuries[area] = { 'wound' => 0, 'scar' => 0 } }
-$injury_mode = 0
-
-$prepared_spell = 'None'
-
-$roundtime_end = 0
-$cast_roundtime_end = 0
-$last_pulse = Time.now.to_i
-$server_time = Time.now.to_i
-$server_time_offset = 0
-
-# $poisons = Array.new
-# $diseases = Array.new
-
-$indicator = Hash.new
-
-$room_title = String.new
-$room_description = String.new
-$room_exits = Array.new
-
-$familiar_room_title = String.new
-$familiar_room_description = String.new
-$familiar_room_exits = Array.new
+# fixme: maybe add script dir to load path
 
 $room_count = 0
-
-$last_dir = String.new
-
-$spellfront = Array.new
-
-$nerve_tracker_num = 0
 
 INFINITY = 1 << 32
 
@@ -580,49 +541,109 @@ ICONMAP = {
 	'IconBLEEDING' => 'O',
 }
 
-def make_wound_gsl
-	$wound_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",$injuries['nsys']['wound'],$injuries['leftEye']['wound'],$injuries['rightEye']['wound'],$injuries['back']['wound'],$injuries['abdomen']['wound'],$injuries['chest']['wound'],$injuries['leftHand']['wound'],$injuries['rightHand']['wound'],$injuries['leftLeg']['wound'],$injuries['rightLeg']['wound'],$injuries['leftArm']['wound'],$injuries['rightArm']['wound'],$injuries['neck']['wound'],$injuries['head']['wound'])
-end
-
-def make_scar_gsl
-	$scar_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",$injuries['nsys']['scar'],$injuries['leftEye']['scar'],$injuries['rightEye']['scar'],$injuries['back']['scar'],$injuries['abdomen']['scar'],$injuries['chest']['scar'],$injuries['leftHand']['scar'],$injuries['rightHand']['scar'],$injuries['leftLeg']['scar'],$injuries['rightLeg']['scar'],$injuries['leftArm']['scar'],$injuries['rightArm']['scar'],$injuries['neck']['scar'],$injuries['head']['scar'])
-end
-
-class SF_XML
+class XMLParser
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :next_level_value, :next_level_text
 	include StreamListener
-	@@bold ||= false
-	@@active_tags ||= Array.new
-	@@active_ids ||= Array.new
-	@@current_stream ||= String.new
-	@@current_style ||= String.new
-	@@stow_container ||= nil
-	@@obj_exist ||= nil
-	@@obj_noun ||= nil
-	@@player_dead ||= nil
-	@@player_stunned ||= nil
-	@@fam_mode ||= String.new
-	@@room_window_disabled ||= false
 
+	def initialize
+		@bold = false
+		@active_tags = Array.new
+		@active_ids = Array.new
+		@current_stream = String.new
+		@current_style = String.new
+		@stow_container = nil
+		@obj_exist = nil
+		@obj_noun = nil
+		@player_status = nil
+		@fam_mode = String.new
+		@room_window_disabled = false
+		@wound_gsl = String.new
+		@scar_gsl = String.new
+		@send_fake_tags = false
+		#@prompt = String.new
+		@nerve_tracker_num = 0
+		@nerve_tracker_active = 'no'
+		@server_time = Time.now.to_i
+		@server_time_offset = 0
+		@roundtime_end = 0
+		@cast_roundtime_end = Time.now.to_i
+		@last_pulse = Time.now.to_i
+		@next_level_value
+		@next_level_text
+
+		@room_count = 0
+		@room_title = String.new
+		@room_description = String.new
+		@room_exits = Array.new
+		@room_exits_string = String.new
+
+		@familiar_room_title = String.new
+		@familiar_room_description = String.new
+		@familiar_room_exits = Array.new
+
+		@spellfront = Array.new
+		@bounty_task = String.new
+		@society_task = String.new
+
+		@mana = 0
+		@max_mana = 0
+		@health = 0
+		@max_health = 0
+		@spirit = 0
+		@max_spirit = 0
+		@stamina = 0
+		@max_stamina = 0
+		@stance_text = String.new
+		@stance_value = 0
+		@mind_text = String.new
+		@mind_value = 0
+		@prepared_spell = 'None'
+		@encumbrance_text = String.new
+		@encumbrance_full_text = String.new
+		@encumbrance_value = 0
+		@indicator = Hash.new
+		@injuries = {'back' => {'scar' => 0, 'wound' => 0}, 'leftHand' => {'scar' => 0, 'wound' => 0}, 'rightHand' => {'scar' => 0, 'wound' => 0}, 'head' => {'scar' => 0, 'wound' => 0}, 'rightArm' => {'scar' => 0, 'wound' => 0}, 'abdomen' => {'scar' => 0, 'wound' => 0}, 'leftEye' => {'scar' => 0, 'wound' => 0}, 'leftArm' => {'scar' => 0, 'wound' => 0}, 'chest' => {'scar' => 0, 'wound' => 0}, 'leftFoot' => {'scar' => 0, 'wound' => 0}, 'rightFoot' => {'scar' => 0, 'wound' => 0}, 'rightLeg' => {'scar' => 0, 'wound' => 0}, 'neck' => {'scar' => 0, 'wound' => 0}, 'leftLeg' => {'scar' => 0, 'wound' => 0}, 'nsys' => {'scar' => 0, 'wound' => 0}, 'rightEye' => {'scar' => 0, 'wound' => 0}}
+		@injury_mode = 0
+	end
+
+	def reset
+		@active_tags = Array.new
+		@active_ids = Array.new
+		@current_stream = String.new
+		@current_style = String.new
+	end
+
+	def make_wound_gsl
+		@wound_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",@injuries['nsys']['wound'],@injuries['leftEye']['wound'],@injuries['rightEye']['wound'],@injuries['back']['wound'],@injuries['abdomen']['wound'],@injuries['chest']['wound'],@injuries['leftHand']['wound'],@injuries['rightHand']['wound'],@injuries['leftLeg']['wound'],@injuries['rightLeg']['wound'],@injuries['leftArm']['wound'],@injuries['rightArm']['wound'],@injuries['neck']['wound'],@injuries['head']['wound'])
+	end
+	
+	def make_scar_gsl
+		@scar_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",@injuries['nsys']['scar'],@injuries['leftEye']['scar'],@injuries['rightEye']['scar'],@injuries['back']['scar'],@injuries['abdomen']['scar'],@injuries['chest']['scar'],@injuries['leftHand']['scar'],@injuries['rightHand']['scar'],@injuries['leftLeg']['scar'],@injuries['rightLeg']['scar'],@injuries['leftArm']['scar'],@injuries['rightArm']['scar'],@injuries['neck']['scar'],@injuries['head']['scar'])
+	end
+	
 	def tag_start(name, attributes)
 		begin
-			@@active_tags.push(name)
-			@@active_ids.push(attributes['id'].to_s)
+			@active_tags.push(name)
+			@active_ids.push(attributes['id'].to_s)
 			if name == 'pushStream'
-				$room_count += 1 if attributes['id'] == 'room'
-				@@current_stream = attributes['id'].to_s
+				if attributes['id'] == 'room'
+					@room_count += 1
+					$room_count += 1 
+				end
+				@current_stream = attributes['id'].to_s
 				GameObj.clear_inv if attributes['id'].to_s == 'inv'
 			elsif name == 'popStream'
-				@@current_stream = String.new
+				@current_stream = String.new
 			elsif name == 'pushBold'
-				@@bold = true
+				@bold = true
 			elsif name == 'popBold'
-				@@bold = false
+				@bold = false
 			elsif name == 'style'
-				@@current_style = attributes['id']
+				@current_style = attributes['id']
 			elsif name == 'prompt'
-				$server_time = attributes['time'].to_i
-				$server_time_offset = (Time.now.to_i - $server_time)
-				$_CLIENT_.puts "\034GSq#{sprintf('%010d', $server_time)}\r\n" if $send_fake_tags
+				@server_time = attributes['time'].to_i
+				@server_time_offset = (Time.now.to_i - @server_time)
+				$_CLIENT_.puts "\034GSq#{sprintf('%010d', @server_time)}\r\n" if @send_fake_tags
 			elsif (name == 'compDef') or (name == 'component')
 				if attributes['id'] == 'room objs'
 					GameObj.clear_loot
@@ -630,19 +651,19 @@ class SF_XML
 				elsif attributes['id'] == 'room players'
 					GameObj.clear_pcs
 				elsif attributes['id'] == 'room exits'
-					$room_exits = Array.new
-					$room_exits_string = String.new
+					@room_exits = Array.new
+					@room_exits_string = String.new
 				elsif attributes['id'] == 'room desc'
-					$room_description = String.new
+					@room_description = String.new
 					GameObj.clear_room_desc
-				#elsif attributes['id'] == 'sprite'
+				# elsif attributes['id'] == 'sprite'
 				end
 			elsif (name == 'a') or (name == 'right') or (name == 'left')
-				@@obj_exist = attributes['exist']
-				@@obj_noun = attributes['noun']
+				@obj_exist = attributes['exist']
+				@obj_noun = attributes['noun']
 			elsif name == 'clearContainer'
 				if attributes['id'] == 'stow'
-					GameObj.clear_container(@@stow_container)
+					GameObj.clear_container(@stow_container)
 				else
 					GameObj.clear_container(attributes['id'])
 				end
@@ -650,90 +671,50 @@ class SF_XML
 				GameObj.delete_container(attributes['id'])
 			elsif name == 'progressBar'
 				if attributes['id'] == 'pbarStance'
-					$stance_text = attributes['text'].split.first
-					$stance_value = attributes['value'].to_i
-					$_CLIENT_.puts "\034GSg#{sprintf('%010d', $stance_value)}\r\n" if $send_fake_tags
+					@stance_text = attributes['text'].split.first
+					@stance_value = attributes['value'].to_i
+					$_CLIENT_.puts "\034GSg#{sprintf('%010d', @stance_value)}\r\n" if @send_fake_tags
 				elsif attributes['id'] == 'mana'
-					last_mana = $mana.to_i
-					$mana, $max_mana = attributes['text'].scan(/-?\d+/)
-					$mana = $mana.to_i
-					$max_mana = $max_mana.to_i
-					difference = $mana - last_mana
-					if (difference == noded_pulse) or (difference == unnoded_pulse) or ( ($mana == $max_mana) and (last_mana + noded_pulse > $max_mana) )
-						$last_pulse = Time.now.to_i
-						if $send_fake_tags
-							$_CLIENT_.puts "\034GSZ#{sprintf('%010d',($mana+1))}\n"
-							$_CLIENT_.puts "\034GSZ#{sprintf('%010d',$mana)}\n"
+					last_mana = @mana
+					@mana, @max_mana = attributes['text'].scan(/-?\d+/).collect { |num| num.to_i }
+					difference = @mana - last_mana
+					if (difference == noded_pulse) or (difference == unnoded_pulse) or ( (@mana == @max_mana) and (last_mana + noded_pulse > @max_mana) )
+						@last_pulse = Time.now.to_i
+						if @send_fake_tags
+							$_CLIENT_.puts "\034GSZ#{sprintf('%010d',(@mana+1))}\n"
+							$_CLIENT_.puts "\034GSZ#{sprintf('%010d',@mana)}\n"
 						end
 					end
-					if $send_fake_tags
-						$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, $wound_gsl, $scar_gsl)}\r\n"
+					if @send_fake_tags
+						$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, @wound_gsl, @scar_gsl)}\r\n"
 					end
 				elsif attributes['id'] == 'stamina'
-					$stamina, $max_stamina = attributes['text'].scan(/-?\d+/)
-					$stamina = $stamina.to_i
-					$max_stamina = $max_stamina.to_i
+					@stamina, @max_stamina = attributes['text'].scan(/-?\d+/).collect { |num| num.to_i }
 				elsif attributes['id'] == 'mindState'
-					$mind_text = attributes['text']
-					$mind_value = attributes['value'].to_i
-					$_CLIENT_.puts "\034GSr#{MINDMAP[$mind_text]}\r\n" if $send_fake_tags
+					@mind_text = attributes['text']
+					@mind_value = attributes['value'].to_i
+					$_CLIENT_.puts "\034GSr#{MINDMAP[@mind_text]}\r\n" if @send_fake_tags
 				elsif attributes['id'] == 'health'
-					$health, $max_health = attributes['text'].scan(/-?\d+/)
-					$health = $health.to_i
-					$max_health = $max_health.to_i
-					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, $wound_gsl, $scar_gsl)}\r\n" if $send_fake_tags
+					@health, @max_health = attributes['text'].scan(/-?\d+/).collect { |num| num.to_i }
+					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, @wound_gsl, @scar_gsl)}\r\n" if @send_fake_tags
 				elsif attributes['id'] == 'spirit'
-					$spirit, $max_spirit = attributes['text'].scan(/-?\d+/)
-					$spirit = $spirit.to_i
-					$max_spirit = $max_spirit.to_i
-					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, $wound_gsl, $scar_gsl)}\r\n" if $send_fake_tags
+					@spirit, @max_spirit = attributes['text'].scan(/-?\d+/).collect { |num| num.to_i }
+					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, @wound_gsl, @scar_gsl)}\r\n" if @send_fake_tags
 				elsif attributes['id'] == 'nextLvlPB'
-					$next_level_value = attributes['value'].to_i
-					$next_level_text = attributes['text']
+					@next_level_value = attributes['value'].to_i
+					@next_level_text = attributes['text']
 				elsif attributes['id'] == 'encumlevel'
-					$encumbrance_value = attributes['value'].to_i
-					$encumbrance_text = attributes['text']
+					@encumbrance_value = attributes['value'].to_i
+					@encumbrance_text = attributes['text']
 				end
 			elsif name == 'roundTime'
-				$roundtime_end = attributes['value'].to_i
-				$_CLIENT_.puts "\034GSQ#{sprintf('%010d', $roundtime_end)}\r\n" if $send_fake_tags
+				@roundtime_end = attributes['value'].to_i
+				$_CLIENT_.puts "\034GSQ#{sprintf('%010d', @roundtime_end)}\r\n" if @send_fake_tags
 			elsif name == 'castTime'
-				$cast_roundtime_end = attributes['value'].to_i
+				@cast_roundtime_end = attributes['value'].to_i
 			elsif name == 'indicator'
-				$indicator[attributes['id']] = attributes['visible']
-=begin
-				# fixme: This seems to work, but sends health too often, not just on the initial poison or disease
-				if (attributes['id'] == 'IconPOISONED' or attributes['id'] == 'IconDISEASED') and (attributes['visible'] == 'y')
-					action = proc { |server_string|
-						if $poison_tracker_active
-							if server_string =~ /<output class=['"]['"]\/>/
-								$poison_tracker_active = false
-								DownstreamHook.remove('poison')
-								return server_string
-							elsif server_string =~ /^Poisoned!  Taking ([0-9]+) damage per round.  Dissipating ([0-9]+) per round\./
-								$poisons.push([$1,$2,Time.now.to_i])
-								return nil
-							elsif server_string =~ /^Diseased!  Taking ([0-9]+) damage per round.  Dissipating ([0-9]+) per round\./
-								$diseases.push([$1,$2,Time.now.to_i])
-								return nil
-							else
-								return nil
-							end
-						else
-							if server_string =~ /<output class=['"]mono['"]\/>/
-								$poison_tracker_active = true
-								$poisons = Array.new
-								$diseases = Array.new
-							end
-							return server_string
-						end
-					}
-					$poison_tracker_active = false
-					DownstreamHook.add('poison', action)
-					$_SERVER_.puts "<c>health\n"
-				end
-=end
-				if $send_fake_tags
+				@indicator[attributes['id']] = attributes['visible']
+				if @send_fake_tags
 					if attributes['id'] == 'IconPOISONED'
 						if attributes['visible'] == 'y'
 							$_CLIENT_.puts "\034GSJ0000000000000000000100000000001\r\n"
@@ -747,134 +728,131 @@ class SF_XML
 							$_CLIENT_.puts "\034GSK0000000000000000000000000000000\r\n"
 						end
 					else
-						gsl_prompt = String.new; ICONMAP.keys.each { |icon| gsl_prompt += ICONMAP[icon] if $indicator[icon] == 'y' }
+						gsl_prompt = String.new; ICONMAP.keys.each { |icon| gsl_prompt += ICONMAP[icon] if @indicator[icon] == 'y' }
 						$_CLIENT_.puts "\034GSP#{sprintf('%-30s', gsl_prompt)}\r\n"
 					end
 				end
-			elsif (name == 'image') and @@active_ids.include?('injuries')
-				if $injuries.keys.include?(attributes['id'])
+			elsif (name == 'image') and @active_ids.include?('injuries')
+				if @injuries.keys.include?(attributes['id'])
 					if attributes['name'] =~ /Injury/i
-						$injuries[attributes['id']]['wound'] = attributes['name'].slice(/\d/).to_i
+						@injuries[attributes['id']]['wound'] = attributes['name'].slice(/\d/).to_i
 					elsif attributes['name'] =~ /Scar/i
-						$injuries[attributes['id']]['wound'] = 0
-						$injuries[attributes['id']]['scar'] = attributes['name'].slice(/\d/).to_i
+						@injuries[attributes['id']]['wound'] = 0
+						@injuries[attributes['id']]['scar'] = attributes['name'].slice(/\d/).to_i
 					elsif attributes['name'] =~ /Nsys/i
 						rank = attributes['name'].slice(/\d/).to_i
 						if rank == 0
-							$injuries['nsys']['wound'] = 0
-							$injuries['nsys']['scar'] = 0
+							@injuries['nsys']['wound'] = 0
+							@injuries['nsys']['scar'] = 0
 						else
-							action = proc { |server_string|
-								if ($nerve_tracker_active == 'maybe')
-									if $nerve_tracker_active == 'maybe'
-										if server_string =~ /^You/
-											$nerve_tracker_active = 'yes'
-											$injuries['nsys']['wound'] = 0
-											$injuries['nsys']['scar'] = 0
-										else
-											$nerve_tracker_active = 'no'
+							Thread.new {
+								wait_while { dead? }
+								action = proc { |server_string|
+									if (@nerve_tracker_active == 'maybe')
+										if @nerve_tracker_active == 'maybe'
+											if server_string =~ /^You/
+												@nerve_tracker_active = 'yes'
+												@injuries['nsys']['wound'] = 0
+												@injuries['nsys']['scar'] = 0
+											else
+												@nerve_tracker_active = 'no'
+											end
 										end
 									end
-								end
-								if $nerve_tracker_active == 'yes'
-									if server_string =~ /<output class=['"]['"]\/>/
-										$nerve_tracker_active = 'no'
-										$nerve_tracker_num -= 1
-										DownstreamHook.remove('nerve_tracker') if $nerve_tracker_num < 1
-										$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, make_wound_gsl, make_scar_gsl)}\r\n" if $send_fake_tags
+									if @nerve_tracker_active == 'yes'
+										if server_string =~ /<output class=['"]['"]\/>/
+											@nerve_tracker_active = 'no'
+											@nerve_tracker_num -= 1
+											DownstreamHook.remove('nerve_tracker') if @nerve_tracker_num < 1
+											$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, make_wound_gsl, make_scar_gsl)}\r\n" if @send_fake_tags
+											server_string
+										elsif server_string =~ /a case of uncontrollable convulsions/
+											@injuries['nsys']['wound'] = 3
+											nil
+										elsif server_string =~ /a case of sporadic convulsions/
+											@injuries['nsys']['wound'] = 2
+											nil
+										elsif server_string =~ /a strange case of muscle twitching/
+											@injuries['nsys']['wound'] = 1
+											nil
+										elsif server_string =~ /a very difficult time with muscle control/
+											@injuries['nsys']['scar'] = 3
+											nil
+										elsif server_string =~ /constant muscle spasms/
+											@injuries['nsys']['scar'] = 2
+											nil
+										elsif server_string =~ /developed slurred speech/
+											@injuries['nsys']['scar'] = 1
+											nil
+										end
+									else
+										if server_string =~ /<output class=['"]mono['"]\/>/
+											@nerve_tracker_active = 'maybe'
+										end
 										server_string
-									elsif server_string =~ /a case of uncontrollable convulsions/
-										$injuries['nsys']['wound'] = 3
-										nil
-									elsif server_string =~ /a case of sporadic convulsions/
-										$injuries['nsys']['wound'] = 2
-										nil
-									elsif server_string =~ /a strange case of muscle twitching/
-										$injuries['nsys']['wound'] = 1
-										nil
-									elsif server_string =~ /a very difficult time with muscle control/
-										$injuries['nsys']['scar'] = 3
-										nil
-									elsif server_string =~ /constant muscle spasms/
-										$injuries['nsys']['scar'] = 2
-										nil
-									elsif server_string =~ /developed slurred speech/
-										$injuries['nsys']['scar'] = 1
-										nil
 									end
-								else
-									if server_string =~ /<output class=['"]mono['"]\/>/
-										$nerve_tracker_active = 'maybe'
-									end
-									server_string
-								end
+								}
+								@nerve_tracker_num += 1
+								DownstreamHook.add('nerve_tracker', action)
+								$_SERVER_.puts "<c>health\n"
 							}
-							$nerve_tracker_active = 'no'
-							$nerve_tracker_num += 1
-							DownstreamHook.add('nerve_tracker', action)
-							$_SERVER_.puts "<c>health\n"
 						end
 					else
-						$injuries[attributes['id']]['wound'] = 0
-						$injuries[attributes['id']]['scar'] = 0
+						@injuries[attributes['id']]['wound'] = 0
+						@injuries[attributes['id']]['scar'] = 0
 					end
 				end
-				$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, make_wound_gsl, make_scar_gsl)}\r\n" if $send_fake_tags
+				$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, make_wound_gsl, make_scar_gsl)}\r\n" if @send_fake_tags
 			elsif (name == 'streamWindow') and (attributes['id'] == 'main') and attributes['subtitle']
-				$room_title = '[' + attributes['subtitle'][3..-1] + ']'
+				@room_title = '[' + attributes['subtitle'][3..-1] + ']'
 			elsif name == 'compass'
-				if @@current_stream == 'familiar'
-					@@fam_mode = String.new
-				elsif @@room_window_disabled
-					$room_exits = Array.new
-					#$room_exits_string = String.new
+				if @current_stream == 'familiar'
+					@fam_mode = String.new
+				elsif @room_window_disabled
+					@room_exits = Array.new
 				end
-			elsif @@room_window_disabled and (name == 'dir') and @@active_tags.include?('compass')
-				$room_exits.push(LONGDIR[attributes['value']])
+			elsif @room_window_disabled and (name == 'dir') and @active_tags.include?('compass')
+				@room_exits.push(LONGDIR[attributes['value']])
 			elsif name == 'radio'
 				if attributes['id'] == 'injrRad'
-					$injury_mode = 0 if attributes['value'] == '1'
+					@injury_mode = 0 if attributes['value'] == '1'
 				elsif attributes['id'] == 'scarRad'
-					$injury_mode = 1 if attributes['value'] == '1'
+					@injury_mode = 1 if attributes['value'] == '1'
 				elsif attributes['id'] == 'bothRad'
-					$injury_mode = 2 if attributes['value'] == '1'
+					@injury_mode = 2 if attributes['value'] == '1'
 				end
 			elsif name == 'label'
 				if attributes['id'] == 'yourLvl'
 					Stats.level = attributes['value'].slice(/\d+/).to_i
 				elsif attributes['id'] == 'encumblurb'
-					$encumbrance_full_text = attributes['value']
+					@encumbrance_full_text = attributes['value']
 				end
 			elsif (name == 'container') and (attributes['id'] == 'stow')
-				@@stow_container = attributes['target'].sub('#', '')
+				@stow_container = attributes['target'].sub('#', '')
 			elsif name == 'app'
 				Char.init(attributes['char']) if attributes['char'] and !attributes['char'].strip.empty?
 				if $fake_stormfront
 					# fixme: game name hardcoded as Gemstone IV; maybe doesn't make any difference to the client.
-					if Char.name
-						$_CLIENT_.puts "\034GSB0000000000#{Char.name}\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
-					else
-						$_CLIENT_.puts "\034GSB0000000000Noname}\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
-					end
-					# Sending fake GSL tags to the Wizard FE is disabled until now, because it doesn't accept the tags and just gives errors until initalized with the above line
-					$send_fake_tags = true
+					$_CLIENT_.puts "\034GSB0000000000#{attributes['char']}\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
+					# Sending fake GSL tags to the Wizard FE is disabled until now, because it doesn't accept the tags and just gives errors until initialized with the above line
+					@send_fake_tags = true
 					# Send all the tags we missed out on
-					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, make_wound_gsl, make_scar_gsl)}\r\n"
-					$_CLIENT_.puts "\034GSg#{sprintf('%010d', $stance_value)}\r\n"
-					$_CLIENT_.puts "\034GSr#{MINDMAP[$mind_text]}\r\n"
+					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, make_wound_gsl, make_scar_gsl)}\r\n"
+					$_CLIENT_.puts "\034GSg#{sprintf('%010d', @stance_value)}\r\n"
+					$_CLIENT_.puts "\034GSr#{MINDMAP[@mind_text]}\r\n"
 					gsl_prompt = String.new
-					$indicator.keys.each { |icon| gsl_prompt += ICONMAP[icon] if $indicator[icon] == 'y' }
+					@indicator.keys.each { |icon| gsl_prompt += ICONMAP[icon] if @indicator[icon] == 'y' }
 					$_CLIENT_.puts "\034GSP#{sprintf('%-30s', gsl_prompt)}\r\n"
 					gsl_prompt = nil
 					gsl_exits = String.new
-					$room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
+					@room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
 					$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
 					gsl_exits = nil
-					$_CLIENT_.puts "\034GSn#{sprintf('%-14s', $prepared_spell)}\r\n"
+					$_CLIENT_.puts "\034GSn#{sprintf('%-14s', @prepared_spell)}\r\n"
 					$_CLIENT_.puts "\034GSm#{sprintf('%-45s', GameObj.right_hand.name)}\r\n"
 					$_CLIENT_.puts "\034GSl#{sprintf('%-45s', GameObj.left_hand.name)}\r\n"
-					$_CLIENT_.puts "\034GSq#{sprintf('%010d', $server_time)}\r\n"
-					$_CLIENT_.puts "\034GSQ#{sprintf('%010d', $roundtime_end)}\r\n"
+					$_CLIENT_.puts "\034GSq#{sprintf('%010d', @server_time)}\r\n"
+					$_CLIENT_.puts "\034GSQ#{sprintf('%010d', @roundtime_end)}\r\n"
 				end
 
 			end
@@ -882,164 +860,172 @@ class SF_XML
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
 			sleep "0.1".to_f
-			@@active_tags = Array.new
-			@@active_ids = Array.new
+			reset
 		end
 	end
 	def text(text)
 		begin
-			if @@active_tags.include?('prompt')
-				$prompt = text
-			elsif @@active_tags.include?('right')
-				GameObj.new_right_hand(@@obj_exist, @@obj_noun, text)
-				$_CLIENT_.puts "\034GSm#{sprintf('%-45s', text)}\r\n" if $send_fake_tags
-			elsif @@active_tags.include?('left')
-				GameObj.new_left_hand(@@obj_exist, @@obj_noun, text)
-				$_CLIENT_.puts "\034GSl#{sprintf('%-45s', text)}\r\n" if $send_fake_tags
-			elsif @@active_tags.include?('spell')
-				$prepared_spell = text
-				$_CLIENT_.puts "\034GSn#{sprintf('%-14s', text)}\r\n" if $send_fake_tags
-			elsif @@active_tags.include?('compDef') or @@active_tags.include?('component')
-				if @@active_ids.include?('room objs')
-					if @@active_tags.include?('a')
-						if @@bold
-							GameObj.new_npc(@@obj_exist, @@obj_noun, text)
+			if @active_tags.include?('prompt')
+				#@prompt = text
+				nil
+			elsif @active_tags.include?('right')
+				GameObj.new_right_hand(@obj_exist, @obj_noun, text)
+				$_CLIENT_.puts "\034GSm#{sprintf('%-45s', text)}\r\n" if @send_fake_tags
+			elsif @active_tags.include?('left')
+				GameObj.new_left_hand(@obj_exist, @obj_noun, text)
+				$_CLIENT_.puts "\034GSl#{sprintf('%-45s', text)}\r\n" if @send_fake_tags
+			elsif @active_tags.include?('spell')
+				@prepared_spell = text
+				$_CLIENT_.puts "\034GSn#{sprintf('%-14s', text)}\r\n" if @send_fake_tags
+			elsif @active_tags.include?('compDef') or @active_tags.include?('component')
+				if @active_ids.include?('room objs')
+					if @active_tags.include?('a')
+						if @bold
+							GameObj.new_npc(@obj_exist, @obj_noun, text)
 						else
-							GameObj.new_loot(@@obj_exist, @@obj_noun, text)
+							GameObj.new_loot(@obj_exist, @obj_noun, text)
 						end
 					elsif (text =~ /that (?:is|appears) ([\w\s]+)(?:,| and|\.)/) or (text =~ / \(([^\(]+)\)/)
 						GameObj.npcs[-1].status = $1
 					end
-				elsif @@active_ids.include?('room players')
-					if @@active_tags.include?('a')
-						GameObj.new_pc(@@obj_exist, @@obj_noun, @@player_title.to_s + text)
-						GameObj.pcs[-1].status = 'dead' if @@player_dead
-						GameObj.pcs[-1].status = 'stunned' if @@player_stunned
+				elsif @active_ids.include?('room players')
+					if @active_tags.include?('a')
+						GameObj.new_pc(@obj_exist, @obj_noun, @player_title.to_s + text)
+						GameObj.pcs[-1].status = @player_status unless @player_status.nil?
 					else
 						if (text =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text =~ / \(([\w\s]+)\)/)
-							GameObj.pcs[-1].status = $1 unless @@player_dead or @@player_stunned
+							GameObj.pcs[-1].status = $1 if @player_status.nil?
 						end
-						if text =~ /(?:^Also here: |, )(the body of )?(a stunned )?([\w\s]+)?$/
-							@@player_dead = $1
-							@@player_stunned = $2
-							@@player_title = $3
+						# fixme: webbed is showing up in .name ('a webbed', 'a stunned and webbed')
+						# (done, test)
+						if text =~ /(?:^Also here: |, )(the body of )?(?:a )?(stunned)?(webbed)?(stunned and webbed)?\s*([\w\s]+)?$/
+							if $1
+								@player_stats = 'dead'
+							elsif $2
+								@player_status = $2
+							elsif $3
+								@player_status = $3
+							elsif $4
+								@player_status = $4
+							else
+								@player_status = nil
+							end
+							@player_title = $5
 						end
 					end
-				elsif @@active_ids.include?('room desc')
+				elsif @active_ids.include?('room desc')
 					if text == '[Room window disabled at this location.]'
 						#respond '[Room window disabled at this location.]'
-						@@room_window_disabled = true
+						@room_window_disabled = true
 					else
-						@@room_window_disabled = false
-						$room_description.concat(text)
-						if @@active_tags.include?('a')
-							GameObj.new_room_desc(@@obj_exist, @@obj_noun, text)
+						@room_window_disabled = false
+						@room_description.concat(text)
+						if @active_tags.include?('a')
+							GameObj.new_room_desc(@obj_exist, @obj_noun, text)
 						end
 					end
-				elsif @@active_ids.include?('room exits')
-					$room_exits_string.concat(text)
-					$room_exits.push(text) if @@active_tags.include?('d')
+				elsif @active_ids.include?('room exits')
+					@room_exits_string.concat(text)
+					@room_exits.push(text) if @active_tags.include?('d')
 				end
-			elsif @@active_tags.include?('inv') and @@active_tags.include?('a')
-				container_id = @@active_ids.find { |id| !id.nil? }
+			elsif @active_tags.include?('inv') and @active_tags.include?('a')
+				container_id = @active_ids.find { |id| !id.nil? }
 				if container_id.to_s == 'stow'
-					container_id = @@stow_container
+					container_id = @stow_container
 				end
-				unless container_id.nil? or (container_id == @@obj_exist)
-					obj = GameObj.new_inv(@@obj_exist, @@obj_noun, text, container_id)
+				unless container_id.nil? or (container_id == @obj_exist)
+					obj = GameObj.new_inv(@obj_exist, @obj_noun, text, container_id)
 				end
-			elsif @@current_stream == 'spellfront'
-				$spellfront = text.split("\n")
-			elsif @@current_stream == 'bounty'
-				$bounty_task = text.strip
-			elsif @@current_stream == 'society'
-				$society_task = text
-			elsif (@@current_stream == 'inv') and @@active_tags.include?('a')
-				GameObj.new_inv(@@obj_exist, @@obj_noun, text, nil)
-			elsif @@current_stream == 'familiar'
+			elsif @current_stream == 'spellfront'
+				@spellfront = text.split("\n")
+			elsif @current_stream == 'bounty'
+				@bounty_task = text.strip
+			elsif @current_stream == 'society'
+				@society_task = text
+			elsif (@current_stream == 'inv') and @active_tags.include?('a')
+				GameObj.new_inv(@obj_exist, @obj_noun, text, nil)
+			elsif @current_stream == 'familiar'
 				# fixme: familiar room tracking does not (can not?) auto update, status of pcs and npcs isn't tracked at all, titles of pcs aren't tracked
-				if @@current_style == 'roomName'
-					$familiar_room_title = text
-					$familiar_room_description = String.new
-					$familiar_room_exits = Array.new
+				if @current_style == 'roomName'
+					@familiar_room_title = text
+					@familiar_room_description = String.new
+					@familiar_room_exits = Array.new
 					GameObj.clear_fam_room_desc
 					GameObj.clear_fam_loot
 					GameObj.clear_fam_npcs
 					GameObj.clear_fam_pcs
-					@@fam_mode = String.new
-				elsif @@current_style == 'roomDesc'
-					$familiar_room_description.concat(text)
-					if @@active_tags.include?('a')
-						GameObj.new_fam_room_desc(@@obj_exist, @@obj_noun, text)
+					@fam_mode = String.new
+				elsif @current_style == 'roomDesc'
+					@familiar_room_description.concat(text)
+					if @active_tags.include?('a')
+						GameObj.new_fam_room_desc(@obj_exist, @obj_noun, text)
 					end
 				elsif text =~ /^You also see/
-					@@fam_mode = 'things'
+					@fam_mode = 'things'
 				elsif text =~ /^Also here/
-					@@fam_mode = 'people'
+					@fam_mode = 'people'
 				elsif text =~ /Obvious (?:paths|exits)/
-					@@fam_mode = 'paths'
-				elsif @@fam_mode == 'things'
-					if @@active_tags.include?('a')
-						if @@bold
-							GameObj.new_fam_npc(@@obj_exist, @@obj_noun, text)
+					@fam_mode = 'paths'
+				elsif @fam_mode == 'things'
+					if @active_tags.include?('a')
+						if @bold
+							GameObj.new_fam_npc(@obj_exist, @obj_noun, text)
 						else
-							GameObj.new_fam_loot(@@obj_exist, @@obj_noun, text)
+							GameObj.new_fam_loot(@obj_exist, @obj_noun, text)
 						end
 					end
 					# respond 'things: ' + text
-				elsif @@fam_mode == 'people' and @@active_tags.include?('a')
-					GameObj.new_fam_pc(@@obj_exist, @@obj_noun, text)
+				elsif @fam_mode == 'people' and @active_tags.include?('a')
+					GameObj.new_fam_pc(@obj_exist, @obj_noun, text)
 					# respond 'people: ' + text
-				elsif (@@fam_mode == 'paths') and @@active_tags.include?('a')
-					$familiar_room_exits.push(text)
+				elsif (@fam_mode == 'paths') and @active_tags.include?('a')
+					@familiar_room_exits.push(text)
 				end
-			elsif @@room_window_disabled
-				if @@current_style == 'roomDesc'
-					$room_description.concat(text)
-					if @@active_tags.include?('a')
-						GameObj.new_room_desc(@@obj_exist, @@obj_noun, text)
+			elsif @room_window_disabled
+				if @current_style == 'roomDesc'
+					@room_description.concat(text)
+					if @active_tags.include?('a')
+						GameObj.new_room_desc(@obj_exist, @obj_noun, text)
 					end
 				elsif text =~ /^Obvious (?:paths|exits): $/
-					$room_exits_string = text.strip
+					@room_exits_string = text.strip
 				end
 			end
 		rescue
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
 			sleep "0.1".to_f
-			@@active_tags = Array.new
-			@@active_ids = Array.new
+			reset
 		end
 	end
 	def tag_end(name)
 		begin
-			if $send_fake_tags and (@@active_ids.last == 'room exits')
+			if @send_fake_tags and (@active_ids.last == 'room exits')
 				gsl_exits = String.new
-				$room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
+				@room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
 				$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
 				gsl_exits = nil
-			elsif @@room_window_disabled and (name == 'compass')
-				@@room_window_disabled = false
-				$room_description = $room_description.strip
-				$room_exits_string = $room_exits_string + ' ' + $room_exits.join(', ')
+			elsif @room_window_disabled and (name == 'compass')
+				@room_window_disabled = false
+				@room_description = @room_description.strip
+				@room_exits_string = @room_exits_string + ' ' + @room_exits.join(', ')
 				gsl_exits = String.new
-				$room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
+				@room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
 				$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
 				gsl_exits = nil
 			end
-			@@active_tags.pop
-			@@active_ids.pop
+			@active_tags.pop
+			@active_ids.pop
 		rescue
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
 			sleep "0.1".to_f
-			@@active_tags = Array.new
-			@@active_ids = Array.new
+			reset
 		end
 	end
 end
 
-SF_Listener = SF_XML.new
+XMLData = XMLParser.new
 
 class UpstreamHook
 	@@upstream_hooks ||= Hash.new
@@ -1116,7 +1102,13 @@ class Alias
 		end
 		unless extra.empty?
 			if target.include?('\?')
-				target.gsub!('\?', extra)
+				if (target =~ /^;e/) and target.include?('"\?"')
+					target.gsub!('"\?"', extra.inspect)
+				elsif (target =~ /^;e/) and target.include?('\'\?\'')
+					target.gsub!('\'\?\'', "'#{extra.split("'").join("\\\\'")}'")
+				else
+					target.gsub!('\?', extra)
+				end
 			else
 				target.concat(' ' + extra)
 			end
@@ -1311,6 +1303,7 @@ class Script
 	def Script.new_downstream(line)
 		for script in @@running
 			script.downstream_buffer.push(line.chomp) if script.want_downstream
+			# fixme: watchfor
 		end
 	end
 	def Script.new_downstream_xml(line)
@@ -1327,6 +1320,19 @@ class Script
 		if @want_downstream or @want_downstream_xml
 			sleep "0.05".to_f while @downstream_buffer.length < 1
 			@downstream_buffer.shift
+		else
+			echo 'this script is set as unique but is waiting for game data...'
+			sleep 2
+			false
+		end
+	end
+	def gets?
+		if @want_downstream or @want_downstream_xml
+			if @downstream_buffer.length < 1
+				nil
+			else
+				@downstream_buffer.shift
+			end
 		else
 			echo 'this script is set as unique but is waiting for game data...'
 			sleep 2
@@ -1484,10 +1490,13 @@ class WizardScript<Script
 		}
 		
 		fixline = proc { |line|
-			if line =~ /^[A-Za-z0-9_\-']+:/i
-				line = line.downcase
+			if line =~ /^[\s\t]*[A-Za-z0-9_\-']+:/i
+				line = line.downcase.strip
 			elsif line =~ /^([\s\t]*)counter\s+(add|sub|subtract|divide|multiply|set)\s+([0-9]+)/i
 				line = "#{$1}c #{counter_action[$2]}= #{$3}"
+			elsif line =~ /^([\s\t]*)counter\s+(add|sub|subtract|divide|multiply|set)\s+(.*)/i
+				indent, action, arg = $1, $2, $3
+				line = "#{indent}c #{counter_action[action]}= #{fixstring.call(arg.inspect)}.to_i"
 			elsif line =~ /^([\s\t]*)save[\s\t]+"?(.*?)"?[\s\t]*$/i
 				indent, arg = $1, $2
 				line = "#{indent}s = #{fixstring.call(arg.inspect)}"
@@ -1567,7 +1576,7 @@ class WizardScript<Script
 				data.insert(idx, '')
 				data.insert(idx, 'c = 0') if has_counter
 				data.insert(idx, "Settings.load\ns = Settings['s'] || String.new\nbefore_dying { Settings['s'] = s; Settings.save }") if has_save
-				data.insert(idx, "def nextroom\n\troom_count = $room_count\n\twait_while { room_count == $room_count }\nend") if has_nextroom
+				data.insert(idx, "def nextroom\n\troom_count = XMLData.room_count\n\twait_while { room_count == XMLData.room_count }\nend") if has_nextroom
 				data.insert(idx, '')
 				break
 			}
@@ -1706,6 +1715,7 @@ end
 class Char
 	@@cha ||= nil
 	@@name ||= nil
+	@@citizenship ||= nil
 	private_class_method :new
 	def Char.init(name)
 		@@name = name.strip if @@name == nil or @@name.strip.empty?
@@ -1723,10 +1733,10 @@ class Char
 		@@name = name
 	end
 	def Char.health(*args)
-		checkhealth(*args)
+		health(*args)
 	end
 	def Char.mana(*args)
-		checkmana(*args)
+		mana(*args)
 	end
 	def Char.spirit(*args)
 		checkspirit(*args)
@@ -1828,6 +1838,12 @@ class Char
 		}
 		ary
 	end
+	def Char.citizenship
+		@@citizenship
+	end
+	def Char.citizenship=(val)
+		@@citizenship = val.to_s
+	end
 end
 
 class Society
@@ -1868,7 +1884,7 @@ class Society
 		@@rank
 	end
 	def Society.task
-		$society_task
+		XMLData.society_task
 	end
 end
 
@@ -2291,11 +2307,12 @@ class Spell
 	def remaining
 		self.touch.as_time
 	end
+	# fixme: some mana costs need eval now
 	def cost
 		@manaCost
 	end
 	def affordable?
-		 checkmana(@manaCost) and checkspirit(@spiritCost.to_i + 1) and checkstamina(@staminaCost)
+		 mana(eval(@manaCost)) and checkspirit(@spiritCost.to_i + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(@staminaCost)
 	end
 end
 
@@ -2358,7 +2375,7 @@ class Gift
 		Gift.stopwatch
 	end
 	def Gift.stopwatch
-		if $mind_value.to_i == 0
+		if XMLData.mind_value.to_i == 0
 			if @@running then @@timer += (Time.now.to_f - @@stopwatch.to_f) end
 			@@running = false
 		else
@@ -2414,26 +2431,26 @@ class Wounds
 		arg = arg.to_s
 		fix_injury_mode
 		fix_name = { 'nerves' => 'nsys', 'lleg' => 'leftLeg', 'rleg' => 'rightLeg', 'rarm' => 'rightArm', 'larm' => 'leftArm', 'rhand' => 'rightHand', 'lhand' => 'leftHand', 'reye' => 'rightEye', 'leye' => 'leftEye', 'abs' => 'abdomen' }
-		if $injuries[arg]['wound']
-			$injuries[arg]['wound']
-		elsif $injuries[fix_name[arg]]['wound']
-			$injuries[fix_name[arg]]['wound']
+		if XMLData.injuries[arg]['wound']
+			XMLData.injuries[arg]['wound']
+		elsif XMLData.injuries[fix_name[arg]]['wound']
+			XMLData.injuries[fix_name[arg]]['wound']
 		else
-			echo 'Wounds: Invalid area, try one of these: arms, limbs, torso, ' + $injuries.keys.join(', ')
+			echo 'Wounds: Invalid area, try one of these: arms, limbs, torso, ' + XMLData.injuries.keys.join(', ')
 			nil
 		end
 	end
 	def Wounds.arms
 		fix_injury_mode
-		[$injuries['leftArm']['wound'],$injuries['rightArm']['wound'],$injuries['leftHand']['wound'],$injuries['rightHand']['wound']].max
+		[XMLData.injuries['leftArm']['wound'],XMLData.injuries['rightArm']['wound'],XMLData.injuries['leftHand']['wound'],XMLData.injuries['rightHand']['wound']].max
 	end
 	def Wounds.limbs
 		fix_injury_mode
-		[$injuries['leftArm']['wound'],$injuries['rightArm']['wound'],$injuries['leftHand']['wound'],$injuries['rightHand']['wound'],$injuries['leftLeg']['wound'],$injuries['rightLeg']['wound']].max
+		[XMLData.injuries['leftArm']['wound'],XMLData.injuries['rightArm']['wound'],XMLData.injuries['leftHand']['wound'],XMLData.injuries['rightHand']['wound'],XMLData.injuries['leftLeg']['wound'],XMLData.injuries['rightLeg']['wound']].max
 	end
 	def Wounds.torso
 		fix_injury_mode
-		[$injuries['rightEye']['wound'],$injuries['leftEye']['wound'],$injuries['chest']['wound'],$injuries['abdomen']['wound'],$injuries['back']['wound']].max
+		[XMLData.injuries['rightEye']['wound'],XMLData.injuries['leftEye']['wound'],XMLData.injuries['chest']['wound'],XMLData.injuries['abdomen']['wound'],XMLData.injuries['back']['wound']].max
 	end
 end
 
@@ -2442,26 +2459,26 @@ class Scars
 		arg = arg.to_s
 		fix_injury_mode
 		fix_name = { 'nerves' => 'nsys', 'lleg' => 'leftLeg', 'rleg' => 'rightLeg', 'rarm' => 'rightArm', 'larm' => 'leftArm', 'rhand' => 'rightHand', 'lhand' => 'leftHand', 'reye' => 'rightEye', 'leye' => 'leftEye', 'abs' => 'abdomen' }
-		if $injuries[arg]['scar']
-			$injuries[arg]['scar']
-		elsif $injuries[fix_name[arg]]['scar']
-			$injuries[fix_name[arg]]['scar']
+		if XMLData.injuries[arg]['scar']
+			XMLData.injuries[arg]['scar']
+		elsif XMLData.injuries[fix_name[arg]]['scar']
+			XMLData.injuries[fix_name[arg]]['scar']
 		else
-			echo 'Scars: Invalid area, try one of these: arms, limbs, torso, ' + $injuries.keys.join(', ')
+			echo 'Scars: Invalid area, try one of these: arms, limbs, torso, ' + XMLData.injuries.keys.join(', ')
 			nil
 		end
 	end
 	def Scars.arms
 		fix_injury_mode
-		[$injuries['leftArm']['scar'],$injuries['rightArm']['scar'],$injuries['leftHand']['scar'],$injuries['rightHand']['scar']].max
+		[XMLData.injuries['leftArm']['scar'],XMLData.injuries['rightArm']['scar'],XMLData.injuries['leftHand']['scar'],XMLData.injuries['rightHand']['scar']].max
 	end
 	def Scars.limbs
 		fix_injury_mode
-		[$injuries['leftArm']['scar'],$injuries['rightArm']['scar'],$injuries['leftHand']['scar'],$injuries['rightHand']['scar'],$injuries['leftLeg']['scar'],$injuries['rightLeg']['scar']].max
+		[XMLData.injuries['leftArm']['scar'],XMLData.injuries['rightArm']['scar'],XMLData.injuries['leftHand']['scar'],XMLData.injuries['rightHand']['scar'],XMLData.injuries['leftLeg']['scar'],XMLData.injuries['rightLeg']['scar']].max
 	end
 	def Scars.torso
 		fix_injury_mode
-		[$injuries['rightEye']['scar'],$injuries['leftEye']['scar'],$injuries['chest']['scar'],$injuries['abdomen']['scar'],$injuries['back']['scar']].max
+		[XMLData.injuries['rightEye']['scar'],XMLData.injuries['leftEye']['scar'],XMLData.injuries['chest']['scar'],XMLData.injuries['abdomen']['scar'],XMLData.injuries['back']['scar']].max
 	end
 end
 
@@ -2715,10 +2732,10 @@ class Map
 	end
 	def Map.current
 		Map.load if @@list.empty?
-		room = @@list.find { |room| room.title.include?($room_title) and room.desc.include?($room_description.strip) and room.paths.include?($room_exits_string.strip) }
+		room = @@list.find { |room| room.title.include?(XMLData.room_title) and room.desc.include?(XMLData.room_description.strip) and room.paths.include?(XMLData.room_exits_string.strip) }
 		unless room
-			desc_regex = /#{Regexp.escape($room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-			room = @@list.find { |room| room.title.include?($room_title) and room.paths.include?($room_exits_string.strip) and room.desc.find { |desc| desc =~ desc_regex } }
+			desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+			room = @@list.find { |room| room.title.include?(XMLData.room_title) and room.paths.include?(XMLData.room_exits_string.strip) and room.desc.find { |desc| desc =~ desc_regex } }
 		end
 		return room
 	end
@@ -2759,6 +2776,7 @@ class Map
 				room['title'] = Array.new
 				room['description'] = Array.new
 				room['paths'] = Array.new
+				map_name, map_x, map_y, map_roomsize = nil, nil, nil, nil
 				room_tag.split(/(?=<(?:\w|\/room))/).each { |line|
 					if line =~ /<room\s+id=['"]([0-9]+)['"]>/
 						room['id'] = $1
@@ -2772,14 +2790,14 @@ class Map
 							room['wayto'][target] = StringProc.new(way.gsub('&gt;','>').gsub('&lt;','<'))
 						end
 						room['timeto'][target] = cost.to_f
-					elsif line =~ /<tsoran\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\/>/
+					elsif line =~ /<tsoran\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\s*\/>/
 						map_name, map_x, map_y, map_roomsize = $1, $2.to_i, $3.to_i, $4.to_i
 					elsif line =~ /<\/room>/
-						room = Map.new(room['id'].to_i, room['title'], room['description'], room['paths'], room['wayto'], room['timeto'])
-						room.map_name = map_name
-						room.map_x = map_x
-						room.map_y = map_y
-						room.map_roomsize = map_roomsize
+						new_room = Map.new(room['id'].to_i, room['title'], room['description'], room['paths'], room['wayto'], room['timeto'])
+						new_room.map_name = map_name
+						new_room.map_x = map_x
+						new_room.map_y = map_y
+						new_room.map_roomsize = map_roomsize
 					end
 				}
 			}
@@ -2978,13 +2996,10 @@ class Map
 				}
 			end
 		elsif destination.class == Array
-			dest_list = destination.dup
+			dest_list = destination.collect { |dest| dest.to_i }
 			while pq.size != 0
 				v = pq.pop
-				if dest_list.include?(v)
-					dest_list.delete(v)
-					break if dest_list.empty?
-				end
+				break if dest_list.include?(v) and (shortest_distances[v] < 20)
 				visited[v] = true
 				@@list[v].wayto.keys.each { |adj_room|
 					adj_room_i = adj_room.to_i
@@ -3069,6 +3084,9 @@ class StringProc
 	end
 	def StringProc._load(string)
 		StringProc.new(string)
+	end
+	def inspect
+		"StringProc.new(#{@string.inspect})"
 	end
 end
 
@@ -3188,6 +3206,7 @@ def goto(label)
 end
 
 def start_script(script_name,cli_vars=[],force=false)
+	# fixme: look in wizard script directory
 	file_name = nil
 	if File.exists?($script_dir + script_name + '.lic')
 		file_name = $script_dir + script_name + '.lic'
@@ -3223,47 +3242,48 @@ def start_script(script_name,cli_vars=[],force=false)
 	end
 	Thread.new {
 		new_script.add_thread(Thread.current)
-		unless script = Script.self
+		if script = Script.self
+			Thread.current.priority = 1
+			respond("--- Lich: #{script.name} active.") unless script.quiet
+			begin
+				while Script.self.current_label
+					eval(Script.self.labels[Script.self.current_label].to_s)
+					Script.self.get_next_label
+				end
+				Script.self.kill
+			rescue SystemExit
+				Script.self.kill
+			rescue SyntaxError
+				respond("--- SyntaxError: #{$!}")
+				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				respond("--- Lich: cannot execute #{Script.self.name}, aborting.")
+				Script.self.kill
+			rescue ScriptError
+				respond("--- ScriptError: #{$!}")
+				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				Script.self.kill
+			rescue
+				respond("--- Error: #{Script.self.name}: #{$!}")
+				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				Script.self.kill
+			rescue NoMemoryError
+				respond("--- NoMemoryError: #{$!}")
+				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				Script.self.kill
+			rescue Exception
+				if $! == JUMP
+					retry if Script.self.get_next_label != JUMP_ERROR
+					respond("--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!")
+					respond($!.backtrace[0..2]) if $LICH_DEBUG
+					Script.self.kill
+				else
+					respond("--- Exception: #{$!}")
+					respond($!.backtrace[0..2]) if $LICH_DEBUG
+					Script.self.kill
+				end
+			end
+		else
 			respond 'start_script screwed up...'
-		end
-		Thread.current.priority = 1
-		respond("--- Lich: #{script.name} active.") unless script.quiet
-		begin
-			while Script.self.current_label
-				eval(Script.self.labels[Script.self.current_label].to_s)
-				Script.self.get_next_label
-			end
-			Script.self.kill
-		rescue SystemExit
-			Script.self.kill
-		rescue SyntaxError
-			respond("--- SyntaxError: #{$!}")
-			respond($!.backtrace[0..2]) if $LICH_DEBUG
-			respond("--- Lich: cannot execute #{Script.self.name}, aborting.")
-			Script.self.kill
-		rescue ScriptError
-			respond("--- ScriptError: #{$!}")
-			respond($!.backtrace[0..2]) if $LICH_DEBUG
-			Script.self.kill
-		rescue
-			respond("--- Error: #{Script.self.name}: #{$!}")
-			respond($!.backtrace[0..2]) if $LICH_DEBUG
-			Script.self.kill
-		rescue NoMemoryError
-			respond("--- NoMemoryError: #{$!}")
-			respond($!.backtrace[0..2]) if $LICH_DEBUG
-			Script.self.kill
-		rescue Exception
-			if $! == JUMP
-				retry if Script.self.get_next_label != JUMP_ERROR
-				respond("--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				Script.self.kill
-			else
-				respond("--- Exception: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				Script.self.kill
-			end
 		end
 	}
 end
@@ -3335,9 +3355,9 @@ def unpause_script(*names)
 end
 
 def fix_injury_mode
-	unless $injury_mode == 2
+	unless XMLData.injury_mode == 2
 		$_SERVER.puts '_injury 2'
-		30.times { sleep "0.1".to_f; break if $injury_mode == 2 }
+		30.times { sleep "0.1".to_f; break if XMLData.injury_mode == 2 }
 	end
 end
 
@@ -3355,79 +3375,67 @@ def parse_list(string)
 end
 
 def waitrt
-	until $roundtime_end > $server_time
+	until XMLData.roundtime_end > XMLData.server_time
 		sleep "0.1".to_f
 	end
-	if $server_time >= $roundtime_end then return end
-	sleep(($roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f + 0.6).abs)
+	if XMLData.server_time >= XMLData.roundtime_end then return end
+	sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
 end
 
 def waitrt?
-	if $roundtime_end > $server_time then waitrt end
+	if XMLData.roundtime_end > XMLData.server_time then waitrt end
 end
 
 def waitcastrt
-	until $cast_roundtime_end > $server_time
+	until XMLData.cast_roundtime_end > XMLData.server_time
 		sleep "0.1".to_f
 	end
-	if $server_time >= $cast_roundtime_end then return end
-	sleep(($cast_roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f + 0.6).abs)
+	if XMLData.server_time >= XMLData.cast_roundtime_end then return end
+	sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
 end
 
 def waitcastrt?
-	if $cast_roundtime_end > $server_time then waitcastrt end
+	if XMLData.cast_roundtime_end > XMLData.server_time then waitcastrt end
 end
 
 def checkrt
-	[$roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f, 0].max
+	[XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f, 0].max
 end
 
 def checkcastrt
-	[$cast_roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f, 0].max
-end
-
-def maxhealth
-	$max_health.to_i
-end
-
-def maxmana
-	$max_mana.to_i
-end
-
-def maxspirit
-	$max_spirit.to_i
+	[XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f, 0].max
 end
 
 def checkpoison
-	$indicator['IconPOISONED'] == 'y'
+	XMLData.indicator['IconPOISONED'] == 'y'
 end
 
 def checkdisease
-	$indicator['IconDISEASED'] == 'y'
+	XMLData.indicator['IconDISEASED'] == 'y'
 end
 
 def checksitting
-	$indicator['IconSITTING'] == 'y'
+	XMLData.indicator['IconSITTING'] == 'y'
 end
 
 def checkkneeling
-	$indicator['IconKNEELING'] == 'y'
+	XMLData.indicator['IconKNEELING'] == 'y'
 end
 
 def checkstunned
-	$indicator['IconSTUNNED'] == 'y'
+	XMLData.indicator['IconSTUNNED'] == 'y'
 end
 
 def checkbleeding
-	$indicator['IconBLEEDING'] == 'y'
+	XMLData.indicator['IconBLEEDING'] == 'y'
 end
 
 def checkgrouped
-	$indicator['IconJOINED'] == 'y'
+	XMLData.indicator['IconJOINED'] == 'y'
 end
 
 def checkdead
-	$indicator['IconDEAD'] == 'y'
+	XMLData.indicator['IconDEAD'] == 'y'
 end
 
 def checkreallybleeding
@@ -3438,7 +3446,6 @@ end
 
 def muckled?
 	muckled = checkwebbed or checkdead or checkstunned
-	# fixme: checksleeping and checkbound will never be defined when muckled? is defined
 	if defined?(checksleeping)
 		muckled = muckled or checksleeping
 	end
@@ -3449,23 +3456,23 @@ def muckled?
 end
 
 def checkhidden
-	$indicator['IconHIDDEN'] == 'y'
+	XMLData.indicator['IconHIDDEN'] == 'y'
 end
 
 def checkwebbed
-	$indicator['IconWEBBED'] == 'y'
+	XMLData.indicator['IconWEBBED'] == 'y'
 end
 
 def checkprone
-	$indicator['IconPRONE'] == 'y'
+	XMLData.indicator['IconPRONE'] == 'y'
 end
 
 def checknotstanding
-	$indicator['IconSTANDING'] == 'n'
+	XMLData.indicator['IconSTANDING'] == 'n'
 end
 
 def checkstanding
-	$indicator['IconSTANDING'] == 'y'
+	XMLData.indicator['IconSTANDING'] == 'y'
 end
 
 def checkname(*strings)
@@ -3573,42 +3580,14 @@ def upstream_waitfor(*strings)
 end
 
 def survivepoison?
-	# fixme: no xml for poison rate
-	return true
-	if checkpoison
-		rate,dissipation = checkpoison
-	else
-		return true
-	end
-	health = checkhealth
-	n = 0
-	until rate <= 0
-		health -= rate
-		rate -= dissipation
-		n += 1
-		if health <= 0 then return false end
-	end
-	true
+	# fixme
+	echo 'survivepoison? called, but there is no XML for poison rate'
 end
 
 def survivedisease?
-	# fixme: no xml for disease rate
+	# fixme
+	echo 'survivepoison? called, but there is no XML for disease rate'
 	return true
-	if checkdisease
-		rate,dissipation = checkdisease
-	else
-		return true
-	end
-	health = checkhealth
-	n = 0
-	deadat = 0
-	until rate <= 0
-		health -= rate
-		rate -= dissipation
-		n += 1
-		if health <= 0 then return false end
-	end
-	true
 end
 
 def before_dying(&code)
@@ -3675,14 +3654,6 @@ def unique_get
 	script.unique_gets
 end
 
-def send_lichnet_string(string)
-	if lichnet = (Script.running + Script.hidden).find { |script| script.name =~ /lichnet/i }
-		lichnet.unique_buffer.push(string)
-	else
-		respond("You aren't running the `LichNet' client script! Type `#{$clean_lich_char}lichnet' to start it.")
-	end
-end
-
 def multimove(*dirs)
 	dirs.flatten.each { |dir| move(dir) }
 end
@@ -3739,12 +3710,12 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 	need_full_hands = false
 	tried_open = false
 	line_count = 0
-	room_count = $room_count
+	room_count = XMLData.room_count
 	giveup_time = Time.now.to_i + giveup_seconds.to_i
 	save_stream = Array.new
 
 	put_dir = proc {
-		if $room_count > room_count
+		if XMLData.room_count > room_count
 			fill_hands if need_full_hands
 			Script.self.downstream_buffer.unshift(save_stream)
 			Script.self.downstream_buffer.flatten!
@@ -3761,98 +3732,86 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 	put_dir.call
 
 	loop {
-		sleep "0.1".to_f
-		for line in clear
+		line = get?
+		unless line.nil?
 			save_stream.push(line)
 			line_count += 1
-			if line =~ /^You can't go there|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails/
-				echo 'move: failed'
+		end
+		if line.nil?
+			sleep "0.1".to_f
+		elsif line =~ /^You can't go there|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails|^There doesn't seem to be any way to do that at the moment\.$/
+			echo 'move: failed'
+			fill_hands if need_full_hands
+			Script.self.downstream_buffer.unshift(save_stream)
+			Script.self.downstream_buffer.flatten!
+			return false
+		elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down/
+			echo 'move: failed'
+			# return nil instead of false to show the direction shouldn't be removed from the map database
+			fill_hands if need_full_hands
+			Script.self.downstream_buffer.unshift(save_stream)
+			Script.self.downstream_buffer.flatten!
+			return nil
+		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
+			sleep 1
+			waitrt?
+			put_dir.call
+			next
+		elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground/
+			sleep 1
+			waitrt?
+			fput 'stand' unless standing?
+			waitrt?
+			put_dir.call
+		elsif line =~ /^You will have to climb that\.$|^You're going to have to climb that\./
+			dir.gsub!('go', 'climb')
+			put_dir.call
+		elsif line =~ /^You can't climb that\./
+			dir.gsub!('climb', 'go')
+			put_dir.call
+		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$/
+			need_full_hands = true
+			empty_hands
+			put_dir.call
+		elsif line =~ /(?:appears|seems) to be closed\.$/
+			if tried_open
 				fill_hands if need_full_hands
 				Script.self.downstream_buffer.unshift(save_stream)
 				Script.self.downstream_buffer.flatten!
 				return false
-			elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down/
-				echo 'move: failed'
-				# return nil instead of false to show the direction shouldn't be removed from the map database
-				fill_hands if need_full_hands
-				Script.self.downstream_buffer.unshift(save_stream)
-				Script.self.downstream_buffer.flatten!
-				return nil
-			elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
-				sleep 1
-				waitrt?
-				put_dir.call
-				break
-			elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground/
-				sleep 1
-				waitrt?
-				fput 'stand' unless standing?
-				waitrt?
-				put_dir.call
-				break
-			elsif line =~ /^You will have to climb that\.$|^You're going to have to climb that\./
-				dir.gsub!('go', 'climb')
-				put_dir.call
-				break
-			elsif line =~ /^You can't climb that\./
-				dir.gsub!('climb', 'go')
-				put_dir.call
-				break
-			elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$/
-				need_full_hands = true
-				empty_hands
-				put_dir.call
-				break
-			elsif line =~ /(?:appears|seems) to be closed\.$/
-				if tried_open
-					fill_hands if need_full_hands
-					Script.self.downstream_buffer.unshift(save_stream)
-					Script.self.downstream_buffer.flatten!
-					return false
-				else
-					tried_open = true
-					fput dir.sub(/go|climb/, 'open')
-					put_dir.call
-					break
-				end
-			elsif line =~ /^You can't enter .+ and remain hidden or invisible\.|if he can't see you!$/
-				fput 'unhide'
-				put_dir.call
-				break
-			elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
-				if $2.to_i > 1
-					sleep ($2.to_i - 0.2)
-				else
-					sleep 0.3
-				end
-				put_dir.call
-				break
-			elsif line =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!|Shouldn't you be standing first/
-				fput 'stand'
-				waitrt?
-				put_dir.call
-				break
-			elsif line =~ /^Sorry, you may only type ahead/
-				sleep 1
-				put_dir.call
-				break
-			elsif line == 'You are still stunned.'
-				wait_while { stunned? }
-				put_dir.call
-				break
-			elsif line =~ /you slip (?:on a patch of ice )?and flail uselessly as you land on your rear(?:\.|!)$|You wobble and stumble only for a moment before landing flat on your face!$/
-				waitrt?
-				fput 'stand' unless standing?
-				waitrt?
-				if running?('ago2')
-					fput 'hide'
-					waitrt?
-				end
+			else
+				tried_open = true
+				fput dir.sub(/go|climb/, 'open')
 				put_dir.call
 				break
 			end
+		elsif line =~ /^You can't enter .+ and remain hidden or invisible\.|if he can't see you!$|^You can't enter .+ when you can't be seen\.$/
+			fput 'unhide'
+			put_dir.call
+		elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
+			if $2.to_i > 1
+				sleep ($2.to_i - 0.2)
+			else
+				sleep 0.3
+			end
+			put_dir.call
+		elsif line =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!|Shouldn't you be standing first/
+			fput 'stand'
+			waitrt?
+			put_dir.call
+		elsif line =~ /^Sorry, you may only type ahead/
+			sleep 1
+			put_dir.call
+		elsif line == 'You are still stunned.'
+			wait_while { stunned? }
+			put_dir.call
+		elsif line =~ /you slip (?:on a patch of ice )?and flail uselessly as you land on your rear(?:\.|!)$|You wobble and stumble only for a moment before landing flat on your face!$/
+			waitrt?
+			fput 'stand' unless standing?
+			waitrt?
+			put_dir.call
 		end
-		if $room_count > room_count
+		if XMLData.room_count > room_count
 			fill_hands if need_full_hands
 			Script.self.downstream_buffer.unshift(save_stream)
 			Script.self.downstream_buffer.flatten!
@@ -3959,13 +3918,13 @@ end
 
 def checkpaths(dir="none")
 	if dir == "none"
-		if $room_exits.empty?
+		if XMLData.room_exits.empty?
 			return false
 		else
-			return $room_exits.collect { |dir| dir = SHORTDIR[dir] }
+			return XMLData.room_exits.collect { |dir| dir = SHORTDIR[dir] }
 		end
 	else
-		$room_exits.include?(dir) || $room_exits.include?(SHORTDIR[dir])
+		XMLData.room_exits.include?(dir) || XMLData.room_exits.include?(SHORTDIR[dir])
 	end
 end
 
@@ -4023,33 +3982,17 @@ def run
 	loop { break unless walk }
 end
 
-def checkfried
-	checkmind(7) or checkmind(8)
-end
-
-def checkencumbrance(string=nil)
-	if string == nil
-		return $encumbrance_text
-	else
-		if string.to_i <= $encumbrance_value
-			return true
-		else
-			return false
-		end
-	end
-end
-
 def check_mind(string=nil)
 	if string.nil?
-		return $mind_text
+		return XMLData.mind_text
 	elsif (string.class == String) and (string.to_i == 0)
-		if string =~ /#{$mind_text}/i
+		if string =~ /#{XMLData.mind_text}/i
 			return true
 		else
 			return false
 		end
 	elsif string.to_i.between?(0,100)
-		return string.to_i <= $mind_value.to_i
+		return string.to_i <= XMLData.mind_value.to_i
 	else
 		echo("check_mind error! You must provide an integer ranging from 0-100, the common abbreviation of how full your head is, or provide no input to have check_mind return an abbreviation of how filled your head is.") ; sleep 1
 		return false
@@ -4058,17 +4001,17 @@ end
 
 def checkmind(string=nil)
 	if string.nil?
-		return $mind_text
+		return XMLData.mind_text
 	elsif string.class == String and string.to_i == 0
-		if string =~ /#{$mind_text}/i
+		if string =~ /#{XMLData.mind_text}/i
 			return true
 		else
 			return false
 		end
 	elsif string.to_i.between?(1,8)
 		mind_state = ['clear as a bell','fresh and clear','clear','muddled','becoming numbed','numbed','must rest','saturated']
-		if mind_state.index($mind_text)
-			mind = mind_state.index($mind_text) + 1
+		if mind_state.index(XMLData.mind_text)
+			mind = mind_state.index(XMLData.mind_text) + 1
 			return string.to_i <= mind
 		else
 			echo "Bad string in checkmind: mind_state"
@@ -4080,46 +4023,213 @@ def checkmind(string=nil)
 	end
 end
 
+def checkfried
+	if XMLData.mind_text =~ /fried|saturated/
+		true
+	else
+		false
+	end
+end
+
+def checksaturated
+	if XMLData.mind_text =~ /saturated/
+		true
+	else
+		false
+	end
+end
+
+def checkmana(num=nil)
+	if num.nil?
+		XMLData.mana
+	else
+		XMLData.mana >= num.to_i
+	end
+end
+
+def maxmana
+	XMLData.max_mana
+end
+
+def percentmana(num=nil)
+	unless num.nil?
+		((XMLData.mana.to_f / XMLData.max_mana.to_f) * 100).to_i >= num.to_i
+	else 
+		((XMLData.mana.to_f / XMLData.max_mana.to_f) * 100).to_i
+	end
+end
+
+def checkhealth(num=nil)
+	if num.nil?
+		XMLData.health
+	else
+		XMLData.health >= num.to_i
+	end
+end
+
+def maxhealth
+	XMLData.max_health
+end
+
+def percenthealth(num=nil)
+	unless num.nil?
+		((health.to_f / maxhealth.to_f) * 100).to_i >= num.to_i
+	else
+		((health.to_f / maxhealth.to_f) * 100).to_i
+	end
+end
+
+def checkspirit(num=nil)
+	if num.nil?
+		XMLData.spirit
+	else
+		XMLData.spirit >= num.to_i
+	end
+end
+
+def maxspirit
+	XMLData.max_spirit
+end
+
+def percentspirit(num=nil)
+	if num.nil?
+		((XMLData.spirit.to_f / XMLData.max_spirit.to_f) * 100).to_i
+	else
+		((XMLData.spirit.to_f / XMLData.max_spirit.to_f) * 100).to_i >= num.to_i
+	end
+end
+
+def checkstamina(num=nil)
+	if num.nil?
+		XMLData.stamina
+	else
+		XMLData.stamina >= num.to_i
+	end
+end
+
+def maxstamina()
+	XMLData.max_stamina
+end
+
+def percentstamina(num=nil)
+	if num.nil?
+		((XMLData.stamina.to_f / XMLData.max_stamina.to_f) * 100).to_i
+	else
+		((XMLData.stamina.to_f / XMLData.max_stamina.to_f) * 100).to_i >= num.to_i
+	end
+end
+
+def checkstance(num=nil)
+	if num.nil?
+		XMLData.stance_text
+	elsif (num.class == String) and (num.to_i == 0)
+		if num =~ /off/i
+			XMLData.stance_value == 0
+		elsif num =~ /adv/i
+			XMLData.stance_value.between?(01, 20)
+		elsif num =~ /for/i
+			XMLData.stance_value.between?(21, 40)
+		elsif num =~ /neu/i
+			XMLData.stance_value.between?(41, 60)
+		elsif num =~ /gua/i
+			XMLData.stance_value.between?(61, 80)
+		elsif num =~ /def/i
+			XMLData.stance_value == 100
+		else
+			echo "checkstance: invalid argument (#{num}).  Must be off/adv/for/neu/gua/def or 0-100"
+			nil
+		end
+	elsif (num.class == Fixnum) or (num =~ /^[0-9]+$/ and num = num.to_i)
+		XMLData.stance_value == num.to_i
+	else
+		echo "checkstance: invalid argument (#{num}).  Must be off/adv/for/neu/gua/def or 0-100"
+		nil
+	end
+end
+
+def percentstance(num=nil)
+	if num.nil?
+		XMLData.stance_value
+	else
+		XMLData.stance_value >= num.to_i
+	end
+end
+
+def checkencumbrance(string=nil)
+	if string.nil?
+		XMLData.encumbrance_text
+	elsif (string.class == Fixnum) or (string =~ /^[0-9]+$/ and string = string.to_i)
+		string <= XMLData.encumbrance_value
+	else
+		# fixme
+		if string =~ /#{XMLData.encumbrance_text}/i
+			true
+		else
+			false
+		end
+	end
+end
+
+def percentencumbrance(num=nil)
+	if num.nil?
+		XMLData.encumbrance_value
+	else
+		num.to_i <= XMLData.encumbrance_value
+	end
+end
+
 def checkarea(*strings)
-	strings.flatten! ; if strings.empty? then return $room_title.split(',').first.sub('[','') end
-	$room_title.split(',').first =~ /#{strings.join('|')}/i
+	strings.flatten!
+	if strings.empty?
+		XMLData.room_title.split(',').first.sub('[','')
+	else
+		XMLData.room_title.split(',').first =~ /#{strings.join('|')}/i
+	end
 end
 
 def checkroom(*strings)
-	strings.flatten! ; if strings.empty? then return $room_title.chomp end
-	$room_title =~ /#{strings.join('|')}/i
+	strings.flatten!
+	if strings.empty?
+		XMLData.room_title.chomp
+	else
+		XMLData.room_title =~ /#{strings.join('|')}/i
+	end
 end
 
 def outside?
-	$room_exits_string =~ /Obvious paths:/
+	if XMLData.room_exits_string =~ /Obvious paths:/
+		true
+	else
+		false
+	end
 end
 
 def checkfamarea(*strings)
 	strings.flatten!
-	if strings.empty? then return $familiar_room_title.split(',').first.sub('[','') end
-	$familiar_room_title.split(',').first =~ /#{strings.join('|')}/i
+	if strings.empty? then return XMLData.familiar_room_title.split(',').first.sub('[','') end
+	XMLData.familiar_room_title.split(',').first =~ /#{strings.join('|')}/i
 end
 
 def checkfampaths(dir="none")
 	if dir == "none"
-		if $familiar_room_exits.empty?
+		if XMLData.familiar_room_exits.empty?
 			return false
 		else
-			return $familiar_room_exits.to_a
+			return XMLData.familiar_room_exits.to_a
 		end
 	else
-		$familiar_room_exits.include?(dir)
+		XMLData.familiar_room_exits.include?(dir)
 	end
 end
 
 def checkfamroom(*strings)
-	strings.flatten! ; if strings.empty? then return $familiar_room_title.chomp end
-	$familiar_room_title =~ /#{strings.join('|')}/i
+	strings.flatten! ; if strings.empty? then return XMLData.familiar_room_title.chomp end
+	XMLData.familiar_room_title =~ /#{strings.join('|')}/i
 end
 
 def checkfamnpcs(*strings)
 	parsed = Array.new
-	$familiar_npcs.each { |val| parsed.push(val.split.last) }
+	XMLData.familiar_npcs.each { |val| parsed.push(val.split.last) }
 	if strings.empty?
 		if parsed.empty?
 			return false
@@ -4137,7 +4247,7 @@ end
 
 def checkfampcs(*strings)
 	familiar_pcs = Array.new
-	$familiar_pcs.to_s.gsub(/Lord |Lady |Great |High |Renowned |Grand |Apprentice |Novice |Journeyman /,'').split(',').each { |line| familiar_pcs.push(line.slice(/[A-Z][a-z]+/)) }
+	XMLData.familiar_pcs.to_s.gsub(/Lord |Lady |Great |High |Renowned |Grand |Apprentice |Novice |Journeyman /,'').split(',').each { |line| familiar_pcs.push(line.slice(/[A-Z][a-z]+/)) }
 	if familiar_pcs.empty?
 		return false
 	elsif strings.empty?
@@ -4209,101 +4319,40 @@ def checkleft(*hand)
 	end
 end
 
-def percentstamina(num=nil)
-	unless num.nil?
-		((checkstamina.to_f / maxstamina.to_f) * 100).to_i >= num.to_i
-	else
-		((checkstamina.to_f / maxstamina.to_f) * 100).to_i >= num.to_i
-	end
-end
-
-def percenthealth(num=nil)
-	unless num.nil?
-		((checkhealth.to_f / maxhealth.to_f) * 100).to_i >= num.to_i
-	else
-		((checkhealth.to_f / maxhealth.to_f) * 100).to_i
-	end
-end
-
-def percentmana(num=nil)
-	unless num.nil? then ((checkmana.to_f / maxmana.to_f) * 100).to_i >= num.to_i
-	else ((checkmana.to_f / maxmana.to_f) * 100).to_i end
-end
-
-def percentspirit(num=nil)
-	unless num.nil? then ((checkspirit.to_f / maxspirit.to_f) * 100).to_i >= num.to_i
-	else ((checkspirit.to_f / maxspirit.to_f) * 100).to_i end
-end
-
-def checkmana(num=nil)
-	if num.nil?
-		$mana.to_i
-	else
-		$mana.to_i >= num.to_i
-	end
-end
-
 def checkroomdescrip(*val)
 	val.flatten!
 	if val.empty?
-		return $room_description
+		return XMLData.room_description
 	else
-		return $room_description =~ /#{val.join('|')}/i
+		return XMLData.room_description =~ /#{val.join('|')}/i
 	end
 end
 
 def checkfamroomdescrip(*val)
 	val.flatten!
 	if val.empty?
-		return $familiar_room_description
+		return XMLData.familiar_room_description
 	else
-		return $familiar_room_description =~ /#{val.join('|')}/i
-	end
-end
-
-def checkstance(num=nil)
-	if num.nil?
-		$stance_text
-	elsif (num.class == String && num.to_i == 0)
-		if num =~ /off/i then stance == 00
-		elsif num =~ /adv/i then $stance_value.between?(01, 20)
-		elsif num =~ /for/i then $stance_value.between?(21, 40)
-		elsif num =~ /neu/i then $stance_value.between?(41, 60)
-		elsif num =~ /gua/i then $stance_value.between?(61, 80)
-		elsif num =~ /def/i then $stance_value == 100
-		else echo('checkstance: Unrecognized stance! Must be off/adv/for/neu/gua/def'); nil end
-	else
-		echo('checkstance: Warning, checkstance was passed an argument of unknown type, assuming type integer and comparing...')
-		$stance_value == num.to_i
+		return XMLData.familiar_room_description =~ /#{val.join('|')}/i
 	end
 end
 
 def checkspell(*spells)
 	spells.flatten!
-	if Spell.active.empty? then return false end
-	spells.each { |spell|
-		unless Spell[spell].active? then return false end
-	}
+	return false if Spell.active.empty?
+	spells.each { |spell| return false unless Spell[spell].active? }
 	true
 end
 
 def checkprep(spell=nil)
 	if spell.nil?
-		$prepared_spell
+		XMLData.prepared_spell
 	elsif spell.class != String
 		echo("Checkprep error, spell # not implemented!  You must use the spell name")
 		false
 	else
-		$prepared_spell =~ /^#{spell}/i
+		XMLData.prepared_spell =~ /^#{spell}/i
 	end
-end
-
-def checkspirit(num=nil)
-	if num.nil? then $spirit.to_i else $spirit.to_i >= num.to_i end
-end
-
-def checkhealth(num=nil)
-	if num.nil? then $health.to_i else $health.to_i >= num.to_i end
 end
 
 def setpriority(val=nil)
@@ -4318,28 +4367,16 @@ def setpriority(val=nil)
 end
 
 def checkbounty
-	if $bounty_task
-		return $bounty_task
+	if XMLData.bounty_task
+		return XMLData.bounty_task
 	else
 		return nil
 	end
 end
 
-def checkstamina(num=nil)
-	if $stamina.nil? then echo("Stamina tracking is only functional when you're using StormFront!"); nil elsif num.nil? then $stamina.to_i else $stamina.to_i >= num.to_i end
-end
-
 def variable
 	unless script = Script.self then echo 'variable: cannot identify calling script.'; return nil; end
 	script.vars
-end
-
-def maxstamina(num=0)
-	if num.zero?
-		$max_stamina.to_i
-	else
-		$max_stamina.to_i >= num.to_i
-	end
 end
 
 def pause(num=1)
@@ -4423,8 +4460,6 @@ def clear(opt=0)
 	to_return
 end
 
-
-
 def match(label, string)
 	strings = [ label, string ]
 	strings.flatten!
@@ -4448,28 +4483,29 @@ end
 
 def matchtimeout(secs, *strings)
 	unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
-	unless (secs.class == Float || secs.class == Fixnum) then echo('matchtimeout error! You appear to have given it a string, not a #! Syntax:  matchtimeout(30, "You stand up")') ; return false end
-	match_string = false
+	unless (secs.class == Float || secs.class == Fixnum)
+		echo('matchtimeout error! You appear to have given it a string, not a #! Syntax:  matchtimeout(30, "You stand up")')
+		return false
+	end
 	strings.flatten!
-	if strings.empty? then echo("matchtimeout without any strings to wait for!") ; sleep 1 ; return false end
+	if strings.empty?
+		echo("matchtimeout without any strings to wait for!")
+		sleep 1
+		return false
+	end
 	regexpstr = strings.join('|')
 	end_time = Time.now.to_f + secs
-
 	loop {
-		clear.each { |line|
-			if line =~ /#{regexpstr}/i
-				match_string = line
-				break
-			end
-		}
-		if match_string or (Time.now.to_f > end_time)
-			break
-		else
+		line = get?
+		if line.nil?
 			sleep "0.1".to_f
+		elsif line =~ /#{regexpstr}/i
+			return line
+		end
+		if (Time.now.to_f > end_time)
+			return false
 		end
 	}
-
-	return match_string
 end
 
 def matchbefore(*strings)
@@ -4529,10 +4565,9 @@ end
 def waitfor(*strings)
 	unless script = Script.self then respond('--- waitfor: Unable to identify calling script.'); return false; end
 	strings.flatten!
-# fixme
-#	if script.wizard and strings.length == 1 and strings.first.strip == '>'
-#		return script.gets
-#	end
+	if (script.class == WizardScript) and (strings.length == 1) and (strings.first.strip == '>')
+		return script.gets
+	end
 	if strings.empty?
 		echo 'waitfor: no string to wait for'
 		return false
@@ -4552,6 +4587,10 @@ end
 
 def get
 	Script.self.gets
+end
+
+def get?
+	Script.self.gets?
 end
 
 def reget(*lines)
@@ -4879,6 +4918,8 @@ def fill_hands
 end
 
 def dothis (action, success_line)
+	# You don't seem to be able to move to do that.
+	# The restricting force that envelops you dissolves away.
 	begin
 		clear
 		put action
@@ -4902,52 +4943,48 @@ end
 
 def dothistimeout (action, timeout, success_line)
 	end_time = Time.now.to_i + timeout
+	line = nil
 	success = false
 	begin
 		clear
-		put action unless action == nil
-		begin
-			break_loop = false
-			sleep "0.01".to_f
-			for line in clear
-				if line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
-					if $2.to_i > 1
-						sleep ($2.to_i - 0.5)
-					else
-						sleep "0.3".to_f
-					end
-					end_time = Time.now.to_i + timeout
-					break_loop = true
-					break
-				elsif line == 'Sorry, you may only type ahead 1 command.'
-					sleep 1
-					end_time = Time.now.to_i + timeout
-					break_loop = true
-					break
-				elsif line == 'You are still stunned.'
-					wait_while { stunned? }
-					end_time = Time.now.to_i + timeout
-					break_loop = true
-					break
-				elsif line =~ success_line
-					success = true
-					break_loop = true
-					break
+		put action unless action.nil?
+		loop {
+			line = get?
+			if line.nil?
+				sleep "0.1".to_f
+			elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
+				if $2.to_i > 1
+					sleep ($2.to_i - 0.5)
+				else
+					sleep "0.3".to_f
 				end
+				end_time = Time.now.to_i + timeout
+				break
+			elsif line == 'Sorry, you may only type ahead 1 command.'
+				sleep 1
+				end_time = Time.now.to_i + timeout
+				break
+			elsif line == 'You are still stunned.'
+				wait_while { stunned? }
+				end_time = Time.now.to_i + timeout
+				break
+			elsif line =~ success_line
+				success = true
+				break
 			end
 			if Time.now.to_i >= end_time
 				return nil
 			end
-		end until break_loop
+		}
 	end until success
 	return line
 end
-
 
 begin
 	undef :abort
 	alias :mana :checkmana
 	alias :mana? :checkmana
+	alias :max_mana :maxmana
 	alias :health :checkhealth
 	alias :health? :checkhealth
 	alias :spirit :checkspirit
@@ -4982,6 +5019,7 @@ begin
 	alias :kill_scripts :stop_script
 	alias :kill_script :stop_script
 	alias :fried? :checkfried
+	alias :saturated? :checksaturated
 	alias :webbed? :checkwebbed
 	alias :pause_scripts :pause_script
 	alias :roomdescription? :checkroomdescrip
@@ -5025,14 +5063,14 @@ def registry_get(key)
 			# $stderr.puts $!.backtrace.join("\r\n")
 		end
 	else
-		if ENV['WINEPREFIX']
+		if ENV['WINEPREFIX'] and File.exists?(ENV['WINEPREFIX'])
 			wine_dir = ENV['WINEPREFIX']
-		elsif ENV['HOME']
+		elsif ENV['HOME'] and File.exists?(ENV['HOME'] + '/.wine')
 			wine_dir = ENV['HOME'] + '/.wine'
 		else
 			return false
 		end
-		if File.exists?(wine_dir) and File.exists?(wine_dir + '/system.reg')
+		if File.exists?(wine_dir + '/system.reg')
 			if hkey == 'HKEY_LOCAL_MACHINE'
 				reg_file = File.open(wine_dir + '/system.reg')
 				reg_data = reg_file.readlines
@@ -5091,9 +5129,9 @@ def registry_put(key, value)
 		end
 		return true
 	else
-		if ENV['WINEPREFIX']
+		if ENV['WINEPREFIX'] and File.exists?(ENV['WINEPREFIX'])
 			wine_dir = ENV['WINEPREFIX']
-		elsif ENV['HOME']
+		elsif ENV['HOME'] and File.exists?(ENV['HOME'] + '/.wine')
 			wine_dir = ENV['HOME'] + '/.wine'
 		else
 			return false
@@ -5255,8 +5293,8 @@ def sf_to_wiz(line)
 		if line =~ /<LaunchURL src="(\/gs4\/play\/cm\/loader.asp[^"]*)" \/>/
 			$_CLIENT_.puts "\034GSw00005\r\nhttps://www.play.net#{$1}\r\n"
 		end
-		if line =~ /<pushStream id="thoughts"[^>]*><a[^>]*>([A-Z][a-z]+)<\/a>(.*?)<popStream\/>/m
-			line = line.sub(/<pushStream id="thoughts"[^>]*><a[^>]*>[A-Z][a-z]+<\/a>.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}")
+		if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]A-Za-z]+)?:(.*?)<popStream\/>/m
+			line = line.sub(/<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*(?:[\s\[\]A-Za-z]+)?:.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}#{$3}")
 		end
 		if line =~ /<stream id="thoughts"[^>]*>([^:]+): (.*?)<\/stream>/m
 			line = line.sub(/<stream id="thoughts"[^>]*>.*?<\/stream>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}")
@@ -5617,7 +5655,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.96'
+$version = '3.97'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5675,8 +5713,7 @@ _VERSION_
 
 
 if RUBY_PLATFORM =~ /win/i
-	wine_dir = nil
-	wine_bin = nil
+	wine_dir = wine_bin = nil
 else
 	if ENV['WINEPREFIX'] and File.exists?(ENV['WINEPREFIX'])
 		wine_dir = ENV['WINEPREFIX']
@@ -5707,7 +5744,6 @@ end
 
 
 $fake_stormfront = false
- $send_fake_tags = false
      $stormfront = false
        $platinum = false
    $dragonrealms = false
@@ -6128,7 +6164,6 @@ else
 	puts "Connection with the local game client is open."
 	timeout_thread.kill
 	timeout_thread = nil
-	Process.wait rescue()
 	heal_hosts(hosts_dir)
 	if test_mode
 		$_SERVER_ = $stdin
@@ -6245,8 +6280,9 @@ client_thread = Thread.new {
 	else
 =begin
 		sf_inv_off_proc = proc { |server_string|
-			if server_string =~ /^<(?:deleteC|clearC|c)ontainer id=["'][0-9]+["'].*?>/
-				server_string = server_string.gsub(/^<(?:deleteContainer|clearContainer|inv).*?>/, '')
+			if server_string =~ /^<container id=['"]-?[0-9]+['"]/
+				server_string.gsub!(/<(?:container|clearContainer)[^>]*>/, '')
+				server_string.gsub!(/<inv id=['"]-?[0-9]+['"].*/inv>/, '')
 				if server_string.empty?
 					nil
 				else
@@ -6258,6 +6294,7 @@ client_thread = Thread.new {
 		}
 		DownstreamHook.add('sf_inv_off', sf_inv_off_proc)
 		sf_inv_toggle_proc = proc { |client_string|
+			# set|flag inv on|off
 			if client_string =~ /^(?:<c>)?_flag Display Inventory Boxes ([01])/
 				if $1 == '0'
 					DownstreamHook.add('sf_inv_off', sf_inv_off_proc)
@@ -6324,8 +6361,14 @@ server_thread = Thread.new {
 			begin
 				# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
 				$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
+
 				$_SERVERBUFFER_.push($_SERVERSTRING_)
-				REXML::Document.parse_stream($_SERVERSTRING_, SF_Listener)
+				begin
+					REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+				rescue
+					$stderr.puts "error in server thread: #{$!}"
+					XMLData.reset
+				end
 				$_SERVERSTRING_ = DownstreamHook.run($_SERVERSTRING_)
 				next unless $_SERVERSTRING_
 				if $fake_stormfront
