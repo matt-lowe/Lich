@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.10'
+$version = '4.0.11'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -346,6 +346,7 @@ rescue
 	$stderr.puts "warning: failed to load GTK bindings: #{$!}"
 end
 
+# fixme: society.lic and sigils.lic not working in v4?
 # fixme: not closing sometimes.
 # fixme: warlock
 # fixme: terminal mode
@@ -2542,7 +2543,7 @@ class Spell
 		Spell.load if @@list.empty?
 		if val.class == Spell
 			val
-		elsif (val.class == Fixnum) or (val.class == String and val.class =~ /^[0-9]+$/)
+		elsif (val.class == Fixnum) or (val.class == String and val =~ /^[0-9]+$/)
 			@@list.find { |spell| spell.num == val.to_i }
 		else
 			if (ret = @@list.find { |spell| spell.name =~ /^#{val}$/i })
@@ -2691,7 +2692,7 @@ class Spell
 		@manaCost
 	end
 	def affordable?
-		 mana(eval(@manaCost)) and checkspirit(@spiritCost.to_i + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(@staminaCost)
+		 mana(eval(@manaCost).to_i) and checkspirit(eval(@spiritCost).to_i + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(eval(@staminaCost).to_i)
 	end
 	def cast(target=nil)
 		if @type.nil?
@@ -3681,9 +3682,9 @@ def start_script(script_name,cli_vars=[],force=false)
 					eval(Script.self.labels[Script.self.current_label].to_s, script_binding, Script.self.name)
 					Script.self.get_next_label
 				end
-				script.kill
+				Script.self.kill
 			rescue SystemExit
-				script.kill
+				Script.self.kill
 			rescue SyntaxError
 				$stdout.puts "--- SyntaxError: #{$!}"
 				$stdout.puts $!.backtrace.first
@@ -3691,28 +3692,28 @@ def start_script(script_name,cli_vars=[],force=false)
 				$stderr.puts $!.backtrace
 				$stderr.flush
 				respond "--- Lich: cannot execute #{Script.self.name}, aborting."
-				script.kill
+				Script.self.kill
 			rescue ScriptError
 				$stdout.puts "--- ScriptError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- ScriptError: #{$!}"
 				$stderr.puts $!.backtrace
 				$stderr.flush
-				script.kill
+				Script.self.kill
 			rescue NoMemoryError
 				$stdout.puts "--- NoMemoryError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- NoMemoryError: #{$!}"
 				$stderr.puts $!.backtrace
 				$stderr.flush
-				script.kill
+				Script.self.kill
 			rescue LoadError
 				$stdout.puts "--- LoadError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- LoadError: #{$!}"
 				$stderr.puts $!.backtrace
 				$stderr.flush
-				script.kill
+				Script.self.kill
 			rescue SecurityError
 				$stdout.puts "--- SecurityError: #{$!}"
 				$stdout.puts $!.backtrace.first
@@ -4588,6 +4589,7 @@ def maxmana
 end
 
 def percentmana(num=nil)
+	return 100 if XMLData.max_mana == 0
 	unless num.nil?
 		((XMLData.mana.to_f / XMLData.max_mana.to_f) * 100).to_i >= num.to_i
 	else 
