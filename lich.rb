@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.78
+ version 3.79
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -484,6 +484,7 @@ $injury_mode = 0
 $prepared_spell = 'None'
 $roundtime_end = Time.now.to_i-1
 $cast_roundtime_end = Time.now.to_i-1
+$last_pulse = Time.now.to_i
 
 # $poisons = Array.new
 # $diseases = Array.new
@@ -652,12 +653,15 @@ class SF_XML
 					$mana, $max_mana = attributes['text'].scan(/-?\d+/)
 					$mana = $mana.to_i
 					$max_mana = $max_mana.to_i
-					if $send_fake_tags
-						difference = $mana - last_mana
-						if (difference == noded_pulse) or (difference == unnoded_pulse) or ( ($mana == $max_mana) and (last_mana + noded_pulse > $max_mana) )
+					difference = $mana - last_mana
+					if (difference == noded_pulse) or (difference == unnoded_pulse) or ( ($mana == $max_mana) and (last_mana + noded_pulse > $max_mana) )
+						$last_pulse = Time.now.to_i
+						if $send_fake_tags
 							$_CLIENT_.puts "\034GSZ#{sprintf('%010d',($mana+1))}\n"
 							$_CLIENT_.puts "\034GSZ#{sprintf('%010d',$mana)}\n"
 						end
+					end
+					if $send_fake_tags
 						$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, $wound_gsl, $scar_gsl)}\r\n"
 					end
 				elsif attributes['id'] == 'stamina'
@@ -2573,8 +2577,9 @@ class Map
 					elsif line =~ /<\/room>/
 						room = Map.new(room['id'].to_i, room['title'], room['description'], room['paths'], room['wayto'], room['timeto'])
 						room.map_name = map_name
-						room.map_name = map_x
-						room.map_name = map_y
+						room.map_x = map_x
+						room.map_y = map_y
+						room.map_roomsize = map_roomsize
 					end
 				}
 			}
@@ -3008,7 +3013,7 @@ def start_script(script_name,cli_vars=[],force=false)
 	rescue
 		respond("--- Lich: error reading script file: #{$!}")
 	end
-	script_thread = Thread.new {
+	Thread.new {
 		new_script.add_thread(Thread.current)
 		unless script = Script.self
 			respond 'start_script screwed up...'
@@ -5405,7 +5410,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.78'
+$version = '3.79'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
