@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.5'
+$version = '4.1.6'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6919,8 +6919,8 @@ main_thread = Thread.new {
 
 	launch_data = nil
 
-	if ARGV.include?('--login') and (char_name = ARGV[ARGV.index('--login')+1].capitalize) and LichSettings['quick_game_entry'][char_name]
-		$stderr.puts "info: using quick game entry settings for #{char_name}"
+	if ARGV.include?('--login') and (charname = ARGV[ARGV.index('--login')+1].capitalize) and LichSettings['quick_game_entry'][charname]
+		$stderr.puts "info: using quick game entry settings for #{charname}"
 		msgbox = proc { |msg|
 			if HAVE_GTK
 				done = false
@@ -6946,15 +6946,15 @@ main_thread = Thread.new {
 			login_server.puts "K\n"
 			hashkey = login_server.gets
 			if 'test'[0].class == String
-				password = LichSettings['quick_game_entry'][char_name][1].unpack('m').first.split('').collect { |c| c.getbyte(0) }
+				password = LichSettings['quick_game_entry'][charname][1].unpack('m').first.split('').collect { |c| c.getbyte(0) }
 				hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
 			else
-				password = LichSettings['quick_game_entry'][char_name][1].unpack('m').first.split('').collect { |c| c[0] }
+				password = LichSettings['quick_game_entry'][charname][1].unpack('m').first.split('').collect { |c| c[0] }
 				hashkey = hashkey.split('').collect { |c| c[0] }
 			end
 			password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
 			password = password.collect { |c| c.chr }.join
-			login_server.puts "A\t#{LichSettings['quick_game_entry'][char_name][0]}\t#{password}\n"
+			login_server.puts "A\t#{LichSettings['quick_game_entry'][charname][0]}\t#{password}\n"
 			password = nil
 			response = login_server.gets
 			login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
@@ -6962,21 +6962,21 @@ main_thread = Thread.new {
 				login_server.puts "M\n"
 				response = login_server.gets
 				if response =~ /^M\t/
-					login_server.puts "F\t#{LichSettings['quick_game_entry'][char_name][2]}\n"
+					login_server.puts "F\t#{LichSettings['quick_game_entry'][charname][2]}\n"
 					response = login_server.gets
 					if response =~ /NORMAL|PREMIUM|TRIAL/
-						login_server.puts "G\t#{LichSettings['quick_game_entry'][char_name][2]}\n"
+						login_server.puts "G\t#{LichSettings['quick_game_entry'][charname][2]}\n"
 						login_server.gets
-						login_server.puts "P\t#{LichSettings['quick_game_entry'][char_name][2]}\n"
+						login_server.puts "P\t#{LichSettings['quick_game_entry'][charname][2]}\n"
 						login_server.gets
 						login_server.puts "C\n"
 						response = login_server.gets
-						login_server.puts "L\t#{LichSettings['quick_game_entry'][char_name][3]}\tSTORM\n"
+						login_server.puts "L\t#{LichSettings['quick_game_entry'][charname][3]}\tSTORM\n"
 						response = login_server.gets
 						if response =~ /^L\t/
 							login_server.close unless login_server.closed?
 							launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-							if LichSettings['quick_game_entry'][char_name][4]
+							if LichSettings['quick_game_entry'][charname][4]
 								launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
 							end
 						else
