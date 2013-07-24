@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.70
+ version 3.71
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -45,9 +45,10 @@ require 'socket'
 include Socket::Constants
 require 'rexml/document'
 require 'rexml/streamlistener'
+include REXML
 require 'zlib'
 require 'stringio'
-include REXML
+require 'drb'
 begin
 	require 'win32/registry'
 	HAVE_REGISTRY = true
@@ -192,18 +193,19 @@ end # class pqueue
 # end pqueue.rb
 #
 
-at_exit { [Script.running + Script.hidden].each { |script| script.kill }; Process.waitall }
+at_exit { Script.running.each { |script| script.kill }; Script.hidden.each { |script| script.kill }; sleep 0.5; Process.waitall }
 
 # fixme: warlock
 # fixme: terminal mode
-# fixme: spellshorts
+# fixme: $_TA_BUFFER_
+
 
 $injuries = Hash.new; ['nsys','leftArm','rightArm','rightLeg','leftLeg','head','rightFoot','leftFoot','rightHand','leftHand','rightEye','leftEye','back','neck','chest','abdomen'].each { |area| $injuries[area] = { 'wound' => 0, 'scar' => 0 } }
 $injury_mode = 0
 
 $prepared_spell = 'None'
-$roundtime_end = Time.now.to_i
-$cast_roundtime_end = Time.now.to_i
+$roundtime_end = Time.now.to_i-1
+$cast_roundtime_end = Time.now.to_i-1
 
 # $poisons = Array.new
 # $diseases = Array.new
@@ -319,12 +321,39 @@ end
 class Array
 	attr_accessor :max_shove_size
 	def shove(line)
-		@max_shove_size ||= 300
+		@max_shove_size ||= 200
 		self.push(line)
 		self.delete_at(0) if self.length > @max_shove_size
 	end
 	def method_missing(*usersave)
 		self
+	end
+end
+      
+class CachedArray < Array
+	attr_accessor :min_size, :max_size
+	def initialize(size=0, obj=nil)
+		super
+		@min_size = 200
+		@max_size = 250
+		num = Time.now.to_i-1
+		@filename = "cache-#{num}.txt"
+		@filename = "cache-#{num+=1}.txt" while File.exists?(@filename)
+		File.open(@filename, 'w') { |f| f.write '' }
+	end
+	def push(line)
+		super
+		if self.length > @max_size
+			file = File.open(@filename, 'a')
+			file.puts(self.shift) while (self.length > @min_size)
+			file.close
+		end
+	end
+	def history
+		file = File.open(@filename)
+		h = file.readlines
+		file.close
+		return h
 	end
 end
 
@@ -617,6 +646,8 @@ class SF_XML
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
 			sleep 0.1
+			@@active_tags = Array.new
+			@@active_ids = Array.new
 		end
 	end
 	def text(text)
@@ -734,6 +765,8 @@ class SF_XML
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
 			sleep 0.1
+			@@active_tags = Array.new
+			@@active_ids = Array.new
 		end
 	end
 	def tag_end(name)
@@ -758,9 +791,13 @@ class SF_XML
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
 			sleep 0.1
+			@@active_tags = Array.new
+			@@active_ids = Array.new
 		end
 	end
 end
+
+SF_Listener = SF_XML.new
 
 class UpstreamHook
 	@@upstream_hooks ||= Hash.new
@@ -1154,8 +1191,8 @@ class Settings
 	def Settings.load(who = nil)
 		@@stamp[Script.self.to_s] = Time.now
 		if !who.nil?
-			unless who.include?(".")
-				who += ".sav"
+			unless who.include?('.')
+				who += '.sav'
 			end
 			begin
 				if File.exists?($script_dir + who)
@@ -1223,9 +1260,7 @@ class String
 	def split_as_list
 		string = self
 		string.sub!(/^You (?:also see|notice) |^In the .+ you see /, ',')
-		string.sub('.','').sub(/ and (an?|some|the)/, ', \1').split(',').reject { |str|
-			str.strip.empty?
-		}.collect { |str| str.lstrip }
+		string.sub('.','').sub(/ and (an?|some|the)/, ', \1').split(',').reject { |str| str.strip.empty? }.collect { |str| str.lstrip }
 	end
 end
 	
@@ -1809,7 +1844,7 @@ class Spell
 		@manaCost
 	end
 	def affordable?
-		 checkmana(@manaCost) and checkspirit(@spiritCost.to_i) and checkstamina(@staminaCost)
+		 checkmana(@manaCost) and checkspirit(@spiritCost.to_i + 1) and checkstamina(@staminaCost)
 	end
 end
 
@@ -2006,6 +2041,15 @@ class GameObj
 		@name = name
 		@status = status
 	end
+	def GameObj
+		@noun
+	end
+	def to_s
+		@noun
+	end
+	def empty?
+		false
+	end
 	def GameObj.new_npc(id, noun, name, status=nil)
 		obj = GameObj.new(id, noun, name, status)
 		@@npcs.push(obj)
@@ -2087,15 +2131,6 @@ class GameObj
 	end
 	def GameObj.clear_fam_pcs
 		@@fam_pcs.clear
-	end
-	def to_s
-		@noun
-	end
-	def empty?
-		false
-	end
-	def GameObj
-		@noun
 	end
 	def GameObj.npcs
 		if @@npcs.empty?
@@ -2182,69 +2217,10 @@ end
 class RoomObj < GameObj
 end
 
-class MapXML
-
-	include StreamListener
-
-	@@current_tag = String.new
-	@@current_attributes = Hash.new
-	@@room_id = nil
-	@@room_title = String.new
-	@@room_description = String.new
-	@@room_paths = String.new
-	@@room_wayto = Hash.new
-	@@room_timeto = Hash.new
-
-	def tag_start(name, attributes)
-		@@current_tag = name
-		@@current_attributes = attributes
-		if name == 'room'
-			@@room_id = attributes['id'].to_i
-		end
-	end
-
-	def text(text)
-		text = text.gsub('&gt;', '>').gsub('&lt;', '<')
-		if @@current_tag == 'title'
-			@@room_title = text
-		elsif @@current_tag == 'description'
-			@@room_description = text
-		elsif @@current_tag == 'paths'
-			@@room_paths = text
-		elsif @@current_tag == 'exit'
-			if @@current_attributes['cost']
-				@@room_timeto[@@current_attributes['target']] = @@current_attributes['cost'].to_f
-			else
-				@@room_timeto[@@current_attributes['target']] = 0.2
-			end
-			if @@current_attributes['type'] == 'Proc'
-				@@room_wayto[@@current_attributes['target']] = StringProc.new(text)
-			elsif @@current_attributes['type'] == 'String'
-				@@room_wayto[@@current_attributes['target']] = text
-			end
-		end
-	end
-
-	def tag_end(name)
-		@@current_tag = String.new
-		@@current_attributes = Hash.new
-		if name == 'room'
-			Room.new(@@room_id, @@room_title, @@room_description, @@room_paths, @@room_wayto, @@room_timeto)
-			@@room_id = nil
-			@@room_title = String.new
-			@@room_description = String.new
-			@@room_paths = String.new
-			@@room_wayto = Hash.new
-			@@room_timeto = Hash.new
-		end
-	end
-end
-
 class Map
 	@@list ||= Array.new
-
 	attr_reader :id
-	attr_accessor :title, :desc, :paths, :wayto, :timeto, :pause, :geo, :realcost, :searched, :nadj, :adj, :parent
+	attr_accessor :title, :desc, :paths, :wayto, :timeto, :pause, :geo, :realcost, :searched, :nadj, :adj, :parent, :atlas_id, :map_name, :map_x, :map_y, :map_roomsize
 	def initialize(id, title, desc, paths, wayto={}, timeto={}, geo=nil, pause = nil)
 		@id, @title, @desc, @paths, @wayto, @timeto, @geo, @pause = id, title, desc, paths, wayto, timeto, geo, pause
 		@@list[@id] = self
@@ -2255,37 +2231,21 @@ class Map
 		free_id += 1 until @@list[free_id].nil?
 		free_id
 	end
-	def outside?
-		@paths =~ /Obvious paths:/
-	end
-	def to_i
-		@id
-	end
 	def Map.clear
 		@@list.clear
 	end
 	def Map.uniq_new(id, title, desc, paths, wayto={}, timeto={}, geo=nil)
+		# id ignored, but left in for backward compatability
 		Map.load if @@list.empty?
-		chkre = /#{desc.strip.chop.gsub(/\.(?:\.\.)?/, '|')}/
-		unless duplicate = @@list.find { |obj| obj.title == title and obj.desc =~ chkre and obj.paths == paths }
-			return Map.new(id, title, desc, paths, wayto, timeto, geo)
+		unless dupe_room = @@list.find { |room| room.title.include(title) and room.desc.include?(desc.strip) and room.paths.include?(paths) }
+			return Map.new(Map.get_free_id, [title], [desc], [paths], wayto, timeto, geo)
 		end
-		return duplicate
+		return dupe_room
 	end
 	def Map.uniq!
-		Map.load if @@list.empty?
-		deleted_rooms = Array.new
-		@@list.each { |room|
-			chkre = /#{desc.strip.chop.gsub(/\.(?:\.\.)?/, '|')}/
-			@@list.each { |duproom|
-				if duproom.desc =~ chkre and room.title == duproom.title and room.paths == duproom.paths and room.id != duproom.id
-					deleted_rooms.push(duproom.id)
-					duproom = nil
-				end
-			}
-		}
-		return nil if deleted_rooms.empty?
-		return deleted_rooms
+		# fixme
+		echo 'Map.uniq! called.  Doing nothing.'
+		return false
 	end
 	def Map.list
 		Map.load if @@list.empty?
@@ -2298,18 +2258,17 @@ class Map
 		else
 			chkre = /#{val.strip.sub(/\.$/, '').gsub(/\.(?:\.\.)?/, '|')}/i
 			chk = /#{Regexp.escape(val.strip)}/i
-			@@list.find { |room| room.title =~ chk } or @@list.find { |room| room.desc =~ chk } or @@list.find { |room| room.desc =~ chkre }
+			@@list.find { |room| room.title.find { |title| title =~ chk } } || @@list.find { |room| room.desc.find { |desc| desc =~ chk } } || @@list.find { |room| room.desc.find { |desc| desc =~ chkre } }
 		end
 	end
 	def Map.current
 		Map.load if @@list.empty?
-		ctitle = checkroom
-		cdescre = /#{Regexp.escape(checkroomdescrip.strip.chop).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-		@@list.find { |room| room.desc =~ cdescre and room.title == ctitle and $room_exits_string.chomp == room.paths }
-	end
-	def Map.current_or_new
-		Map.load if @@list.empty?
-		Map.current || Map.new(Map.get_free_id, $room_title, $room_description, $room_exits_string)
+		room = @@list.find { |room| room.title.include?($room_title) and room.desc.include?($room_description.strip) and room.paths.include?($room_exits_string.strip) }
+		unless room
+			desc_regex = /#{Regexp.escape($room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+			@@list.find { |room| room.title.include?($room_title) and room.paths.include?($room_exits_string.strip) and room.desc.find { |desc| desc =~ desc_regex } }
+		end
+		return room
 	end
 	def Map.reload
 		@@list.clear
@@ -2325,22 +2284,55 @@ class Map
 		fd.close
 		fd = nil
 		GC.start
+		# try not to freak out if we load an old style map database
+		if Map.list[0].desc.class == String
+			Map.list.each { |room| room.desc = [ room.desc ] if room.desc.class == String }
+		end
+		if Map.list[0].title.class == String
+			Map.list.each { |room| room.title = [ room.title ] if room.title.class == String }
+		end
+		if Map.list[0].paths.class == String
+			Map.list.each { |room| room.paths = [ room.paths ] if room.paths.class == String }
+		end
 	end
-	def Map.load_xml(file=($script_dir.to_s + "map.xml"))
-		unless File.exists?(file)
+	def Map.load_xml(filename=($script_dir.to_s + "map.xml"))
+		unless File.exists?(filename)
 			raise Exception.exception("MapDatabaseError"), "Fatal error: file `#{file}' does not exist!"
 		end
-		fd = File.open(file, 'r')
-		begin
-			REXML::Document.parse_stream(fd, MapXML.new)
-		rescue
-			respond "--- Lich: error loading map database. (#{$!})"
-		end
-		fd.close
-		fd = nil
-		GC.start
+		File.open(filename) { |file|
+			file.read.split(/(?=<room)/).each { |room_tag|
+				room = Hash.new
+				room['wayto'] = Hash.new
+				room['timeto'] = Hash.new
+				room['title'] = Array.new
+				room['description'] = Array.new
+				room['paths'] = Array.new
+				room_tag.split(/(?=<(?:\w|\/room))/).each { |line|
+					if line =~ /<room\s+id=['"]([0-9]+)['"]>/
+						room['id'] = $1
+					elsif line =~ /<(title|description|paths)>(.*?)<\/\1>/
+						room[$1].push($2.gsub('&gt;','>').gsub('&lt;','<'))
+					elsif line =~ /<exit\s+target=['"](.*?)['"]\s+type=['"](.*?)['"]\s+cost=['"](.*?)['"]>(.*?)<\/exit>/m
+						target, type, cost, way = $1, $2, $3, $4
+						if type =~ /String/i
+							room['wayto'][target] = way
+						elsif type =~ /Proc/i
+							room['wayto'][target] = StringProc.new(way.gsub('&gt;','>').gsub('&lt;','<'))
+						end
+						room['timeto'][target] = cost.to_f
+					elsif line =~ /<tsoran\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\/>/
+						map_name, map_x, map_y, map_roomsize = $1, $2.to_i, $3.to_i, $4.to_i
+					elsif line =~ /<\/room>/
+						room = Map.new(room['id'].to_i, room['title'], room['description'], room['paths'], room['wayto'], room['timeto'])
+						room.map_name = map_name
+						room.map_name = map_x
+						room.map_name = map_y
+					end
+				}
+			}
+		}
 	end
-	def Map.load_unique(file=($script_dir.to_s + 'unique_map_movements.txt'))
+	def Map.load_unique(file)
 		Map.load if @@list.empty?
 		nil
 	end
@@ -2392,7 +2384,12 @@ class Map
 			file = nil
 			file = File.open(filename, 'wb')
 			@@list.each { |room|
-				file.write "<room id=\"#{room.id}\">\n	<title>#{room.title.gsub('<', '&lt;').gsub('>', '&gt;')}</title>\n	<description>#{room.desc.gsub('<', '&lt;').gsub('>', '&gt;')}</description>\n	<paths>#{room.paths}</paths>\n"
+				next if room == nil
+				file.write "<room id=\"#{room.id}\">\n"
+				room.title.each { |title| file.write "	<title>#{title.gsub('<', '&lt;').gsub('>', '&gt;')}</title>\n" }
+				room.desc.each { |desc| file.write "	<description>#{desc.gsub('<', '&lt;').gsub('>', '&gt;')}</description>\n" }
+				room.paths.each { |paths| file.write "	<paths>#{paths.gsub('<', '&lt;').gsub('>', '&gt;')}</paths>\n" }
+				file.write "	<tsoran name=\"#{room.map_name}\" x=\"#{room.map_x}\" y=\"#{room.map_y}\" size=\"#{room.map_roomsize}\" />\n" if room.map_name
 				room.wayto.keys.each { |target|
 					if room.timeto[target]
 						cost = " cost=\"#{room.timeto[target]}\""
@@ -2474,32 +2471,6 @@ class Map
 		end
 		time
 	end
-	def get_wayto(int)
-		# fixme
-		echo 'get_wayto called, doing nothing'
-=begin
-		dir = @wayto[int.to_s]
-		if dir =~ /^\s*(?:n|north)\s*$/i then return N
-		elsif dir =~ /^\s*(?:ne|northeast)\s*$/i then return NE
-		elsif dir =~ /^\s*(?:e|east)\s*$/i then return E
-		elsif dir =~ /^\s*(?:se|southeast)\s*$/i then return SE
-		elsif dir =~ /^\s*(?:s|south)\s*$/i then return S
-		elsif dir =~ /^\s*(?:sw|southwest)\s*$/i then return SW
-		elsif dir =~ /^\s*(?:w|west)\s*$/i then return W
-		elsif dir =~ /^\s*(?:nw|northwest)$\s*/i then return NW
-		else return NODIR
-		end
-=end
-	end
-	def to_s
-		"##{@id}:\n#{@title}\n#{@desc}\n#{@paths}"
-	end
-	def inspect
-		self.instance_variables.collect { |var| var.to_s + "=" + self.instance_variable_get(var).inspect }.join("\n")
-	end
-	def cinspect
-		inspect
-	end
 	def Map.findpath(source, destination)
 		Map.load if @@list.empty?
 		previous, shortest_distances = Map.dijkstra_quick(source, destination)
@@ -2571,6 +2542,21 @@ class Map
 			}
 		end
 		return previous, shortest_distances
+	end
+	def outside?
+		@paths =~ /Obvious paths:/
+	end
+	def to_i
+		@id
+	end
+	def to_s
+		"##{@id}:\n#{@title[0]}\n#{@desc[0]}\n#{@paths[0]}"
+	end
+	def inspect
+		self.instance_variables.collect { |var| var.to_s + "=" + self.instance_variable_get(var).inspect }.join("\n")
+	end
+	def cinspect
+		inspect
 	end
 	# backward compatability
 	def guaranteed_shortest_pathfind(target)
@@ -3267,6 +3253,7 @@ def out
 end
 
 def move(dir='none')
+	# How do you intend to get the doorman's attention?  After all, no one can see you right now.
 	attempts = 0
 	if dir == 'none'
 		echo('Error! Move without a direction to move in!')
@@ -3277,7 +3264,7 @@ def move(dir='none')
 		moveflag = true
 		put(dir)
 		while feed = get
-			if feed =~ /can't go there|Where are you trying to go|What were you referring to\?| appears to be closed\.|I could not find what you were referring to\.|You can't climb that\.|How do you plan to do that here\?|You take a few steps towards|You're going to have to climb that\.|You cannot do that\.|You settle yourself on|You shouldn't annoy|You can't go to|That's probably not a very good idea|You can't do that|Maybe you should look at the [\w\s]+ and work with one at a time\.|You are already|An unseen force prevents you\.|You walk over to|You can't enter|You step over to|Sorry, you aren't allowed to enter here\.|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|seems to be closed\.|Please leave promptly\.|That looks like someplace only performers should go\./
+			if feed =~ /can't go there|Where are you trying to go|What were you referring to\?| appears to be closed\.|I could not find what you were referring to\.|You can't climb that\.|How do you plan to do that here\?|You take a few steps towards|You're going to have to climb that\.|You cannot do that\.|You settle yourself on|You shouldn't annoy|You can't go to|That's probably not a very good idea|You can't do that|Maybe you should look at the [\w\s]+ and work with one at a time\.|You are already|An unseen force prevents you\.|You walk over to|You can't enter|You step over to|Sorry, you aren't allowed to enter here\.|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|seems to be closed\.|Please leave promptly\.|That looks like someplace only performers should go\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^You will have to climb that\.$|^Your attempt fails/
 				echo("Error, can't go in the direction specified!")
 				Script.self.downstream_buffer.unshift(feed)
 				return false
@@ -3446,7 +3433,7 @@ end
 
 def wait_until(announce=nil)
 	priosave = Thread.current.priority
-	Thread.current.priority = -10
+	Thread.current.priority = 0
 	unless announce.nil? or yield
 		respond(announce)
 	end
@@ -3458,7 +3445,7 @@ end
 
 def wait_while(announce=nil)
 	priosave = Thread.current.priority
-	Thread.current.priority = -10
+	Thread.current.priority = 0
 	unless announce.nil? or !yield
 		respond(announce)
 	end
@@ -4066,27 +4053,18 @@ def get
 end
 
 def reget(*lines)
+	unless script = Script.self then respond('--- reget: Unable to identify calling script.'); return false; end
 	lines.flatten!
 	if caller.find { |c| c =~ /regetall/ }
 		history = ($_SERVERBUFFER_.history + $_SERVERBUFFER_)
 	else
 		history = $_SERVERBUFFER_.dup
 	end
-	unless Script.status_scripts.include?(Script.self)
-		if $stormfront
-			history.collect! { |line|
-				line = line.strip.gsub(/<[^>]+>/, '')
-				line.empty? ? nil : line
-			}.compact!
-		else
-			history.collect! { |line|
-				line = line.strip.gsub(/\034.*/, '')
-				line.empty? ? nil : line
-			}.compact!
-		end
+	unless script.want_downstream_xml
+		history.collect! { |line| line = strip_xml(line) }.compact!
 	end
 	if lines.first.kind_of? Numeric or lines.first.to_i.nonzero?
-		num = lines.shift.to_i
+		num = [ lines.shift.to_i, history.length ].min
 	else
 		num = history.length
 	end
@@ -4165,7 +4143,7 @@ def put(*messages)
 	messages.each { |message|
 		message.chomp!
 		unless scr = Script.self then scr = "(script unknown)" end
-		$_CLIENTBUFFER_.shove("[#{scr}]#{$SEND_CHARACTER}<c>#{message}\r\n")
+		$_CLIENTBUFFER_.push("[#{scr}]#{$SEND_CHARACTER}<c>#{message}\r\n")
 		respond("[#{scr}]#{$SEND_CHARACTER}#{message}\r\n") unless scr.silent
 		$_SERVER_.write("<c>#{message}\n")
 		$_LASTUPSTREAM_ = "[#{scr}]#{$SEND_CHARACTER}#{message}"
@@ -4291,25 +4269,6 @@ end
 def running?(*snames)
 	snames.each { |checking| (return false) unless (Script.running.find { |lscr| lscr.name =~ /^#{checking}$/i } || Script.running.find { |lscr| lscr.name =~ /^#{checking}/i }) }
 	true
-end
-
-def dump_to_log(log_dir)
-	begin
-		file = File.open("#{log_dir}lich-log.txt", "w")
-		file.print("--- Dump of the up- and down-streams of data as seen by the Lich (this includes all status lines, etc.) ---\r\n")
-		file.print("\tLich v#{$version}  " + Time.now.to_s)
-		file.print("\r\n\r\n\r\n===========\r\nFrom the Game Host to Your Computer\r\n==========\r\n\r\n")
-		file.puts($_SERVERBUFFER_.history + $_SERVERBUFFER_)
-		file.print("\r\n\r\n\r\n\r\n==========\r\nFrom Your Computer to the Game Host\r\n==========\r\n\r\n")
-		file.puts($_CLIENTBUFFER_.history + $_CLIENTBUFFER_)
-		respond("--- Lich: '#{log_dir}lich-log.txt' written successfully.  If you want to keep it, don't forget to rename it or next time it'll be overwritten!")
-	rescue
-		$stderr.puts("--- Lich encountered an error and cannot write to log; message was:\n--- #{$!}")
-	ensure
-	 	psinet_log = nil
-		simu_log = nil
-		file.close
-	end
 end
 
 def respond(first = "", *messages)
@@ -4793,6 +4752,172 @@ def uninstall_from_registry
 	return result
 end
 
+def do_client(client_string)
+	if client_string =~ /^(?:<c>)?#{$lich_char}(.+)$/
+		cmd = $1
+		if cmd =~ /^k$|^kill$|^stop$/
+			if Script.running.empty?
+				respond('--- Lich: no scripts to kill')
+			else
+				Script.running.last.kill
+			end
+
+		elsif cmd =~ /^p$|^pause$/
+			script = Script.running.reverse.find { |scr| scr.paused == false }
+			unless script
+				respond('--- Lich: no scripts to pause')
+			else
+				script.pause
+			end
+			script = nil
+		elsif cmd =~ /^u$|^unpause$/
+			script = Script.running.reverse.find { |scr| scr.paused == true }
+			unless script
+				respond('--- Lich: no scripts to unpause')
+			else
+				script.unpause
+			end
+			script = nil
+		elsif cmd =~ /^ka$|^kill\s?all$|^stop\s?all$/
+			killed = false
+			Script.running.each { |script|
+				unless script.no_kill_all
+					script.kill
+					killed = true
+				end
+			}
+			respond('--- Lich: no scripts to kill') unless killed
+		elsif cmd =~ /^pa$|^pause\s?all$/
+			paused = false
+			Script.running.each { |script|
+				unless script.paused or script.no_pause_all
+					script.pause
+					paused = true
+				end
+			}
+			unless paused
+				respond('--- Lich: no scripts to pause')
+			end
+			paused_scripts = nil
+		elsif cmd =~ /^ua$|^unpause\s?all$/
+			unpaused = false
+			Script.running.each { |script|
+				if script.paused and not script.no_pause_all
+					script.unpause
+					unpaused = true
+				end
+			}
+			unless unpaused
+				respond('--- Lich: no scripts to unpause')
+			end
+			unpaused_scripts = nil
+		elsif cmd =~ /^(k|kill|stop|p|pause|u|unpause)\s(.+)/
+			action = $1
+			target = $2
+			script = Script.running.find { |scr| scr.name == target }
+			script = Script.hidden.find { |scr| scr.name == target } unless script
+			script = Script.running.find { |scr| scr.name =~ /^#{target}/i } unless script
+			script = Script.hidden.find { |scr| scr.name =~ /^#{target}/i } unless script
+			if script.nil?
+				respond("--- Lich: #{target}.lic does not appear to be running! Use ';list' or ';listall' to see what's active.")
+			elsif action =~ /^k|kill|stop$/
+				script.kill
+				begin
+					GC.start
+				rescue
+					respond('--- Lich: Error starting garbage collector. (3)')
+				end
+			elsif action =~/^p|pause$/
+				script.pause
+			elsif action =~/^u|unpause$/
+				script.unpause
+			end
+			action = target = script = nil
+		elsif cmd =~ /^list\s?(?:all)?$|^l(?:a)?$/i
+			if cmd =~ /a(?:ll)?/i
+				list = Script.running + Script.hidden
+			else
+				list = Script.running
+			end
+			unless list.empty?
+				list.each_index { |index| if list[index].paused then list[index] = list[index].name + ' (paused)' end }
+				respond("--- Lich: #{list.join(", ")}.")
+			else
+				respond("--- Lich: no active scripts.")
+			end
+			list = nil
+		elsif cmd =~ /^force\s+(?:.+)$/
+			script_name = Regexp.escape(cmd.split[1].chomp)
+			vars = cmd.split[2..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).collect { |val| val.gsub(/(?!\\)?"/,'') }
+			force_start_script(script_name, vars)
+		elsif cmd =~ /^send |^s /
+			if cmd.split[1] == "to"
+				script = (Script.running + Script.hidden).find { |scr| scr.name == cmd.split[2].chomp.strip } || script = (Script.running + Script.hidden).find { |scr| scr.name =~ /^#{cmd.split[2].chomp.strip}/i }
+				if script
+					msg = cmd.split[3..-1].join(' ').chomp
+					if script.want_downstream
+						script.downstream_buffer.shove(msg)
+					else
+						script.unique_buffer.shove(msg)
+					end
+					respond("--- sent to '#{script.name}': #{msg}")
+				else
+					respond("--- Lich: '#{cmd.split[2].chomp.strip}' does not match any active script!")
+					return
+				end
+				script = nil
+			else
+				if Script.running.empty? and Script.hidden.empty?
+					respond('--- Lich: no active scripts to send to.')
+				else
+					msg = cmd.split[1..-1].join(' ').chomp
+					respond("--- sent: #{msg}")
+					Script.new_downstream(msg)
+				end
+			end
+		elsif eobj = /^(?:exec|e)(q)? (.+)$/.match(cmd)
+			cmd_data = cmd.sub(/^(?:exec|execq|e|eq) /i, '')
+			if eobj.captures.first.nil?
+				start_exec_script(cmd_data, false)
+			else
+				# quiet mode
+				start_exec_script(cmd_data, true)
+			end
+		else
+			script_name = Regexp.escape(cmd.split.first.chomp)
+			vars = cmd.split[1..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).collect { |val| val.gsub(/(?!\\)?"/,'') }
+			start_script(script_name, vars)
+		end
+	else
+		$_SERVER_.puts client_string
+		$_CLIENTBUFFER_.push client_string
+	end
+	Script.new_upstream(client_string)
+end
+
+def show_notice
+	unless $stormfront and not $fake_stormfront
+		respond("\034GSL")
+	else
+#		respond('<output class="mono"/>')
+#		respond('<pushBold/>')
+	end
+	respond
+	respond("** NOTICE:")
+	respond("** Lich is not intended to facilitate AFK scripting.")
+	respond("** The author does not condone violation of game policy,")
+	respond("** nor is he in any way attempting to encourage it.")
+	respond
+	if $stormfront and not $fake_stormfront
+		respond("** (this notice will never repeat, it's one-time-only)")
+#		respond('<popBold/>')
+#		respond('<output class=""/>')
+	else
+		respond("** (this notice will never repeat, it's one-time-only)\034GSM")
+	end
+	respond("\r\n")
+end
+
 sock_keepalive_proc = proc { |sock|
 	err_msg = proc { |err|
 		err ||= $!
@@ -4827,7 +4952,13 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.70'
+
+
+
+
+Dir.chdir(File.dirname($PROGRAM_NAME))
+
+$version = '3.71'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -4884,8 +5015,6 @@ Thanks to all those who've reported bugs and helped me track down problems on bo
 _VERSION_
 
 
-Dir.chdir(File.dirname($PROGRAM_NAME))
-
 if RUBY_PLATFORM =~ /win/i
 	wine_dir = nil
 	wine_bin = nil
@@ -4923,9 +5052,10 @@ $fake_stormfront = false
      $stormfront = false
        $platinum = false
    $dragonrealms = false
+       test_mode = false
          simu_ip = nil
        simu_port = nil
-       launch_file = nil
+     launch_file = nil
              sge = nil
        $lich_dir = nil
      $script_dir = nil
@@ -4938,6 +5068,7 @@ args = ARGV.dup
 while arg = args.shift
 	if (arg == '-h') or (arg == '--help')
 		$stdout.puts(cmd_line_help)
+		sleep 10
 		exit
 	elsif (arg == '-v') or (arg == '--version')
 		$stdout.puts(cmd_line_version)
@@ -5031,6 +5162,8 @@ while arg = args.shift
 	elsif arg == '--bare'
 		$BARE_BONES = true
 		$stdout.puts('Running in bare-bones mode.')
+	elsif arg == '--test'
+		test_mode = true
 	elsif arg == '--install'
 		if install_to_registry
 			$stdout.puts 'Install was successful.'
@@ -5101,20 +5234,26 @@ unless $data_dir
 	end
 end
 
+#
+# delete cache files that are more than 24 hours old
+#
+Dir.entries($script_dir)[2..-1].each { |filename|
+	if filename =~ /^cache-([0-9]+).txt$/
+		if $1.to_i < Time.now.to_i + 86400
+			File.delete(filename)
+		end
+	end
+}
+
+$_SERVERBUFFER_ = CachedArray.new
+$_CLIENTBUFFER_ = CachedArray.new
 trace_var(:$_CLIENT_, sock_keepalive_proc)
 trace_var(:$_SERVER_, sock_keepalive_proc)
-
 Socket.do_not_reverse_lookup = true
-
-# fixme: no $_TA_BUFFER_
-
-# fixme: not using CachedArray
-$_SERVERBUFFER_ = Array.new
-$_CLIENTBUFFER_ = Array.new
 
 if launch_file
 	unless launcher_cmd = registry_get('HKEY_LOCAL_MACHINE\Software\Classes\Simutronics.Autolaunch\Shell\Open\command\RealCommand')
-		$stderr.puts "Oh shit!"
+		$stderr.puts "Failed to read registry; don't know where the launcher is."
 		exit
 	end
 	if launch_file =~ /SGE\.sal/i
@@ -5306,10 +5445,11 @@ else
 	end
 	$temp_error = nil
 	hack_hosts(hosts_dir, simu_ip)
+	undef :hack_hosts
 	# fixme: needs testing
 	sge_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\SGE32\Directory')
 	launch_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\Directory')
-	if File.exists?("#{$lich_dir}nosge.txt") or (launch_dir =~ /lich/i) or not sge_dir
+	if File.exists?("#{$lich_dir}nosge.txt") or (launch_dir.to_s =~ /lich/i) or not sge_dir
 		sge_file = File.join(sge_dir, 'SGE.exe')
 		sge_file = wine_dir + '/drive_c/' + sge_file[3..-1].split('\\').join('/') if wine_dir
 		if File.exists(sge_file)
@@ -5318,7 +5458,12 @@ else
 		end
 
 	end
-	timeout_thread = Thread.new { sleep 120 ; $stderr.puts("Timeout, restoring backup and exiting.") ; heal_hosts(hosts_dir); exit 1 }
+	timeout_thread = Thread.new {
+		sleep 120
+		$stderr.puts("Timeout, restoring backup and exiting.")
+		heal_hosts(hosts_dir)
+		exit 1
+	}
 	puts "Pretending to be the game host, and waiting for game client to connect to us..."
 	$_CLIENT_ = listener.accept
 	puts "Connection with the local game client is open."
@@ -5326,7 +5471,29 @@ else
 	timeout_thread = nil
 	Process.wait rescue()
 	heal_hosts(hosts_dir)
+	if test_mode
+		$_SERVER_ = $stdin
+		$_CLIENT_.puts "Running in test mode: host socket set to stdin."
+	else
+		$stdout.puts 'Connecting to the real game host...'
+		if $fake_stormfront
+			if $platinum
+				$_SERVER_ = TCPSocket.open('storm.gs4.game.play.net', 10124)
+			elsif $dragonrealms
+				# fixme
+				$stderr.puts 'Error: ip and port for dragonrealms is unknown.'
+				exit
+			else $fake_stormfront
+				$_SERVER_ = TCPSocket.open('storm.gs4.game.play.net', 10024)
+			end
+		else
+			$_SERVER_ = TCPSocket.open(simu_quad_ip, simu_port)
+		end
+		$stdout.puts 'Connection with the game host is open.'
+	end
 end
+
+listener = timeout_thr = nil
 
 unless RUBY_PLATFORM =~ /win/i
 	begin
@@ -5352,36 +5519,16 @@ begin
 rescue
 	$stderr.puts "error closing listener socket: #{$!}"
 	errtimeout += 1
-	if errtimeout > 20 then $stderr.puts("error appears unrecoverable, aborting") end
+	$stderr.puts('error appears unrecoverable, aborting') if errtimeout > 20
 	sleep 0.05
 	retry unless errtimeout > 20
 end
 errtimeout = nil
 
-if ARGV.find { |arg| arg =~ /^--test|^-t/ }
-	$_SERVER_ = $stdin
-	$_CLIENT_.puts "Running in test mode: host socket set to stdin."
-elsif !$_SERVER_
-	$stdout.puts 'Connecting to the real game host...'
-	if $fake_stormfront and $platinum
-		$_SERVER_ = TCPSocket.open('storm.gs4.game.play.net', 10124)
-	elsif $fake_stormfront and $dragonrealms
-		# fixme
-		$stderr.puts 'Error: ip and port for dragonrealms is unknown.'
-		exit
-	elsif $fake_stormfront
-		$_SERVER_ = TCPSocket.open('storm.gs4.game.play.net', 10024)
-	else
-		$_SERVER_ = TCPSocket.open(simu_quad_ip, simu_port)
-	end
-	$stdout.puts 'Connection with the game host is open.'
-end
-
-listener = timeout_thr = nil
-
 if File.exists?($lich_dir + 'lich-char.txt')
 	file = File.open($lich_dir + 'lich-char.txt')
-	arr = file.readlines; arr = arr.find_all { |line| line !~ /^#/ }
+	arr = file.readlines
+	arr = arr.find_all { |line| line !~ /^#/ }
 	$clean_lich_char = arr.last.strip
 	file.close
 	file = nil
@@ -5396,190 +5543,46 @@ undef :exit!
 client_thread = Thread.new {
 	$login_time = Time.now
 
-	def do_client(client_string)
-		if client_string =~ /^(?:<c>)?#{$lich_char}(.+)$/
-			cmd = $1
-			if cmd =~ /^k$|^kill$|^stop$/
-				if Script.running.empty?
-					respond('--- Lich: no scripts to kill')
-				else
-					Script.running.last.kill
-				end
-	
-			elsif cmd =~ /^p$|^pause$/
-				script = Script.running.reverse.find { |scr| scr.paused == false }
-				unless script
-					respond('--- Lich: no scripts to pause')
-				else
-					script.pause
-				end
-				script = nil
-			elsif cmd =~ /^u$|^unpause$/
-				script = Script.running.reverse.find { |scr| scr.paused == true }
-				unless script
-					respond('--- Lich: no scripts to unpause')
-				else
-					script.unpause
-				end
-				script = nil
-			elsif cmd =~ /^ka$|^kill\s?all$|^stop\s?all$/
-				killed = false
-				Script.running.each { |script|
-					unless script.no_kill_all
-						script.kill
-						killed = true
-					end
-				}
-				respond('--- Lich: no scripts to kill') unless killed
-			elsif cmd =~ /^pa$|^pause\s?all$/
-				paused = false
-				Script.running.each { |script|
-					unless script.paused or script.no_pause_all
-						script.pause
-						paused = true
-					end
-				}
-				unless paused
-					respond('--- Lich: no scripts to pause')
-				end
-				paused_scripts = nil
-			elsif cmd =~ /^ua$|^unpause\s?all$/
-				unpaused = false
-				Script.running.each { |script|
-					if script.paused and not script.no_pause_all
-						script.unpause
-						unpaused = true
-					end
-				}
-				unless unpaused
-					respond('--- Lich: no scripts to unpause')
-				end
-				unpaused_scripts = nil
-			elsif cmd =~ /^(k|kill|stop|p|pause|u|unpause)\s(.+)/
-				action = $1
-				target = $2
-				script = Script.running.find { |scr| scr.name == target }
-				script = Script.hidden.find { |scr| scr.name == target } unless script
-				script = Script.running.find { |scr| scr.name =~ /^#{target}/i } unless script
-				script = Script.hidden.find { |scr| scr.name =~ /^#{target}/i } unless script
-				if script.nil?
-					respond("--- Lich: #{target}.lic does not appear to be running! Use ';list' or ';listall' to see what's active.")
-				elsif action =~ /^k|kill|stop$/
-					script.kill
-					begin
-						GC.start
-					rescue
-						respond('--- Lich: Error starting garbage collector. (3)')
-					end
-				elsif action =~/^p|pause$/
-					script.pause
-				elsif action =~/^u|unpause$/
-					script.unpause
-				end
-				action = target = script = nil
-			elsif cmd =~ /^list\s?(?:all)?$|^l(?:a)?$/i
-				if cmd =~ /a(?:ll)?/i
-					list = Script.running + Script.hidden
-				else
-					list = Script.running
-				end
-				unless list.empty?
-					list.each_index { |index| if list[index].paused then list[index] = list[index].name + ' (paused)' end }
-					respond("--- Lich: #{list.join(", ")}.")
-				else
-					respond("--- Lich: no active scripts.")
-				end
-				list = nil
-			elsif cmd =~ /^force\s+(?:.+)$/
-				script_name = Regexp.escape(cmd.split[1].chomp)
-				vars = cmd.split[2..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).collect { |val| val.gsub(/(?!\\)?"/,'') }
-				force_start_script(script_name, vars)
-			elsif cmd =~ /^send |^s /
-				if cmd.split[1] == "to"
-					script = (Script.running + Script.hidden).find { |scr| scr.name == cmd.split[2].chomp.strip } || script = (Script.running + Script.hidden).find { |scr| scr.name =~ /^#{cmd.split[2].chomp.strip}/i }
-					if script
-						msg = cmd.split[3..-1].join(' ').chomp
-						if script.want_downstream
-							script.downstream_buffer.shove(msg)
-						else
-							script.unique_buffer.shove(msg)
-						end
-						respond("--- sent to '#{script.name}': #{msg}")
-					else
-						respond("--- Lich: '#{cmd.split[2].chomp.strip}' does not match any active script!")
-						return
-					end
-					script = nil
-				else
-					if Script.running.empty? and Script.hidden.empty?
-						respond('--- Lich: no active scripts to send to.')
-					else
-						msg = cmd.split[1..-1].join(' ').chomp
-						respond("--- sent: #{msg}")
-						Script.new_downstream(msg)
-					end
-				end
-			elsif eobj = /^(?:exec|e)(q)? (.+)$/.match(cmd)
-				cmd_data = cmd.sub(/^(?:exec|execq|e|eq) /i, '')
-				if eobj.captures.first.nil?
-					start_exec_script(cmd_data, false)
-				else
-					# quiet mode
-					start_exec_script(cmd_data, true)
-				end
-			else
-				script_name = Regexp.escape(cmd.split.first.chomp)
-				vars = cmd.split[1..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).collect { |val| val.gsub(/(?!\\)?"/,'') }
-				start_script(script_name, vars)
-			end
-		else
-			$_SERVER_.puts client_string
-			$_CLIENTBUFFER_.shove client_string
-		end
-		Script.new_upstream(client_string)
-	end
-
 	if $fake_stormfront
 		#
 		# send the login key
 		#
 		client_string = $_CLIENT_.gets
-		$_CLIENTBUFFER_.shove(client_string.dup)
 		$_SERVER_.write(client_string)
 		#
 		# take the version string from the client, ignore it, and ask the server for xml
 		#
 		$_CLIENT_.gets
 		client_string = "/FE:WIZARD /VERSION:1.0.1.22 /P:#{RUBY_PLATFORM} /XML\r\n"
-		$_CLIENTBUFFER_.shove(client_string.dup)
+		$_CLIENTBUFFER_.push(client_string.dup)
 		$_SERVER_.write(client_string)
 		#
 		# tell the server we're ready
 		#
 		sleep 0.3
 		client_string = "<c>\r\n"
-		$_CLIENTBUFFER_.shove(client_string)
+		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
 		sleep 0.3
 		client_string = "<c>\r\n"
-		$_CLIENTBUFFER_.shove(client_string)
+		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
 		#
 		# ask the server for both wound and scar information
 		#
 		client_string = "<c>_injury 2\r\n"
-		$_CLIENTBUFFER_.shove(client_string)
+		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
 		#
 		# client wants to send "GOOD", xml server won't recognize it
 		#
 		$_CLIENT_.gets
 	else
-		2.times {
-			client_string = $_CLIENT_.gets
-			$_CLIENTBUFFER_.shove(client_string.dup)
-			$_SERVER_.write(client_string)
-		}
+		client_string = $_CLIENT_.gets
+		$_SERVER_.write(client_string)
+		client_string = $_CLIENT_.gets
+		$_CLIENTBUFFER_.push(client_string.dup)
+		$_SERVER_.write(client_string)
 	end
 
 	begin	
@@ -5604,28 +5607,22 @@ client_thread = Thread.new {
 		sleep 0.5
 		retry if not $_CLIENT_.closed? and not $_SERVER_.closed?
 	end
-	[Script.running + Script.hidden].each { |script| script.kill }
+	Script.running.each { |script| script.kill }
+	Script.hidden.each { |script| script.kill }
+	sleep 0.5
 	$_SERVER_.puts('quit') unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
 	$_CLIENT_.close unless $_CLIENT_.closed?
-	sleep 0.1
 	exit
 }
-#
-# End of client thread
-#
 
 # fixme: bare bones
 
-#
-# Server thread for Stormfront and fake Stormfront
-#
 server_thread = Thread.new {
-	SF_Listener = SF_XML.new
 	begin
 		while $_SERVERSTRING_ = $_SERVER_.gets
 			begin
-				$_SERVERBUFFER_.shove($_SERVERSTRING_)
+				$_SERVERBUFFER_.push($_SERVERSTRING_)
 				$_SERVERSTRING_ = DownstreamHook.run($_SERVERSTRING_)
 				next unless $_SERVERSTRING_
 				if $fake_stormfront
@@ -5664,11 +5661,12 @@ server_thread = Thread.new {
 		retry if not $_CLIENT_.closed? and not $_SERVER_.closed?
 	end
 	respond("--- Lich's connection to the game has been closed.\r\n\r\n") if $LICH_DEBUG and !$_CLIENT_.closed?
-	[Script.running + Script.hidden].each { |script| script.kill }
+	Script.running.each { |script| script.kill }
+	Script.hidden.each { |script| script.kill }
+	sleep 0.5
 	$_CLIENT_.close unless $_CLIENT_.closed?
 	$_SERVER_.puts("<c>quit") unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
-	sleep 0.1
 	exit
 }
 
@@ -5695,39 +5693,6 @@ until $_SERVERBUFFER_.find { |line| line =~ /Welcome to GemStone/i } or $_SERVER
 end
 sleep 1
 
-# Overwrite the user's encrypted login key before loading the favorites list (make sure it's gone before a script could possibly start and snag it)
-$_CLIENTBUFFER_[0] = "*** (encrypted login key would be here, but it is erased by Lich immediately after use) ***"
-
-# Call the garbage collector to make as certain as possible the key is gone forever (it's overkill, but it can't hurt...)
-begin
-	GC.start
-rescue
-	echo "Error starting garbage collector. (4)"
-end
-
-def show_notice
-	unless $stormfront and not $fake_stormfront
-		respond("\034GSL")
-	else
-#		respond('<output class="mono"/>')
-#		respond('<pushBold/>')
-	end
-	respond
-	respond("** NOTICE:")
-	respond("** Lich is not intended to facilitate AFK scripting.")
-	respond("** The author does not condone violation of game policy,")
-	respond("** nor is he in any way attempting to encourage it.")
-	respond
-	if $stormfront and not $fake_stormfront
-		respond("** (this notice will never repeat, it's one-time-only)")
-	else
-		respond("** (this notice will never repeat, it's one-time-only)\034GSM")
-#		respond('<popBold/>')
-#		respond('<output class=""/>')
-	end
-	respond("\r\n")
-end
-
 unless File.exists?("#{$lich_dir}notfirst.txt") or !$_SERVERBUFFER_.find { |line| line =~ /GemStone|DragonRealm/i }
 	begin
 		show_notice
@@ -5737,8 +5702,6 @@ unless File.exists?("#{$lich_dir}notfirst.txt") or !$_SERVERBUFFER_.find { |line
 		respond("have to repeat this notice every login: #{$!.chomp}.")
 	end
 end
-
-undef :hack_hosts
 
 begin
 	server_thread.join
@@ -5771,6 +5734,7 @@ rescue
 	respond $!.backtrace.join("\r\n") if $LICH_DEBUG
 end
 
-[Script.running + Script.hidden].each { |script| script.kill }
-sleep 0.1
+Script.running.each { |script| script.kill }
+Script.hidden.each { |script| script.kill }
+sleep 0.5
 exit
