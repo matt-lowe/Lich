@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.19'
+$version = '4.0.20'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -346,8 +346,6 @@ rescue
 	$stderr.puts "warning: failed to load GTK bindings: #{$!}"
 end
 
-# fixme: society.lic and sigils.lic not working in v4?
-# fixme: not closing sometimes.
 # fixme: warlock
 # fixme: terminal mode
 # fixme: signs3 uses Script.self.io
@@ -1065,6 +1063,10 @@ class DownstreamHook
 			echo "DownstreamHook: not a Proc (#{action})"
 			return false
 		end
+		unless $SAFE == 0
+			respond '--- SecurityError: an untrusted script tried to add a DownstreamHook'
+			return false
+		end
 		@@downstream_hooks[name] = action
 	end
 	def DownstreamHook.run(server_string)
@@ -1118,16 +1120,150 @@ class LichSettings
 		end
 	end
 	def LichSettings.list
-		@@settings.dup
+		settings = @@settings.dup
+		if caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/ }
+			settings.delete('quick_game_entry')
+			settings.delete('trusted_scripts')
+			settings.delete('untrusted_scripts')
+		end
+		settings
 	end
 	def LichSettings.clear
 		@@settings = Hash.new
 	end
 	def LichSettings.[](setting_name)
-		@@settings[setting_name]
+		if (setting_name == 'quick_game_entry') and caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/ }
+			nil
+		elsif (setting_name == 'trusted_scripts' or setting_name == 'untrusted_scripts') and caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/ }
+			@@settings[setting_name].dup
+		else
+			@@settings[setting_name]
+		end
 	end
 	def LichSettings.[]=(setting_name, setting_value)
-		@@settings[setting_name] = setting_value
+		if (setting_name == 'quick_game_entry' or setting_name == 'trusted_scripts' or setting_name == 'untrusted_scripts') and caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/ }
+			nil
+		else
+			@@settings[setting_name] = setting_value
+		end
+	end
+end
+
+class Settings
+	@@hash ||= Hash.new
+	@@auto ||= false
+	@@stamp ||= Hash.new
+	def Settings.auto=(val)
+		@@auto = val
+	end
+	def Settings.auto
+		@@auto
+	end
+	def Settings.save(who=Script.self)
+		if who.class == String
+			who = (Script.running.find { |s| s.name == who } || Script.hidden.find { |s| s.name == who })
+		end
+		if who =~ /^lich$/i
+			respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
+			return false
+		end
+		if who.class == Script
+			if $SAFE == 0
+				@@hash[who.name] ||= Hash.new
+				File.open("#{$data_dir}#{who.name}.sav", 'wb') { |f|
+					f.write(Marshal.dump(@@hash[who.name]))
+				}
+			else
+				action = { 'type' => :save_settings, 'script' => Script.self }
+				$untrusted_pending_actions.push(action)
+				wait_until { $untrusted_pending_actions.empty? }
+			end
+		else
+			respond '--- Lich: Settings.save: unable to identify calling script.'
+			return false
+		end
+	end
+	def Settings.load(who = Script.self)
+		if who.class == String
+			who = (Script.running.find { |s| s.name == who } || Script.hidden.find { |s| s.name == who })
+		end
+		if who.name =~ /^lich$/i
+			respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
+			return false
+		end
+		if who.class == Script
+			if $SAFE == 0
+				@@stamp[who.name] = Time.now
+				if File.exists?("#{$data_dir}#{who.name}.sav")
+					begin
+						File.open("#{$data_dir}#{who.name}.sav", 'rb') { |f|
+							@@hash[who.name] = Marshal.load(f.read)
+						}
+					rescue
+						$stdout.puts "--- error: Settings.load: #{$!}"
+						$stderr.puts "error: Settings.load: #{$!}"
+						$stderr.puts $!.backtrace
+					end
+				else
+					nil
+				end
+			else
+				action = { 'type' => :load_settings, 'script' => Script.self }
+				$untrusted_pending_actions.push(action)
+				wait_until { $untrusted_pending_actions.empty? }
+			end
+		else
+			respond '--- Lich: Settings.load: unable to identify calling script.'
+			return false
+		end
+	end
+	def Settings.autoload
+		if script.to_s =~ /^lich$/i
+			respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
+			return false
+		end
+		fname = $data_dir + Script.self.to_s + '.sav'
+		if File.mtime(fname) > @@stamp[Script.self.to_s]
+			Settings.load
+			true
+		else
+			false
+		end
+	end
+	def Settings.clear
+		unless script = Script.self
+			respond "--- Lich: The script trying to access settings cannot be identified!"
+			return false
+		end
+		@@hash[script.to_s] ||= Hash.new
+		@@hash[script.to_s].clear
+	end
+	def Settings.[](val)
+		Settings.autoload if @@auto
+		unless script = Script.self
+			respond "--- Lich: The script trying to access settings cannot be identified!"
+			return nil
+		end
+		@@hash[script.to_s] ||= Hash.new
+		@@hash[script.to_s][val]
+	end
+	def Settings.[]=(setting, val)
+		unless script = Script.self
+			respond "--- Lich: The script trying to access settings cannot be identified!"
+			return nil
+		end
+		@@hash[script.to_s] ||= Hash.new
+		@@hash[script.to_s][setting] = val
+		Settings.save if @@auto
+		@@hash[script.to_s][setting]
+	end
+	def Settings.to_hash
+		unless script = Script.self
+			respond "--- Lich: The script trying to access settings cannot be identified!"
+			return nil
+		end
+		@@hash[script.to_s] ||= Hash.new
+		@@hash[script.to_s]
 	end
 end
 
@@ -1452,10 +1588,11 @@ end
 
 class Script
 	@@running ||= Array.new
-	attr_reader :name, :vars, :safe, :labels, :file_name, :label_order, :thread_group
+	attr_reader :name, :vars, :safe, :labels, :file_name, :label_order, :thread_group, :trusted
 	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
+		@trusted = !LichSettings['untrusted_scripts'].include?(@name)
 		@file_name = file_name
 		@vars = Array.new
 		unless cli_vars.empty?
@@ -1585,10 +1722,12 @@ class Script
 		to_return
 	end
 	def Script.self
-		script = @@running.find { |scr| scr.thread_group == Thread.current.group }
-		return nil unless script
-		while script.paused; sleep "0.2".to_f; end
-		script
+		if script = @@running.find { |scr| scr.thread_group == Thread.current.group }
+			sleep "0.2".to_f while script.paused
+			script
+		else
+			nil
+		end
 	end
 	def Script.running
 		list = Array.new
@@ -1699,6 +1838,7 @@ class ExecScript<Script
 			num.succ!
 		end
 		@name = "exec#{num}"
+		@trusted = true
 		@cmd_data = cmd_data
 		@vars = Array.new
 		@downstream_buffer = LimitedArray.new
@@ -1732,6 +1872,7 @@ end
 class WizardScript<Script
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
+		@trusted = false
 		@file_name = file_name
 		@vars = Array.new
 		unless cli_vars.empty?
@@ -1922,119 +2063,9 @@ class ScriptBinder
 	end
 end
 
-class Settings
-	@@hash ||= {}
-	@@auto ||= false
-	@@stamp ||= Hash.new
-	def Settings.auto=(val)
-		@@auto = val
-	end
-	def Settings.auto
-		@@auto
-	end
-	def Settings.save
-		if script = Script.self
-			if script.to_s == 'lich'
-				respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
-				return false
-			end
-			@@hash[script.to_s] ||= Hash.new
-			File.open($data_dir + script.to_s + '.sav', 'wb') { |f|
-				f.write(Marshal.dump(@@hash[script.to_s]))
-			}
-		else
-			respond "--- Lich: The script trying to save its data cannot be identified!"
-			return false
-		end
-	end
-	def Settings.autoload
-		if Script.self.to_s == 'lich'
-			respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
-			return false
-		end
-		fname = $data_dir + Script.self.to_s + '.sav'
-		if File.mtime(fname) > @@stamp[Script.self.to_s]
-			Settings.load
-			true
-		else
-			false
-		end
-	end
-	def Settings.load(who = nil)
-		@@stamp[Script.self.to_s] = Time.now
-		if !who.nil?
-			who.concat('.sav') unless who =~ /\.sav$/i
-			if File.exists?("#{$data_dir}who")
-				begin
-					File.open("#{$data_dir}who", 'rb') { |f|
-						@@hash[who.sub(/\..*/, '')] = Marshal.load(f.read)
-					}
-				rescue
-					$stdout.puts "--- error: Settings.load: #{$!}"
-					$stderr.puts "error: Settings.load: #{$!}"
-					$stderr.puts $!.backtrace
-				end
-			else
-				nil
-			end
-		elsif script = Script.self
-			if script.to_s == 'lich'
-				respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use the Settings class, because it will conflict with Lich\'s settings.'
-				return false
-			end
-			if File.exists?($data_dir + script.to_s + ".sav")
-				begin
-					File.open($data_dir + script.to_s + '.sav', 'rb') { |f|
-						data = Marshal.load(f.read)
-						@@hash[script.to_s] = data
-					}
-				rescue
-					$stdout.puts "--- error: Settings.load: #{$!}"
-					$stderr.puts "error: Settings.load: #{$!}"
-					$stderr.puts $!.backtrace
-				end
-			else
-				nil
-			end
-		else
-			respond "--- Lich: The script trying to save its data cannot be identified!"
-			return false
-		end
-	end
-	def Settings.clear
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return false
-		end
-		unless @@hash[script.to_s] then @@hash[script.to_s] = {} end
-		@@hash[script.to_s].clear
-	end
-	def Settings.[](val)
-		Settings.autoload if @@auto
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return nil
-		end
-		unless @@hash[script.to_s] then @@hash[script.to_s] = {} end
-		@@hash[script.to_s][val]
-	end
-	def Settings.[]=(setting, val)
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return nil
-		end
-		unless @@hash[script.to_s] then @@hash[script.to_s] = {} end
-		@@hash[script.to_s][setting] = val
-		Settings.save if @@auto
-		@@hash[script.to_s][setting]
-	end
-	def Settings.to_hash
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return nil
-		end
-		unless @@hash[script.to_s] then @@hash[script.to_s] = {} end
-		@@hash[script.to_s]
+class UntrustedScriptBinder
+	def create_block
+		Proc.new { }
 	end
 end
 
@@ -2411,14 +2442,107 @@ class Skills
 	@@firstaid ||= 0
 	@@trading ||= 0
 	@@pickpocketing ||= 0
+
+	def Skills.twoweaponcombat;           @@twoweaponcombat;         end
+	def Skills.twoweaponcombat=(val);     @@twoweaponcombat=val;     end
+	def Skills.armoruse;                  @@armoruse;                end
+	def Skills.armoruse=(val);            @@armoruse=val;            end
+	def Skills.shielduse;                 @@shielduse;               end
+	def Skills.shielduse=(val);           @@shielduse=val;           end
+	def Skills.combatmaneuvers;           @@combatmaneuvers;         end
+	def Skills.combatmaneuvers=(val);     @@combatmaneuvers=val;     end
+	def Skills.edgedweapons;              @@edgedweapons;            end
+	def Skills.edgedweapons=(val);        @@edgedweapons=val;        end
+	def Skills.bluntweapons;              @@bluntweapons;            end
+	def Skills.bluntweapons=(val);        @@bluntweapons=val;        end
+	def Skills.twohandedweapons;          @@twohandedweapons;        end
+	def Skills.twohandedweapons=(val);    @@twohandedweapons=val;    end
+	def Skills.rangedweapons;             @@rangedweapons;           end
+	def Skills.rangedweapons=(val);       @@rangedweapons=val;       end
+	def Skills.thrownweapons;             @@thrownweapons;           end
+	def Skills.thrownweapons=(val);       @@thrownweapons=val;       end
+	def Skills.polearmweapons;            @@polearmweapons;          end
+	def Skills.polearmweapons=(val);      @@polearmweapons=val;      end
+	def Skills.brawling;                  @@brawling;                end
+	def Skills.brawling=(val);            @@brawling=val;            end
+	def Skills.ambush;                    @@ambush;                  end
+	def Skills.ambush=(val);              @@ambush=val;              end
+	def Skills.multiopponentcombat;       @@multiopponentcombat;     end
+	def Skills.multiopponentcombat=(val); @@multiopponentcombat=val; end
+	def Skills.combatleadership;          @@combatleadership;        end
+	def Skills.combatleadership=(val);    @@combatleadership=val;    end
+	def Skills.physicalfitness;           @@physicalfitness;         end
+	def Skills.physicalfitness=(val);     @@physicalfitness=val;     end
+	def Skills.dodging;                   @@dodging;                 end
+	def Skills.dodging=(val);             @@dodging=val;             end
+	def Skills.arcanesymbols;             @@arcanesymbols;           end
+	def Skills.arcanesymbols=(val);       @@arcanesymbols=val;       end
+	def Skills.magicitemuse;              @@magicitemuse;            end
+	def Skills.magicitemuse=(val);        @@magicitemuse=val;        end
+	def Skills.spellaiming;               @@spellaiming;             end
+	def Skills.spellaiming=(val);         @@spellaiming=val;         end
+	def Skills.harnesspower;              @@harnesspower;            end
+	def Skills.harnesspower=(val);        @@harnesspower=val;        end
+	def Skills.emc;                       @@emc;                     end
+	def Skills.emc=(val);                 @@emc=val;                 end
+	def Skills.mmc;                       @@mmc;                     end
+	def Skills.mmc=(val);                 @@mmc=val;                 end
+	def Skills.smc;                       @@smc;                     end
+	def Skills.smc=(val);                 @@smc=val;                 end
+	def Skills.elair;                     @@elair;                   end
+	def Skills.elair=(val);               @@elair=val;               end
+	def Skills.elearth;                   @@elearth;                 end
+	def Skills.elearth=(val);             @@elearth=val;             end
+	def Skills.elfire;                    @@elfire;                  end
+	def Skills.elfire=(val);              @@elfire=val;              end
+	def Skills.elwater;                   @@elwater;                 end
+	def Skills.elwater=(val);             @@elwater=val;             end
+	def Skills.slblessings;               @@slblessings;             end
+	def Skills.slblessings=(val);         @@slblessings=val;         end
+	def Skills.slreligion;                @@slreligion;              end
+	def Skills.slreligion=(val);          @@slreligion=val;          end
+	def Skills.slsummoning;               @@slsummoning;             end
+	def Skills.slsummoning=(val);         @@slsummoning=val;         end
+	def Skills.sldemonology;              @@sldemonology;            end
+	def Skills.sldemonology=(val);        @@sldemonology=val;        end
+	def Skills.slnecromancy;              @@slnecromancy;            end
+	def Skills.slnecromancy=(val);        @@slnecromancy=val;        end
+	def Skills.mldivination;              @@mldivination;            end
+	def Skills.mldivination=(val);        @@mldivination=val;        end
+	def Skills.mlmanipulation;            @@mlmanipulation;          end
+	def Skills.mlmanipulation=(val);      @@mlmanipulation=val;      end
+	def Skills.mltelepathy;               @@mltelepathy;             end
+	def Skills.mltelepathy=(val);         @@mltelepathy=val;         end
+	def Skills.mltransference;            @@mltransference;          end
+	def Skills.mltransference=(val);      @@mltransference=val;      end
+	def Skills.mltransformation;          @@mltransformation;        end
+	def Skills.mltransformation=(val);    @@mltransformation=val;    end
+	def Skills.survival;                  @@survival;                end
+	def Skills.survival=(val);            @@survival=val;            end
+	def Skills.disarmingtraps;            @@disarmingtraps;          end
+	def Skills.disarmingtraps=(val);      @@disarmingtraps=val;      end
+	def Skills.pickinglocks;              @@pickinglocks;            end
+	def Skills.pickinglocks=(val);        @@pickinglocks=val;        end
+	def Skills.stalkingandhiding;         @@stalkingandhiding;       end
+	def Skills.stalkingandhiding=(val);   @@stalkingandhiding=val;   end
+	def Skills.perception;                @@perception;              end
+	def Skills.perception=(val);          @@perception=val;          end
+	def Skills.climbing;                  @@climbing;                end
+	def Skills.climbing=(val);            @@climbing=val;            end
+	def Skills.swimming;                  @@swimming;                end
+	def Skills.swimming=(val);            @@swimming=val;            end
+	def Skills.firstaid;                  @@firstaid;                end
+	def Skills.firstaid=(val);            @@firstaid=val;            end
+	def Skills.trading;                   @@trading;                 end
+	def Skills.trading=(val);             @@trading=val;             end
+	def Skills.pickpocketing;             @@pickpocketing;           end
+	def Skills.pickpocketing=(val);       @@pickpocketing=val;       end
+
 	def Skills.serialize
 		[@@twoweaponcombat, @@armoruse, @@shielduse, @@combatmaneuvers, @@edgedweapons, @@bluntweapons, @@twohandedweapons, @@rangedweapons, @@thrownweapons, @@polearmweapons, @@brawling, @@ambush, @@multiopponentcombat, @@combatleadership, @@physicalfitness, @@dodging, @@arcanesymbols, @@magicitemuse, @@spellaiming, @@harnesspower, @@emc, @@mmc, @@smc, @@elair, @@elearth, @@elfire, @@elwater, @@slblessings, @@slreligion, @@slsummoning, @@sldemonology, @@slnecromancy, @@mldivination, @@mlmanipulation, @@mltelepathy, @@mltransference, @@mltransformation, @@survival, @@disarmingtraps, @@pickinglocks, @@stalkingandhiding, @@perception, @@climbing, @@swimming, @@firstaid, @@trading, @@pickpocketing]
 	end
 	def Skills.load_serialized=(array)
 		@@twoweaponcombat, @@armoruse, @@shielduse, @@combatmaneuvers, @@edgedweapons, @@bluntweapons, @@twohandedweapons, @@rangedweapons, @@thrownweapons, @@polearmweapons, @@brawling, @@ambush, @@multiopponentcombat, @@combatleadership, @@physicalfitness, @@dodging, @@arcanesymbols, @@magicitemuse, @@spellaiming, @@harnesspower, @@emc, @@mmc, @@smc, @@elair, @@elearth, @@elfire, @@elwater, @@slblessings, @@slreligion, @@slsummoning, @@sldemonology, @@slnecromancy, @@mldivination, @@mlmanipulation, @@mltelepathy, @@mltransference, @@mltransformation, @@survival, @@disarmingtraps, @@pickinglocks, @@stalkingandhiding, @@perception, @@climbing, @@swimming, @@firstaid, @@trading, @@pickpocketing = array
-	end
-	def Skills.method_missing(arg1, arg2='')
-		instance_eval("@@#{arg1}#{arg2}", if Script.self then Script.self.name else "Lich" end)
 	end
 	def Skills.to_bonus(ranks)
 		bonus = 0
@@ -2449,28 +2573,39 @@ class Spells
 	@@majorelemental ||= 0
 	@@minorspiritual ||= 0
 	@@majorspiritual ||= 0
-	@@wizard ||= 0
-	@@sorcerer ||= 0
-	@@ranger ||= 0
-	@@paladin ||= 0
-	@@empath ||= 0
-	@@cleric ||= 0
-	@@bard ||= 0
-	def Spells.method_missing(arg1, arg2='')
-		instance_eval("@@#{arg1}#{arg2}")
-	end
-	def Spells.minorspirit
-		@@minorspiritual
-	end
-	def Spells.minorspirit=(val)
-		@@minorspiritual = val
-	end
-	def Spells.majorspirit
-		@@majorspiritual
-	end
-	def Spells.majorspirit=(val)
-		@@majorspiritual = val
-	end
+	@@wizard         ||= 0
+	@@sorcerer       ||= 0
+	@@ranger         ||= 0
+	@@paladin        ||= 0
+	@@empath         ||= 0
+	@@cleric         ||= 0
+	@@bard           ||= 0
+	def Spells.minorelemental=(val); @@minorelemental = val; end
+	def Spells.minorelemental;       @@minorelemental;       end
+	def Spells.majorelemental=(val); @@majorelemental = val; end
+	def Spells.majorelemental;       @@majorelemental;       end
+	def Spells.minorspiritual=(val); @@minorspiritual = val; end
+	def Spells.minorspiritual;       @@minorspiritual;       end
+	def Spells.minorspirit=(val);    @@minorspiritual = val; end
+	def Spells.minorspirit;          @@minorspiritual;       end
+	def Spells.majorspiritual=(val); @@majorspiritual = val; end
+	def Spells.majorspiritual;       @@majorspiritual;       end
+	def Spells.majorspirit=(val);    @@majorspiritual = val; end
+	def Spells.majorspirit;          @@majorspiritual;       end
+	def Spells.wizard=(val);         @@wizard = val;         end
+	def Spells.wizard;               @@wizard;               end
+	def Spells.sorcerer=(val);       @@sorcerer = val;       end
+	def Spells.sorcerer;             @@sorcerer;             end
+	def Spells.ranger=(val);         @@ranger = val;         end
+	def Spells.ranger;               @@ranger;               end
+	def Spells.paladin=(val);        @@paladin = val;        end
+	def Spells.paladin;              @@paladin;              end
+	def Spells.empath=(val);         @@empath = val;         end
+	def Spells.empath;               @@empath;               end
+	def Spells.cleric=(val);         @@cleric = val;         end
+	def Spells.cleric;               @@cleric;               end
+	def Spells.bard=(val);           @@bard = val;           end
+	def Spells.bard;                 @@bard;                 end
 	def Spells.get_circle_name(num)
 		val = num.to_s
 		if val == '1' then 'Minor Spirit'
@@ -2531,10 +2666,28 @@ end
 class Spell
 	@@list ||= Array.new
 	@@cast_lock = false
-	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :renewCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type, :command
+	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :renewCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type, :command, :mana_cost_formula
 	attr_accessor :stance, :channel
 	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
 		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@renewCost,@stacks,@selfonly,@command,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
+		@duration.untaint
+		@manaCost.untaint
+		@mana_cost_formula = @manaCost
+		@mana_cost_formula.untaint
+		@spiritCost.untaint
+		@staminaCost.untaint
+		@boltAS.untaint
+		@physicalAS.untaint
+		@boltDS.untaint
+		@physicalDS.untaint
+		@elementalCS.untaint
+		@spiritCS.untaint
+		@sorcererCS.untaint
+		@elementalTD.untaint
+		@spiritTD.untaint
+		@sorcererTD.untaint
+		@strength.untaint
+		@dodging.untaint
 		if num.to_i.nonzero? then @num = num.to_i else @num = num end
 		@timestamp = Time.now
 		@active = false
@@ -2546,21 +2699,36 @@ class Spell
 		@@list.push(self) unless @@list.find { |spell| spell.num == @num }
 	end
 	def Spell.load(filename="#{$script_dir}spell-list.xml.txt")
-		begin
-			@@list.clear
-			File.open(filename) { |file|
-				file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
-					spell = Hash.new
-					spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-					Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
+		if $SAFE == 0
+			begin
+				spell_times = Hash.new
+				# reloading spell data should not reset spell tracking...
+				unless @@list.empty?
+					@@list.each { |spell| spell_times[spell.num] = spell.timeleft if spell.active? }
+					@@list.clear
+				end
+				File.open(filename) { |file|
+					file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
+						spell = Hash.new
+						spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+						Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
+					}
 				}
-			}
-			return true
-		rescue
-			$stdout.puts "--- error: Spell.load: #{$!}"
-			$stderr.puts "error: Spell.load: #{$!}"
-			$stderr.puts $!.backtrace
-			return false
+				spell_times.each_pair { |num,timeleft|
+					Spell[num].putup
+					Spell[num].timeleft = timeleft
+				}
+				return true
+			rescue
+				$stdout.puts "--- error: Spell.load: #{$!}"
+				$stderr.puts "error: Spell.load: #{$!}"
+				$stderr.puts $!.backtrace
+				return false
+			end
+		else
+			action = { 'type' => :load_spells, 'file' => filename }
+			$untrusted_pending_actions.push(action)
+			wait_until { $untrusted_pending_actions.empty? }
 		end
 	end
 	def Spell.[](val)
@@ -2600,6 +2768,13 @@ class Spell
 	def Spell.dnmsgs
 		Spell.load if @@list.empty?
 		@@list.collect { |spell| spell.msgdn }
+	end
+	def mana_cost
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@mana_cost_formula}") }.call
+		else
+			eval(@mana_cost_formula)
+		end
 	end
 	def timeleft
 		# this is just a copy and paste of the "touch" function.  For some reason, just calling touch here does not work correctly.
@@ -2736,14 +2911,32 @@ class Spell
 			echo 'cast: not enough stamina'
 			return false
 		end
-		wait_while { @@cast_lock and (locking_script = (Script.hidden + Script.running).find { |s| s.name == @@cast_lock }) and not locking_script.paused and (locking_script.name != Script.self.name) }
+		loop {
+			break unless @@cast_lock
+			break unless locking_script = (Script.running.find { |s| s.name == @@cast_lock } || Script.hidden.find { |s| s.name == @@cast_lock })
+			break if locking_script.paused
+			break if locking_script == Script.self.name
+			sleep 0.1
+		}
 		@@cast_lock = Script.self.name
-		# fixme: check mana/stamina/spirit again
+		unless checkmana(eval(@manaCost))
+			echo 'cast: not enough mana'
+			return false
+		end
+		unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+			echo 'cast: not enough spirit'
+			return false
+		end
+		unless checkstamina(eval(@staminaCost))
+			echo 'cast: not enough stamina'
+			return false
+		end
 		if @command
 			waitrt?
 			waitcastrt?
 			fput @command
 			@@cast_lock = false
+			true
 		else
 			if @channel
 				cast_cmd = 'channel'
@@ -2761,17 +2954,17 @@ class Spell
 				unless checkprep == 'None'
 					dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 					unless checkmana(eval(@manaCost))
-						@@cast_lock = false
+						@@cast_lock = false if @@cast_lock == Script.self.name
 						echo 'cast: not enough mana'
 						return false
 					end
 					unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
-						@@cast_lock = false
+						@@cast_lock = false if @@cast_lock == Script.self.name
 						echo 'cast: not enough spirit'
 						return false
 					end
 					unless checkstamina(eval(@staminaCost))
-						@@cast_lock = false
+						@@cast_lock = false if @@cast_lock == Script.self.name
 						echo 'cast: not enough stamina'
 						return false
 					end
@@ -2790,7 +2983,7 @@ class Spell
 							return false
 						end
 					elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$/
-						$cast_lock = false
+						$cast_lock = false if @@cast_lock == Script.self.name
 						return false
 					end
 				}
@@ -2805,7 +2998,7 @@ class Spell
 			if cast_result == 'Cast at what?'
 				dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 			end
-			@@cast_lock = false
+			@@cast_lock = false if @@cast_lock == Script.self.name
 			cast_result
 		end
 	end
@@ -2828,17 +3021,38 @@ class Stats
 	@@int ||= [0,0]
 	@@wis ||= [0,0]
 	@@inf ||= [0,0]
-	def Stats.method_missing(arg1, arg2='')
-		if arg2.class == Array
-			instance_eval("@@#{arg1}[#{arg2.join(',')}]", if Script.self then Script.self.name else "Lich" end)
-		elsif arg2.to_s =~ /^\d+$/
-			instance_eval("@@#{arg1}#{arg2}", if Script.self then Script.self.name else "Lich" end)
-		elsif arg2.empty?
-			instance_eval("@@#{arg1}", if Script.self then Script.self.name else "Lich" end)
-		else
-			instance_eval("@@#{arg1}'#{arg2}'", if Script.self then Script.self.name else "Lich" end)
-		end
-	end
+	def Stats.race;         @@race;       end
+	def Stats.race=(val);   @@race=val;   end
+	def Stats.prof;         @@prof;       end
+	def Stats.prof=(val);   @@prof=val;   end
+	def Stats.gender;       @@gender;     end
+	def Stats.gender=(val); @@gender=val; end
+	def Stats.age;          @@age;        end
+	def Stats.age=(val);    @@age=val;    end
+	def Stats.exp;          @@exp;        end
+	def Stats.exp=(val);    @@exp=val;    end
+	def Stats.level;        @@level;      end
+	def Stats.level=(val);  @@level=val;  end
+	def Stats.str;          @@str;        end
+	def Stats.str=(val);    @@str=val;    end
+	def Stats.con;          @@con;        end
+	def Stats.con=(val);    @@con=val;    end
+	def Stats.dex;          @@dex;        end
+	def Stats.dex=(val);    @@dex=val;    end
+	def Stats.agi;          @@agi;        end
+	def Stats.agi=(val);    @@agi=val;    end
+	def Stats.dis;          @@dis;        end
+	def Stats.dis=(val);    @@dis=val;    end
+	def Stats.aur;          @@aur;        end
+	def Stats.aur=(val);    @@aur=val;    end
+	def Stats.log;          @@log;        end
+	def Stats.log=(val);    @@log=val;    end
+	def Stats.int;          @@int;        end
+	def Stats.int=(val);    @@int=val;    end
+	def Stats.wis;          @@wis;        end
+	def Stats.wis=(val);    @@wis=val;    end
+	def Stats.inf;          @@inf;        end
+	def Stats.inf=(val);    @@inf=val;    end
 	def Stats.serialize
 		[@@race,@@prof,@@gender,@@age,@@exp,@@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf]
 	end
@@ -2879,19 +3093,32 @@ class Gift
 end
 
 class Wounds
-	def Wounds.method_missing(arg)
-		arg = arg.to_s
-		fix_injury_mode
-		fix_name = { 'nerves' => 'nsys', 'lleg' => 'leftLeg', 'rleg' => 'rightLeg', 'rarm' => 'rightArm', 'larm' => 'leftArm', 'rhand' => 'rightHand', 'lhand' => 'leftHand', 'reye' => 'rightEye', 'leye' => 'leftEye', 'abs' => 'abdomen' }
-		if XMLData.injuries[arg]['wound']
-			XMLData.injuries[arg]['wound']
-		elsif XMLData.injuries[fix_name[arg]]['wound']
-			XMLData.injuries[fix_name[arg]]['wound']
-		else
-			echo 'Wounds: Invalid area, try one of these: arms, limbs, torso, ' + XMLData.injuries.keys.join(', ')
-			nil
-		end
-	end
+	def Wounds.leftEye;   fix_injury_mode; XMLData.injuries['leftEye']['wound'];   end
+	def Wounds.leye;      fix_injury_mode; XMLData.injuries['leftEye']['wound'];   end
+	def Wounds.rightEye;  fix_injury_mode; XMLData.injuries['rightEye']['wound'];  end
+	def Wounds.reye;      fix_injury_mode; XMLData.injuries['rightEye']['wound'];  end
+	def Wounds.head;      fix_injury_mode; XMLData.injuries['head']['wound'];      end
+	def Wounds.neck;      fix_injury_mode; XMLData.injuries['neck']['wound'];      end
+	def Wounds.back;      fix_injury_mode; XMLData.injuries['back']['wound'];      end
+	def Wounds.chest;     fix_injury_mode; XMLData.injuries['chest']['wound'];     end
+	def Wounds.abdomen;   fix_injury_mode; XMLData.injuries['abdomen']['wound'];   end
+	def Wounds.abs;       fix_injury_mode; XMLData.injuries['abdomen']['wound'];   end
+	def Wounds.leftArm;   fix_injury_mode; XMLData.injuries['leftArm']['wound'];   end
+	def Wounds.larm;      fix_injury_mode; XMLData.injuries['leftArm']['wound'];   end
+	def Wounds.rightArm;  fix_injury_mode; XMLData.injuries['rightArm']['wound'];  end
+	def Wounds.rarm;      fix_injury_mode; XMLData.injuries['rightArm']['wound'];  end
+	def Wounds.rightHand; fix_injury_mode; XMLData.injuries['rightHand']['wound']; end
+	def Wounds.rhand;     fix_injury_mode; XMLData.injuries['rightHand']['wound']; end
+	def Wounds.leftHand;  fix_injury_mode; XMLData.injuries['leftHand']['wound'];  end
+	def Wounds.lhand;     fix_injury_mode; XMLData.injuries['leftHand']['wound'];  end
+	def Wounds.leftLeg;   fix_injury_mode; XMLData.injuries['leftLeg']['wound'];   end
+	def Wounds.lleg;      fix_injury_mode; XMLData.injuries['leftLeg']['wound'];   end
+	def Wounds.rightLeg;  fix_injury_mode; XMLData.injuries['rightLeg']['wound'];  end
+	def Wounds.rleg;      fix_injury_mode; XMLData.injuries['rightLeg']['wound'];  end
+	def Wounds.leftFoot;  fix_injury_mode; XMLData.injuries['leftFoot']['wound'];  end
+	def Wounds.rightFoot; fix_injury_mode; XMLData.injuries['rightFoot']['wound']; end
+	def Wounds.nsys;      fix_injury_mode; XMLData.injuries['nsys']['wound'];      end
+	def Wounds.nerves;    fix_injury_mode; XMLData.injuries['nsys']['wound'];      end
 	def Wounds.arms
 		fix_injury_mode
 		[XMLData.injuries['leftArm']['wound'],XMLData.injuries['rightArm']['wound'],XMLData.injuries['leftHand']['wound'],XMLData.injuries['rightHand']['wound']].max
@@ -2904,22 +3131,39 @@ class Wounds
 		fix_injury_mode
 		[XMLData.injuries['rightEye']['wound'],XMLData.injuries['leftEye']['wound'],XMLData.injuries['chest']['wound'],XMLData.injuries['abdomen']['wound'],XMLData.injuries['back']['wound']].max
 	end
+	def Wounds.method_missing(arg=nil)
+		echo "Wounds: Invalid area, try one of these: arms, limbs, torso, #{XMLData.injuries.keys.join(', ')}"
+		nil
+	end
 end
 
 class Scars
-	def Scars.method_missing(arg)
-		arg = arg.to_s
-		fix_injury_mode
-		fix_name = { 'nerves' => 'nsys', 'lleg' => 'leftLeg', 'rleg' => 'rightLeg', 'rarm' => 'rightArm', 'larm' => 'leftArm', 'rhand' => 'rightHand', 'lhand' => 'leftHand', 'reye' => 'rightEye', 'leye' => 'leftEye', 'abs' => 'abdomen' }
-		if XMLData.injuries[arg]['scar']
-			XMLData.injuries[arg]['scar']
-		elsif XMLData.injuries[fix_name[arg]]['scar']
-			XMLData.injuries[fix_name[arg]]['scar']
-		else
-			echo 'Scars: Invalid area, try one of these: arms, limbs, torso, ' + XMLData.injuries.keys.join(', ')
-			nil
-		end
-	end
+	def Scars.leftEye;   fix_injury_mode; XMLData.injuries['leftEye']['scar'];   end
+	def Scars.leye;      fix_injury_mode; XMLData.injuries['leftEye']['scar'];   end
+	def Scars.rightEye;  fix_injury_mode; XMLData.injuries['rightEye']['scar'];  end
+	def Scars.reye;      fix_injury_mode; XMLData.injuries['rightEye']['scar'];  end
+	def Scars.head;      fix_injury_mode; XMLData.injuries['head']['scar'];      end
+	def Scars.neck;      fix_injury_mode; XMLData.injuries['neck']['scar'];      end
+	def Scars.back;      fix_injury_mode; XMLData.injuries['back']['scar'];      end
+	def Scars.chest;     fix_injury_mode; XMLData.injuries['chest']['scar'];     end
+	def Scars.abdomen;   fix_injury_mode; XMLData.injuries['abdomen']['scar'];   end
+	def Scars.abs;       fix_injury_mode; XMLData.injuries['abdomen']['scar'];   end
+	def Scars.leftArm;   fix_injury_mode; XMLData.injuries['leftArm']['scar'];   end
+	def Scars.larm;      fix_injury_mode; XMLData.injuries['leftArm']['scar'];   end
+	def Scars.rightArm;  fix_injury_mode; XMLData.injuries['rightArm']['scar'];  end
+	def Scars.rarm;      fix_injury_mode; XMLData.injuries['rightArm']['scar'];  end
+	def Scars.rightHand; fix_injury_mode; XMLData.injuries['rightHand']['scar']; end
+	def Scars.rhand;     fix_injury_mode; XMLData.injuries['rightHand']['scar']; end
+	def Scars.leftHand;  fix_injury_mode; XMLData.injuries['leftHand']['scar'];  end
+	def Scars.lhand;     fix_injury_mode; XMLData.injuries['leftHand']['scar'];  end
+	def Scars.leftLeg;   fix_injury_mode; XMLData.injuries['leftLeg']['scar'];   end
+	def Scars.lleg;      fix_injury_mode; XMLData.injuries['leftLeg']['scar'];   end
+	def Scars.rightLeg;  fix_injury_mode; XMLData.injuries['rightLeg']['scar'];  end
+	def Scars.rleg;      fix_injury_mode; XMLData.injuries['rightLeg']['scar'];  end
+	def Scars.leftFoot;  fix_injury_mode; XMLData.injuries['leftFoot']['scar'];  end
+	def Scars.rightFoot; fix_injury_mode; XMLData.injuries['rightFoot']['scar']; end
+	def Scars.nsys;      fix_injury_mode; XMLData.injuries['nsys']['scar'];      end
+	def Scars.nerves;    fix_injury_mode; XMLData.injuries['nsys']['scar'];      end
 	def Scars.arms
 		fix_injury_mode
 		[XMLData.injuries['leftArm']['scar'],XMLData.injuries['rightArm']['scar'],XMLData.injuries['leftHand']['scar'],XMLData.injuries['rightHand']['scar']].max
@@ -2931,6 +3175,10 @@ class Scars
 	def Scars.torso
 		fix_injury_mode
 		[XMLData.injuries['rightEye']['scar'],XMLData.injuries['leftEye']['scar'],XMLData.injuries['chest']['scar'],XMLData.injuries['abdomen']['scar'],XMLData.injuries['back']['scar']].max
+	end
+	def Scars.method_missing(arg=nil)
+		echo "Scars: Invalid area, try one of these: arms, limbs, torso, #{XMLData.injuries.keys.join(', ')}"
+		nil
 	end
 end
 
@@ -3198,29 +3446,30 @@ class Map
 		Map.load
 		GC.start
 	end
-	def Map.load(file=($script_dir.to_s + "map.dat"))
-		unless File.exists?(file)
-			raise Exception.exception("MapDatabaseError"), "Fatal error: file `#{file}' does not exist!"
-		end
-		fd = File.open(file, 'rb')
-		@@list = Marshal.load(fd.read)
-		fd.close
-		fd = nil
-		GC.start
-		# try not to freak out if we load an old style map database
-		if Map.list[0].desc.class == String
-			Map.list.each { |room| room.desc = [ room.desc ] if room.desc.class == String }
-		end
-		if Map.list[0].title.class == String
-			Map.list.each { |room| room.title = [ room.title ] if room.title.class == String }
-		end
-		if Map.list[0].paths.class == String
-			Map.list.each { |room| room.paths = [ room.paths ] if room.paths.class == String }
+	def Map.load(filename="#{$script_dir}map.dat")
+		if $SAFE == 0
+			if File.exists?(filename)
+				File.open(filename, 'rb') { |file| @@list = Marshal.load(file.read) }
+				GC.start
+				# try not to freak out if we load an old style map database
+				if (Map.list[0].desc.class == String) or (Map.list[0].title.class == String) or (Map.list[0].paths.class == String)
+					Map.list.each { |room| room.desc = [ room.desc ] if room.desc.class == String; room.title = [ room.title ] if room.title.class == String; room.paths = [ room.paths ] if room.paths.class == String }
+				end
+				Map.list.each { |room| room.wayto.values.each { |way| way._dump.untaint if way.class == Proc } }
+				true
+			else
+				respond "--- error: File does not exist: #{filename}"
+				false
+			end
+		else
+			action = { 'type' => :load_map, 'file' => filename }
+			$untrusted_pending_actions.push(action)
+			wait_until { $untrusted_pending_actions.empty? }
 		end
 	end
-	def Map.load_xml(filename=($script_dir.to_s + "map.xml"))
+	def Map.load_xml(filename="#{$script_dir}map.xml")
 		unless File.exists?(filename)
-			raise Exception.exception("MapDatabaseError"), "Fatal error: file `#{file}' does not exist!"
+			raise Exception.exception("MapDatabaseError"), "Fatal error: file `#{filename}' does not exist!"
 		end
 		File.open(filename) { |file|
 			file.read.split(/(?=<room)/).each { |room_tag|
@@ -3244,7 +3493,7 @@ class Map
 							room['wayto'][target] = StringProc.new(way.gsub('&gt;','>').gsub('&lt;','<'))
 						end
 						room['timeto'][target] = cost.to_f
-					elsif line =~ /<(?:image|narost)\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\s*\/>/
+					elsif line =~ /<(?:image|tsoran)\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\s*\/>/
 						map_name, map_x, map_y, map_roomsize = $1, $2.to_i, $3.to_i, $4.to_i
 					elsif line =~ /<\/room>/
 						new_room = Map.new(room['id'].to_i, room['title'], room['description'], room['paths'], room['wayto'], room['timeto'])
@@ -3261,35 +3510,36 @@ class Map
 		Map.load if @@list.empty?
 		nil
 	end
-	def Map.save(filename=($script_dir.to_s + 'map.dat'))
-		if File.exists?(filename)
-			respond "File exists!  Backing it up before proceeding..."
-			begin
-				file = nil
-				bakfile = nil
-				file = File.open(filename, 'rb')
-				bakfile = File.open(filename + ".bak", "wb")
-				bakfile.write(file.read)
-			rescue
-				respond $!
-			ensure
-				file ? file.close : nil
-				bakfile ? bakfile.close : nil
+	def Map.save(filename="#{$script_dir}map.dat")
+		if $SAFE == 0
+			if File.exists?(filename)
+				respond "--- Backing up map database"
+				begin
+					File.open(filename, 'rb') { |infile|
+						File.open("#{filename}.bak", 'wb') { |outfile|
+							outfile.write(infile.read)
+						}
+					}
+				rescue
+					respond "--- error: #{$!}"
+				end
 			end
+			begin
+				File.open(filename, 'wb') { |file|
+					file.write(Marshal.dump(@@list))
+				}
+				respond "--- Map database saved"
+			rescue
+				respond "--- error: #{$!}"
+			end
+			GC.start
+		else
+			action = { 'type' => :save_map, 'file' => filename }
+			$untrusted_pending_actions.push(action)
+			wait_until { $untrusted_pending_actions.empty? }
 		end
-		begin
-			file = nil
-			file = File.open(filename, 'wb')
-			file.write(Marshal.dump(@@list))
-			respond "The current map database has been saved!"
-		rescue
-			respond $!
-		ensure
-			file ? file.close : nil
-		end
-		GC.start
 	end
-	def Map.save_xml(filename=($script_dir.to_s + 'map.xml'))
+	def Map.save_xml(filename="#{$script_dir}map.xml")
 		if File.exists?(filename)
 			respond "File exists!  Backing it up before proceeding..."
 			begin
@@ -3338,47 +3588,8 @@ class Map
 		GC.start
 	end
 	def Map.smart_check
-		Map.load if @@list.empty?
-		error_rooms = []
-		@@list.each { |room|
-			if room.wayto.keys.include?(room.id.to_s)
-				error_rooms.push("Room references itself as adjacent:\n#{room}")
-			end
-			room.wayto.dup.each { |torm, way|
-				if way =~ /^(?:g |go )?(?:n|no|nor|nort|north)$/ and !(room.paths =~ /\bnorth,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:ne|northeast|northeas|northea|northe)$/ and !(room.paths =~ /\bnortheast,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:e|ea|eas|east)$/ and !(room.paths =~ /\beast,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:southeast|southeas|southea|southe)$/ and !(room.paths =~ /\bsoutheast,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:south|sout|sou|so|s)$/ and !(room.paths =~ /\bsouth,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:sw|southwest|southwes|southwe|southw)$/ and !(room.paths =~ /\bsouthwest,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:west|wes|we|w)$/ and !(room.paths =~ /\bwest,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:nw|northwest|northwes|northwe|northw)$/ and !(room.paths =~ /\bnorthwest,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:u|up)$/ and !(room.paths =~ /\bup,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				elsif way =~ /^(?:g |go )?(?:d|do|dow|down)$/ and !(room.paths =~ /\bdown,?\b/)
-					puts("Dir error in room:\n#{room}\n... cannot reach room #{torm} by going #{way}!")
-					room.wayto.delete(torm)
-				end
-			}
-		}
-		error_rooms
+		echo 'Map.smart_check is depreciated.  Doing nothing.'
+		nil
 	end
 	def Map.estimate_time(array)
 		Map.load if @@list.empty?
@@ -3540,7 +3751,11 @@ class StringProc
 		Proc
 	end
 	def call(*args)
-		eval(@string, nil, "StringProc")
+		if $SAFE < 3
+			proc { $SAFE = 3; eval(@string) }.call
+		else
+			eval(@string)
+		end
 	end
 	def _dump(depth = nil)
 		@string
@@ -3654,137 +3869,145 @@ end
 
 def start_script(script_name,cli_vars=[],force=false)
 	# fixme: look in wizard script directory
-	file_name = nil
-	if File.exists?($script_dir + script_name + '.lic')
-		file_name = $script_dir + script_name + '.lic'
-	elsif File.exists?($script_dir + script_name + '.cmd')
-		file_name = $script_dir + script_name + '.cmd'
-	elsif File.exists?($script_dir + script_name + '.wiz')
-		file_name = $script_dir + script_name + '.wiz'
-	else
-		file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }
-		unless file_name = file_list.find { |val| val =~ /^#{script_name}\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } or 
-		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?i:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/ } or 
-		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } or 
-		       file_name = file_list.find { |val| val =~ /^#{script_name}$/i }
-			respond("--- Lich: could not find script `#{script_name}' in directory #{$script_dir}!")
+	if $SAFE == 0
+		file_name = nil
+		if File.exists?("#{$script_dir}#{script_name}.lic")
+			file_name = "#{script_name}.lic"
+		elsif File.exists?("#{$script_dir}#{script_name}.cmd")
+			file_name = "#{script_name}.cmd"
+		elsif File.exists?("#{$script_dir}#{script_name}.wiz")
+			file_name = "#{script_name}.wiz"
+		else
+			file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }
+			file_name = (file_list.find { |val| val =~ /^#{script_name}\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?i:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{script_name}$/i })
 			file_list = nil
+		end
+		unless file_name
+			respond("--- Lich: could not find script `#{script_name}' in directory #{$script_dir}!")
 			return false
 		end
-		file_name = $script_dir + file_name
-		file_list = nil
-	end
-	if not force and (Script.running + Script.hidden).find { |scr| scr.name == /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first }
-		respond("--- Lich: #{script_name} is already running (use #{$clean_lich_char}force [ScriptName] if desired).")
-		return false
-	end
-	begin
-		if file_name =~ /cmd$|wiz$/i
-			new_script = WizardScript.new(file_name, cli_vars)
-		else
-			new_script = Script.new(file_name, cli_vars)
+		if not force and (Script.running + Script.hidden).find { |scr| scr.name == file_name.sub(/\..{1,3}$/, '') }
+			respond("--- Lich: #{script_name} is already running (use #{$clean_lich_char}force [scriptname] if desired).")
+			return false
 		end
-		if new_script.labels.length > 1
-			script_binding = ScriptBinder.new.create_block.binding
-		else
-			script_binding = nil
-		end
-	rescue
-		respond "--- Lich: error starting script (#{script_name}): #{$!}"
-		return false
-	end
-	unless new_script
-		respond "--- Lich: failed to start script (#{script_name})"
-		return false
-	end
-	new_thread = Thread.new {
-		100.times { break if Script.self == new_script; sleep 0.01 }
-		if script = Script.self
-			eval('script = Script.self', script_binding, Script.self.name) if script_binding
-			Thread.current.priority = 1
-			respond("--- Lich: #{script.name} active.") unless script.quiet
-			begin
-				while Script.self.current_label
-					eval(Script.self.labels[Script.self.current_label].to_s, script_binding, Script.self.name)
-					Script.self.get_next_label
-				end
-				Script.self.kill
-			rescue SystemExit
-				Script.self.kill
-			rescue SyntaxError
-				$stdout.puts "--- SyntaxError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- SyntaxError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				respond "--- Lich: cannot execute #{Script.self.name}, aborting."
-				Script.self.kill
-			rescue ScriptError
-				$stdout.puts "--- ScriptError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- ScriptError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue NoMemoryError
-				$stdout.puts "--- NoMemoryError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- NoMemoryError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue LoadError
-				$stdout.puts "--- LoadError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- LoadError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue SecurityError
-				$stdout.puts "--- SecurityError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- SecurityError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue ThreadError
-				$stdout.puts "--- ThreadError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- ThreadError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue Exception
-				if $! == JUMP
-					retry if Script.self.get_next_label != JUMP_ERROR
-					$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
-					$stderr.puts $!.backtrace
-					$stderr.flush
-					Script.self.kill
-				else
-					$stdout.puts "--- Exception: #{$!}"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- Exception: #{$!}"
-					$stderr.puts $!.backtrace
-					$stderr.flush
-					Script.self.kill
-				end
-			rescue
-				$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
+		begin
+			if file_name =~ /cmd$|wiz$/i
+				new_script = WizardScript.new("#{$script_dir}#{file_name}", cli_vars)
+			else
+				new_script = Script.new("#{$script_dir}#{file_name}", cli_vars)
 			end
-		else
-			respond 'start_script screwed up...'
+			if !new_script.trusted
+				script_binding = UntrustedScriptBinder.new.create_block.binding
+			elsif new_script.labels.length > 1
+				script_binding = ScriptBinder.new.create_block.binding
+			else
+				script_binding = nil
+			end
+		rescue
+			respond "--- Lich: error starting script (#{script_name}): #{$!}"
+			return false
 		end
-	}
-	new_script.thread_group.add(new_thread)
-	true
+		unless new_script
+			respond "--- Lich: failed to start script (#{script_name})"
+			return false
+		end
+		new_thread = Thread.new {
+			100.times { break if Script.self == new_script; sleep 0.01 }
+			if script = Script.self
+				eval('script = Script.self', script_binding, script.name) if script_binding
+				Thread.current.priority = 1
+				respond("--- Lich: #{script.name} active.") unless script.quiet
+				begin
+					while (script = Script.self) and script.current_label
+						if script.trusted
+							eval(script.labels[script.current_label].to_s, script_binding, script.name)
+						else
+							proc { eval("$SAFE = 3 if $SAFE < 3\n#{script.labels[script.current_label]}", script_binding, script.name, 0) }.call
+						end
+						Script.self.get_next_label
+					end
+					Script.self.kill
+				rescue SystemExit
+					Script.self.kill
+				rescue SyntaxError
+					$stdout.puts "--- SyntaxError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- SyntaxError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					respond "--- Lich: cannot execute #{Script.self.name}, aborting."
+					Script.self.kill
+				rescue ScriptError
+					$stdout.puts "--- ScriptError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- ScriptError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue NoMemoryError
+					$stdout.puts "--- NoMemoryError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- NoMemoryError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue LoadError
+					$stdout.puts "--- LoadError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- LoadError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue SecurityError
+					$stdout.puts "--- SecurityError: #{$!}"
+					$stdout.puts $!.backtrace[0..1]
+					$stderr.puts "--- SecurityError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue ThreadError
+					$stdout.puts "--- ThreadError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- ThreadError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue Exception
+					if $! == JUMP
+						retry if Script.self.get_next_label != JUMP_ERROR
+						$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+						$stderr.puts $!.backtrace
+						$stderr.flush
+						Script.self.kill
+					else
+						$stdout.puts "--- Exception: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- Exception: #{$!}"
+						$stderr.puts $!.backtrace
+						$stderr.flush
+						Script.self.kill
+					end
+				rescue
+					$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				end
+			else
+				respond 'start_script screwed up...'
+			end
+		}
+		new_script.thread_group.add(new_thread)
+		true
+	else
+		action = { 'type' => :start_script, 'script_name' => script_name, 'cli_vars' => cli_vars, 'force' => force }
+		$untrusted_pending_actions.push(action)
+		wait_until { $untrusted_pending_actions.empty? }
+	end
 end
 
 def start_scripts(*script_names)
@@ -3844,7 +4067,7 @@ def start_exec_script(cmd_data, quiet=false)
 				Script.self.kill
 			rescue SecurityError
 				$stdout.puts "--- SecurityError: #{$!}"
-				$stdout.puts $!.backtrace.first
+				$stdout.puts $!.backtrace[0..1]
 				$stderr.puts "--- SecurityError: #{$!}"
 				$stderr.puts $!.backtrace
 				$stderr.flush
@@ -4257,6 +4480,7 @@ def out
 end
 
 def move(dir='none', giveup_seconds=30, giveup_lines=30)
+	# Guardsman Vontrilaias stops you and says, "Stop.  You need to make sure you check in at Wyveryn Keep and get proper identification papers.  We don't let just anyone wander around here.  Now go on through the gate and get over there."
 	# Guardsman Simlasyth stops you and says, "Stop.  You need to make sure you check in at Wyveryn Keep and get proper identification papers.  We don't let just anyone wander around here.  Now go o
 	# You approach the entrance and identify yourself to the guard.  The guard checks over a long scroll of names and says, "I'm sorry, the Guild is open to invitees only.  Please do return at a later date when we will be open to the public."
 	if dir == 'none'
@@ -6271,6 +6495,30 @@ def do_client(client_string)
 				respond "       #{$clean_lich_char}settings list"
 				respond
 			end
+		elsif cmd =~ /^trust\s+(.*)/i
+			script_name = $1
+			if LichSettings['untrusted_scripts'].delete(script_name)
+				LichSettings.save
+				respond "--- Lich: '#{script_name}' is now a trusted script."
+			else
+				respond "--- Lich: '#{script_name}' was not found in the untrusted script list."
+			end
+		elsif cmd =~ /^distrust\s+(.*)/i
+			script_name = $1
+			if File.exists?("#{$script_dir}#{script_name}.lic")
+				LichSettings['untrusted_scripts'] ||= Array.new
+				LichSettings['untrusted_scripts'].push(script_name) unless LichSettings['untrusted_scripts'].include?(script_name)
+				LichSettings.save
+				respond "--- Lich: '#{script_name}' is no longer a trusted script."
+			else
+				respond "--- Lich: could not find script: #{script_name}"
+			end
+		elsif cmd =~ /^list\s?(?:un)?trust(?:ed)?$|^lt$/i
+			if LichSettings['untrusted_scripts'].nil? or LichSettings['untrusted_scripts'].empty?
+				respond "--- Lich: all scripts are trusted"
+			else
+				respond "--- Lich: untrusted scripts: #{LichSettings['untrusted_scripts'].join(', ')}"
+			end
 		elsif cmd =~ /^help$/i
 			respond
 			respond "Lich v#{$version}"
@@ -6401,15 +6649,15 @@ get_real_launcher_cmd = proc {
 }
 
 fix_game_host_port = proc { |gamehost,gameport|
-	if (gamehost == 'gs-plat.simutronics.net') and (gameport == '10121')
+	if (gamehost == 'gs-plat.simutronics.net') and (gameport.to_i == 10121)
 		gamehost = 'storm.gs4.game.play.net'
-		gameport = '10124'
-	elsif (gamehost == 'gs3.simutronics.net') and (gameport == '4900')
+		gameport = 10124
+	elsif (gamehost == 'gs3.simutronics.net') and (gameport.to_i == 4900)
 		gamehost = 'storm.gs4.game.play.net'
-		gameport = '10024'
-	elsif (gamehost == 'prime.dr.game.play.net') and (gameport == '4901')
+		gameport = 10024
+	elsif (gamehost == 'prime.dr.game.play.net') and (gameport.to_i == 4901)
 		gamehost = 'dr.simutronics.net'
-		gameport = '11024'
+		gameport = 11024
 	end
 	[ gamehost, gameport ]
 }
@@ -6656,6 +6904,8 @@ main_thread = Thread.new {
 	launch_data = nil
 
 	if HAVE_GTK and ARGV.empty?
+		setting_quick_game_entry = LichSettings['quick_game_entry'] || Hash.new
+		done = false
 		Gtk.queue {
 
 			login_server = nil
@@ -6671,8 +6921,7 @@ main_thread = Thread.new {
 			# quick game entry tab
 			#
 
-			LichSettings['quick_game_entry'] ||= Hash.new
-			if LichSettings['quick_game_entry'].empty?
+			if setting_quick_game_entry.empty?
 				box = Gtk::HBox.new
 				box.pack_start(Gtk::Label.new('You have no saved login info.'), true, true, 0)
 				quick_game_entry_tab = Gtk::VBox.new
@@ -6685,9 +6934,9 @@ main_thread = Thread.new {
 				quick_pass_box.pack_end(quick_pass_entry, false, false, 5)
 				quick_pass_box.pack_end(Gtk::Label.new('Password:'), false, false, 5)
 	
-				quick_table = Gtk::Table.new(LichSettings['quick_game_entry'].length, 3, true)
+				quick_table = Gtk::Table.new(setting_quick_game_entry.length, 3, true)
 				row = 0
-				LichSettings['quick_game_entry'].keys.sort.each { |char_name|
+				setting_quick_game_entry.keys.sort.each { |char_name|
 					label = Gtk::Label.new(char_name)
 					play_button = Gtk::Button.new('Play')
 					remove_button = Gtk::Button.new('Remove')
@@ -6716,7 +6965,7 @@ main_thread = Thread.new {
 							quick_pass_entry.text = String.new
 							password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
 							password = password.collect { |c| c.chr }.join
-							login_server.puts "A\t#{LichSettings['quick_game_entry'][char_name][0]}\t#{password}\n"
+							login_server.puts "A\t#{setting_quick_game_entry[char_name][0]}\t#{password}\n"
 							password = nil
 							response = login_server.gets
 							login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
@@ -6724,25 +6973,25 @@ main_thread = Thread.new {
 								login_server.puts "M\n"
 								response = login_server.gets
 								if response =~ /^M\t/
-									login_server.puts "F\t#{LichSettings['quick_game_entry'][char_name][1]}\n"
+									login_server.puts "F\t#{setting_quick_game_entry[char_name][1]}\n"
 									response = login_server.gets
 									if response =~ /NORMAL|PREMIUM|TRIAL/
-										login_server.puts "G\t#{LichSettings['quick_game_entry'][char_name][1]}\n"
+										login_server.puts "G\t#{setting_quick_game_entry[char_name][1]}\n"
 										login_server.gets
-										login_server.puts "P\t#{LichSettings['quick_game_entry'][char_name][1]}\n"
+										login_server.puts "P\t#{setting_quick_game_entry[char_name][1]}\n"
 										login_server.gets
 										login_server.puts "C\n"
 										response = login_server.gets
-										login_server.puts "L\t#{LichSettings['quick_game_entry'][char_name][2]}\tSTORM\n"
+										login_server.puts "L\t#{setting_quick_game_entry[char_name][2]}\tSTORM\n"
 										response = login_server.gets
 										if response =~ /^L\t/
 											login_server.close unless login_server.closed?
 											launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-											if LichSettings['quick_game_entry'][char_name][3]
+											if setting_quick_game_entry[char_name][3]
 												launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
 											end
-											main_thread.run
 											window.destroy
+											done = true
 										else
 											login_server.close unless login_server.closed?
 											msgbox.call("Unrecognized response from server. (#{response})")
@@ -6769,8 +7018,7 @@ main_thread = Thread.new {
 						end
 					}
 					remove_button.signal_connect('clicked') {
-						LichSettings['quick_game_entry'].delete(char_name)
-						LichSettings.save
+						setting_quick_game_entry.delete(char_name)
 						label.visible = false
 						play_button.visible = false
 						remove_button.visible = false
@@ -6992,12 +7240,10 @@ main_thread = Thread.new {
 							launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=WIZ") }
 						end
 						if make_quick_option.active?
-							LichSettings['quick_game_entry'] ||= Hash.new
-							LichSettings['quick_game_entry'][char_treeview.selection.selected[1]] = [ user_id_entry.text, selected_game_code, char_code, wizard_option.active? ]
-							LichSettings.save
+							setting_quick_game_entry[char_treeview.selection.selected[1]] = [ user_id_entry.text, selected_game_code, char_code, wizard_option.active? ]
 						end
-						main_thread.run
 						window.destroy
+						done = true
 					else
 						login_server.close unless login_server.closed?
 						disconnect_button.sensitive = false
@@ -7313,16 +7559,22 @@ main_thread = Thread.new {
 			window.title = "Lich v#{$version}"
 			window.border_width = 5
 			window.add(notebook)
-			window.signal_connect('delete_event') { Gtk.main_quit }
+			window.signal_connect('delete_event') { window.destroy; done = true }
 
 			window.show_all
 
 			refresh_button.clicked
 
-			notebook.set_page(1) if LichSettings['quick_game_entry'].empty?
+			notebook.set_page(1) if setting_quick_game_entry.empty?
 		}
 
-		Thread.stop
+		wait_until { done }
+
+		LichSettings['quick_game_entry'] = setting_quick_game_entry
+		LichSettings.save
+		setting_quick_game_entry = nil
+
+		Gtk.queue { Gtk.main_quit } unless launch_data
 
 	end
 
@@ -7632,6 +7884,47 @@ main_thread = Thread.new {
 	$_CLIENT_.sync = true
 	$_SERVER_.sync = true
 
+	$untrusted_pending_actions = Array.new
+	untrusted_handler_thread = Thread.new {
+		loop {
+			begin
+				wait_while { $untrusted_pending_actions.empty? }
+				action = $untrusted_pending_actions.first
+				if action['type'] == :load_settings
+					Settings.load(action['script'])
+				elsif action['type'] == :save_settings
+					Settings.save(action['script'])
+				elsif action['type'] == :load_map
+					if action['file'] == "#{$script_dir}map.dat"
+						Map.load(action['file'])
+					else
+						respond '--- SecurityError: untrusted script tried to call Map.load on a non-default file.'
+					end
+				elsif action['type'] == :save_map
+					if action['file'] == "#{$script_dir}map.dat"
+						Map.save(action['file'])
+					else
+						respond '--- SecurityError: untrusted script tried to call Map.save on a non-default file.'
+					end
+				elsif action['type'] == :load_spells
+					if action['file'] == "#{$script_dir}spell-list.xml.txt"
+						Spell.load(action['file'])
+					else
+						respond '--- SecurityError: untrusted script tried to call Spell.load on a non-default file.'
+					end
+				elsif action['type'] == :start_script
+					start_script(action['script_name'], action['cli_vars'], action['force'])
+				end
+				$untrusted_pending_actions.shift
+			rescue
+				$stdout.puts("--- Lich: untrusted_handler_thread: #{$!}") rescue()
+				$stderr.puts($!)
+				$stderr.puts($!.backtrace)
+				sleep 0.3
+			end
+		}
+	}
+
 	client_thread = Thread.new {
 		$login_time = Time.now
 
@@ -7737,10 +8030,8 @@ main_thread = Thread.new {
 			$stderr.puts "error: client_thread: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep "0.2".to_f
-			retry unless $_CLIENT_.closed? or $_SERVER_.closed?
+			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or !server_thread.alive?
 		end
-		# $_SERVER_.puts('quit') unless $_SERVER_.closed?
-		# $_SERVER_.close rescue()
 		server_thread.kill rescue()
 	}
 	
@@ -7818,19 +8109,21 @@ main_thread = Thread.new {
 		LichSettings.save
 	end
 	
-	server_thread.join rescue()
-	
+	server_thread.join
+	client_thread.kill rescue()
+
 	Script.running.each { |script| script.kill }
 	Script.hidden.each { |script| script.kill }
-	100.times { sleep "0.1".to_f; break if Script.running.empty? or Script.hidden.empty? }
-	$_SERVER_.puts('quit') unless $_SERVER_.closed?
+	100.times { sleep "0.1".to_f; break if Script.running.empty? and Script.hidden.empty? }
+	# sending quit seems to cause Lich to hang.  $_SERVER_.closed? is false even though it appears to be closed.
+	# $_SERVER_.puts('quit') unless $_SERVER_.closed?
 	$_SERVER_.close rescue()
 	$_CLIENT_.close rescue()
-	client_thread.kill rescue()
 	Gtk.queue { Gtk.main_quit } if HAVE_GTK
 }
 
 if HAVE_GTK
+	$SAFE = 3
 	Gtk.main_with_queue(100)
 else
 	main_thread.join
