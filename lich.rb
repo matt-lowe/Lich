@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.1'
+$version = '4.1.2'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -200,6 +200,7 @@ num = Time.now.to_i
 debug_filename = "#{$temp_dir}debug-#{num}.txt"
 debug_filename = "#{$temp_dir}debug-#{num+=1}.txt" while File.exists?(debug_filename)
 $stderr = File.open(debug_filename, 'w')
+$stderr.sync
 
 $stderr.puts "info: #{Time.now}"
 $stderr.puts "info: $lich_dir: #{$lich_dir}"
@@ -275,49 +276,40 @@ begin
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue SyntaxError
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue SystemExit
 							nil
 						rescue SecurityError
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue ThreadError
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue Exception
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue ScriptError
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue LoadError
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue NoMemoryError
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						rescue
 							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
-							$stderr.flush
 						end
 					end
 					GTK_PENDING_BLOCKS.clear
@@ -3969,7 +3961,6 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- SyntaxError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					respond "--- Lich: cannot execute #{Script.self.name}, aborting."
 					Script.self.kill
 				rescue ScriptError
@@ -3977,21 +3968,18 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- ScriptError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue NoMemoryError
 					$stdout.puts "--- NoMemoryError: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- NoMemoryError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue LoadError
 					$stdout.puts "--- LoadError: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- LoadError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue SecurityError
 					$stdout.puts "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
@@ -3999,14 +3987,12 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 					$stdout.puts $!.backtrace[0..1]
 					$stderr.puts "--- SecurityError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue ThreadError
 					$stdout.puts "--- ThreadError: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- ThreadError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue Exception
 					if $! == JUMP
@@ -4015,14 +4001,12 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						$stdout.puts $!.backtrace.first
 						$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
 						$stderr.puts $!.backtrace
-						$stderr.flush
 						Script.self.kill
 					else
 						$stdout.puts "--- Exception: #{$!}"
 						$stdout.puts $!.backtrace.first
 						$stderr.puts "--- Exception: #{$!}"
 						$stderr.puts $!.backtrace
-						$stderr.flush
 						Script.self.kill
 					end
 				rescue
@@ -4030,7 +4014,6 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				end
 			else
@@ -4081,21 +4064,18 @@ def start_exec_script(cmd_data, flags=Hash.new)
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- SyntaxError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue ScriptError
 					$stdout.puts "--- ScriptError: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- ScriptError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue NoMemoryError
 					$stdout.puts "--- NoMemoryError: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- NoMemoryError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue LoadError
 					respond("--- LoadError: #{$!}")
@@ -4103,35 +4083,30 @@ def start_exec_script(cmd_data, flags=Hash.new)
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- LoadError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue SecurityError
 					$stdout.puts "--- SecurityError: #{$!}"
 					$stdout.puts $!.backtrace[0..1]
 					$stderr.puts "--- SecurityError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue ThreadError
 					$stdout.puts "--- ThreadError: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- ThreadError: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue Exception
 					$stdout.puts "--- Exception: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- Exception: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				rescue
 					$stdout.puts "--- Error: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- Error: #{$!}"
 					$stderr.puts $!.backtrace
-					$stderr.flush
 					Script.self.kill
 				end
 			else
@@ -6954,20 +6929,97 @@ main_thread = Thread.new {
 	LichSettings['clientbuffer_max_size'] ||= 100
 	LichSettings['clientbuffer_min_size'] ||= 50
 	LichSettings['trusted_scripts'] ||= [ 'updater', 'infomon', 'lnet', 'narost' ]
+	LichSettings['quick_game_entry'].delete_if { |key,val| val.length != 5 }
 
 	$clean_lich_char = LichSettings['lich_char']
 	$lich_char = Regexp.escape("#{$clean_lich_char}")
 
 	launch_data = nil
 
-	if HAVE_GTK and ARGV.empty?
+	if ARGV.include?('--login') and (char_name = ARGV[ARGV.index('--login')+1].capitalize) and LichSettings['quick_game_entry'][char_name]
+		$stderr.puts "info: using quick game entry settings for #{char_name}"
+		msgbox = proc { |msg|
+			if HAVE_GTK
+				window = Gtk::Window.new
+				dialog = Gtk::MessageDialog.new(window, Gtk::Dialog::DESTROY_WITH_PARENT, Gtk::MessageDialog::QUESTION, Gtk::MessageDialog::BUTTONS_CLOSE, msg)
+				dialog.run
+				dialog.destroy
+				window.destroy
+			else
+				$stdout.puts(msg) rescue()
+				$stderr.puts(msg)
+			end
+		}
+
+		begin
+			login_server = TCPSocket.new('eaccess.play.net', 7900)
+		rescue
+			msgbox.call "error connecting to server: #{$!}"
+		end
+		if login_server
+			login_server.puts "K\n"
+			hashkey = login_server.gets
+			if 'test'[0].class == String
+				password = LichSettings['quick_game_entry'][char_name][1].unpack('m').first.split('').collect { |c| c.getbyte(0) }
+				hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
+			else
+				password = LichSettings['quick_game_entry'][char_name][1].unpack('m').first.split('').collect { |c| c[0] }
+				hashkey = hashkey.split('').collect { |c| c[0] }
+			end
+			password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
+			password = password.collect { |c| c.chr }.join
+			login_server.puts "A\t#{LichSettings['quick_game_entry'][char_name][0]}\t#{password}\n"
+			password = nil
+			response = login_server.gets
+			login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
+			if login_key
+				login_server.puts "M\n"
+				response = login_server.gets
+				if response =~ /^M\t/
+					login_server.puts "F\t#{LichSettings['quick_game_entry'][char_name][2]}\n"
+					response = login_server.gets
+					if response =~ /NORMAL|PREMIUM|TRIAL/
+						login_server.puts "G\t#{LichSettings['quick_game_entry'][char_name][2]}\n"
+						login_server.gets
+						login_server.puts "P\t#{LichSettings['quick_game_entry'][char_name][2]}\n"
+						login_server.gets
+						login_server.puts "C\n"
+						response = login_server.gets
+						login_server.puts "L\t#{LichSettings['quick_game_entry'][char_name][3]}\tSTORM\n"
+						response = login_server.gets
+						if response =~ /^L\t/
+							login_server.close unless login_server.closed?
+							launch_data = response.sub(/^L\tOK\t/, '').split("\t")
+							if LichSettings['quick_game_entry'][char_name][4]
+								launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+							end
+						else
+							login_server.close unless login_server.closed?
+							msgbox.call("Unrecognized response from server. (#{response})")
+						end
+					else
+						login_server.close unless login_server.closed?
+						msgbox.call("Unrecognized response from server. (#{response})")
+					end
+				else
+					login_server.close unless login_server.closed?
+					msgbox.call("Unrecognized response from server. (#{response})")
+				end
+			else
+				login_server.close unless login_server.closed?
+				msgbox.call "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
+			end
+		else
+			msgbox.call "failed to connect to server"
+		end
+	elsif HAVE_GTK and ARGV.empty?
 		setting_quick_game_entry = LichSettings['quick_game_entry'] || Hash.new
-		setting_quick_game_entry.delete_if { |key,val| val.length != 5 }
 		done = false
 		Gtk.queue {
 
 			login_server = nil
 			window = nil
+			install_tab_loaded = false
 
 			msgbox = proc { |msg|
 				dialog = Gtk::MessageDialog.new(window, Gtk::Dialog::DESTROY_WITH_PARENT, Gtk::MessageDialog::QUESTION, Gtk::MessageDialog::BUTTONS_CLOSE, msg)
@@ -7369,6 +7421,7 @@ main_thread = Thread.new {
 			psinet_installstate = nil
 
 			refresh_button.signal_connect('clicked') {
+				install_tab_loaded = true
 				launch_cmd = registry_get('HKEY_LOCAL_MACHINE\Software\Classes\Simutronics.Autolaunch\Shell\Open\command\\').to_s
 				website_order_entry_1.text = launch_cmd
 
@@ -7604,6 +7657,9 @@ main_thread = Thread.new {
 			notebook.append_page(game_entry_tab, Gtk::Label.new('Game Entry'))
 			notebook.append_page(install_tab, Gtk::Label.new('Install'))
 			notebook.append_page(options_tab, Gtk::Label.new('Options'))
+			notebook.signal_connect('switch-page') { |who,page,page_num|
+				refresh_button.clicked if (page_num == 2) and not install_tab_loaded
+			}
 
 			window = Gtk::Window.new
 			window.title = "Lich v#{$version}"
@@ -7612,8 +7668,6 @@ main_thread = Thread.new {
 			window.signal_connect('delete_event') { window.destroy; done = true }
 
 			window.show_all
-
-			refresh_button.clicked
 
 			notebook.set_page(1) if setting_quick_game_entry.empty?
 		}
@@ -7860,7 +7914,6 @@ main_thread = Thread.new {
 		frontend_cmd += " /GGS /H127.0.0.1 /P#{localport} /Kfake_login_key"
 		frontend_cmd = "#{wine_bin} #{frontend_cmd}" if wine_bin
 		$stderr.puts "info: frontend_cmd: #{frontend_cmd}"
-		$stderr.flush
 		Thread.new {
 			Dir.chdir(frontend_dir) rescue()
 			system(frontend_cmd)
