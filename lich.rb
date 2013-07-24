@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.74
+ version 3.75
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -59,9 +59,9 @@ rescue
 end
 begin
 	require 'gtk2/base.rb'
-#	include Gtk
+	# include Gtk
 	require 'monitor'
-	#require 'pango'
+	# require 'pango'
 	HAVE_GTK = true
 rescue LoadError
 	HAVE_GTK = false
@@ -459,7 +459,8 @@ at_exit { Script.running.each { |script| script.kill }; Script.hidden.each { |sc
 # fixme: $_TA_BUFFER_
 # fixme: signs3 uses Script.self.io
 
-$injuries = Hash.new; ['nsys','leftArm','rightArm','rightLeg','leftLeg','head','rightFoot','leftFoot','rightHand','leftHand','rightEye','leftEye','back','neck','chest','abdomen'].each { |area| $injuries[area] = { 'wound' => 0, 'scar' => 0 } }
+$injuries = Hash.new
+['nsys','leftArm','rightArm','rightLeg','leftLeg','head','rightFoot','leftFoot','rightHand','leftHand','rightEye','leftEye','back','neck','chest','abdomen'].each { |area| $injuries[area] = { 'wound' => 0, 'scar' => 0 } }
 $injury_mode = 0
 
 $prepared_spell = 'None'
@@ -484,6 +485,8 @@ $room_count = 0
 $last_dir = String.new
 
 $spellfront = Array.new
+
+$nerve_tracker_num = 0
 
 INFINITY = 1 << 32
 
@@ -731,15 +734,56 @@ class SF_XML
 						if rank == 0
 							$injuries['nsys']['wound'] = 0
 							$injuries['nsys']['scar'] = 0
-						elsif ($injuries['nsys']['wound'] == 0) and ($injuries['nsys']['scar'] == 0)
-							$injuries['nsys']['wound'] = rank
-						elsif $injuries['nsys']['wound'] > 1
-							$injuries['nsys']['wound'] = rank
-						elsif $injuries['nsys']['wound'] == 1
-							$injuries['nsys']['wound'] = 0
-							$injuries['nsys']['scar'] = rank
 						else
-							$injuries['nsys']['scar'] = rank
+							action = proc { |server_string|
+								if ($nerve_tracker_active == 'maybe')
+									if $nerve_tracker_active == 'maybe'
+										if server_string =~ /^You/
+											$nerve_tracker_active = 'yes'
+											$injuries['nsys']['wound'] = 0
+											$injuries['nsys']['scar'] = 0
+										else
+											$nerve_tracker_active = 'no'
+										end
+									end
+								end
+								if $nerve_tracker_active == 'yes'
+									if server_string =~ /<output class=['"]['"]\/>/
+										$nerve_tracker_active = 'no'
+										$nerve_tracker_num -= 1
+										DownstreamHook.remove('nerve_tracker') if $nerve_tarcker_num < 1
+										$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, make_wound_gsl, make_scar_gsl)}\r\n" if $send_fake_tags
+										server_string
+									elsif server_string =~ /a case of uncontrollable convulsions/
+										$injuries['nsys']['wound'] = 3
+										nil
+									elsif server_string =~ /a case of sporadic convulsions/
+										$injuries['nsys']['wound'] = 2
+										nil
+									elsif server_string =~ /a strange case of muscle twitching/
+										$injuries['nsys']['wound'] = 1
+										nil
+									elsif server_string =~ /a very difficult time with muscle control/
+										$injuries['nsys']['scar'] = 3
+										nil
+									elsif server_string =~ /constant muscle spasms/
+										$injuries['nsys']['scar'] = 2
+										nil
+									elsif server_string =~ /developed slurred speech/
+										$injuries['nsys']['scar'] = 1
+										nil
+									end
+								else
+									if server_string =~ /<output class=['"]mono['"]\/>/
+										$nerve_tracker_active = 'maybe'
+									end
+									server_string
+								end
+							}
+							$nerve_tracker_active = 'no'
+							$nerve_tracker_num += 1
+							DownstreamHook.add('nerve_tracker', action)
+							$_SERVER_.puts "<c>health\n"
 						end
 					else
 						$injuries[attributes['id']]['wound'] = 0
@@ -1001,6 +1045,9 @@ class DownstreamHook
 	def DownstreamHook.remove(name)
 		@@downstream_hooks.delete(name)
 	end
+	def DownstreamHook.list
+		@@downstream_hooks.keys.dup
+	end
 end
 
 class Alias
@@ -1019,17 +1066,17 @@ class Alias
 	end
 	def Alias.find(trigger)
 		return nil if (trigger == nil) or trigger.empty? or @@regex_string.empty?
-		/^(?:<c>)?(#{@@regex_string})/i.match(trigger.strip).captures.first
+		/^(?:<c>)?(#{@@regex_string})(?:\s|$)/i.match(trigger.strip).captures.first
 	end
 	def Alias.list
 		@@alias_hash.dup
 	end
 	def Alias.run(trig)
-		/^(?:<c>)?(#{@@regex_string})(?:\s*)?(.*)$/i.match(trig.strip)
+		/^(?:<c>)?(#{@@regex_string})(?:\s+|$)(.*)/i.match(trig.strip)
 		trigger, extra = $1, $2
-		unless target = @@alias_hash[Regexp.escape(trigger)].dup
-			respond '--- Lich: tried to run unkown alias (' + trig.to_s + ')'
-			return false
+		unless target = @@alias_hash[Regexp.escape(trigger.downcase)].dup
+			respond '--- Lich: tried to run unkown alias (' + trig.to_s.strip + ')'
+			return falses
 		end
 		unless extra.empty?
 			if target.include?('\?')
@@ -2637,7 +2684,7 @@ class Map
 	end
 	def Map.findpath(source, destination)
 		Map.load if @@list.empty?
-		previous, shortest_distances = Map.dijkstra_quick(source, destination)
+		previous, shortest_distances = Map.dijkstra(source, destination)
 		return nil unless previous[destination]
 		path = [ destination ]
 		path.push(previous[path[-1]]) until previous[path[-1]] == source
@@ -2645,7 +2692,7 @@ class Map
 		path.pop
 		return path
 	end
-	def Map.dijkstra(source)
+	def Map.dijkstra(source, destination=nil)
 		Map.load if @@list.empty?
 		n = @@list.length
 		source = source.to_i
@@ -2659,52 +2706,56 @@ class Map
 		visited[source] = true
 		shortest_distances[source] = 0
 
-		while pq.size != 0
-			v = pq.pop
-			visited[v] = true
-			@@list[v].wayto.keys.each { |adj_room|
-				adj_room_i = adj_room.to_i
-				nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
-				if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-					shortest_distances[adj_room_i] = nd
-					previous[adj_room_i] = v
-					pq.push(adj_room_i)
+		if destination.nil?
+			while pq.size != 0
+				v = pq.pop
+				visited[v] = true
+				@@list[v].wayto.keys.each { |adj_room|
+					adj_room_i = adj_room.to_i
+					nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+					if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
+						shortest_distances[adj_room_i] = nd
+						previous[adj_room_i] = v
+						pq.push(adj_room_i)
+					end
+				}
+			end
+		elsif destination.class == Fixnum
+			while pq.size != 0
+				v = pq.pop
+				break if v == destination
+				visited[v] = true
+				@@list[v].wayto.keys.each { |adj_room|
+					adj_room_i = adj_room.to_i
+					nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+					if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
+						shortest_distances[adj_room_i] = nd
+						previous[adj_room_i] = v
+						pq.push(adj_room_i)
+					end
+				}
+			end
+		elsif destination.class == Array
+			dest_list = destination.dup
+			while pq.size != 0
+				v = pq.pop
+				if dest_list.include?(v)
+					dest_list.delete(v)
+					break if dest_list.empty?
 				end
-			}
+				visited[v] = true
+				@@list[v].wayto.keys.each { |adj_room|
+					adj_room_i = adj_room.to_i
+					nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+					if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
+						shortest_distances[adj_room_i] = nd
+						previous[adj_room_i] = v
+						pq.push(adj_room_i)
+					end
+				}
+			end
 		end
 
-		# shortest_distances is 5 times larger than the real estimate
-		return previous, shortest_distances
-	end
-	def Map.dijkstra_quick(source, destination)
-		Map.load if @@list.empty?
-		n = @@list.length
-		source = source.to_i
-		destination = destination.to_i
-
-		visited = Array.new
-		shortest_distances = Array.new
-		previous = Array.new
-		pq = PQueue.new(proc {|x,y| shortest_distances[x] < shortest_distances[y]})
-		
-		pq.push(source)
-		visited[source] = true
-		shortest_distances[source] = 0
-
-		while pq.size != 0
-			v = pq.pop
-			break if v == destination
-			visited[v] = true
-			@@list[v].wayto.keys.each { |adj_room|
-				adj_room_i = adj_room.to_i
-				nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
-				if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-					shortest_distances[adj_room_i] = nd
-					previous[adj_room_i] = v
-					pq.push(adj_room_i)
-				end
-			}
-		end
 		return previous, shortest_distances
 	end
 	def outside?
@@ -3421,6 +3472,7 @@ end
 
 def move(dir='none')
 	# How do you intend to get the doorman's attention?  After all, no one can see you right now.
+	tried_open = false
 	attempts = 0
 	if dir == 'none'
 		echo('Error! Move without a direction to move in!')
@@ -3436,8 +3488,10 @@ def move(dir='none')
 				Script.self.downstream_buffer.unshift(feed)
 				return false
 			elsif feed =~ /(?:appears|seems) to be closed\.$/
+				return false if tried_open
 				fput dir.sub(/go|climb/, 'open')
 				put(dir)
+				tried_open = true
 				next
 			elsif feed =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
 				sleep(1)
@@ -5134,7 +5188,7 @@ sock_keepalive_proc = proc { |sock|
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
 
-$version = '3.74'
+$version = '3.75'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5625,7 +5679,7 @@ else
 	# fixme: needs testing
 	sge_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\SGE32\Directory')
 	launch_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\Directory')
-	if File.exists?("#{$lich_dir}nosge.txt") or (launch_dir.to_s =~ /lich/i) or not sge_dir
+	unless File.exists?("#{$lich_dir}nosge.txt") or (launch_dir.to_s =~ /lich/i) or not sge_dir
 		sge_file = File.join(sge_dir, 'SGE.exe')
 		sge_file = wine_dir + '/drive_c/' + sge_file[3..-1].split('\\').join('/') if wine_dir
 		if File.exists(sge_file)
