@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.4'
+$version = '4.0.5'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1491,19 +1491,16 @@ class Script
 	end
 	def kill
 		Thread.new {
-			@thread_group.add(Thread.current)
-			@paused = false
-			script = Script.self
-			die_with = @die_with.dup
-			@die_with = nil
-			dying_procs = @dying_procs.dup
-			@dying_procs = nil
-			@thread_group.list.each { |thr|
-				if (thr != Thread.current) and thr.alive?
+			die_with, dying_procs = @die_with.dup, @dying_procs.dup
+			@die_with, @dying_procs = nil, nil
+			@thread_group.list.dup.each { |thr|
+				unless thr == Thread.current
 					thr.kill rescue()
 				end
 			}
+			@thread_group.add(Thread.current)
 			die_with.each { |script_name| stop_script script_name }
+			@paused = false
 			dying_procs.each { |runme|
 				begin
 					runme.call
@@ -1521,10 +1518,7 @@ class Script
 					echo("--- error in dying code block: #{$!}")
 				end
 			}
-			@downstream_buffer = nil
-			@upstream_buffer = nil
-			@match_stack_labels = nil
-			@match_stack_strings = nil
+			@downstream_buffer = @upstream_buffer = @match_stack_labels = @match_stack_strings = nil
 			@@running.delete(self)
 			respond("--- Lich: #{@name} has exited.") unless @quiet
 			GC.start
@@ -1662,6 +1656,9 @@ class Script
 	def match_stack_clear
 		@match_stack_labels.clear
 		@match_stack_strings.clear
+	end
+	def create_block
+		Proc.new { }
 	end
 	# for backwards compatability
 	def Script.namescript_incoming(line)
@@ -1892,12 +1889,6 @@ class WizardScript<Script
 		@@running.push(self)
 		return self
 	end
-end
-
-class ScriptBinder
-  def create_block
-    Proc.new { }
-  end
 end
 
 class Settings
@@ -3492,6 +3483,11 @@ def start_script(script_name,cli_vars=[],force=false)
 		else
 			new_script = Script.new(file_name, cli_vars)
 		end
+		if new_script.labels.length > 1
+			script_binding = new_script.create_block.binding
+		else
+			script_binding = nil
+		end
 	rescue
 		respond "--- Lich: error starting script (#{script_name}): #{$!}"
 		return false
@@ -3503,8 +3499,7 @@ def start_script(script_name,cli_vars=[],force=false)
 	new_thread = Thread.new {
 		100.times { break if Script.self == new_script; sleep 0.01 }
 		if script = Script.self
-			script_binding = ScriptBinder.new.create_block.binding
-			eval('script = Script.self', script_binding, Script.self.name)
+			eval('script = Script.self', script_binding, Script.self.name) if script_binding
 			Thread.current.priority = 1
 			respond("--- Lich: #{script.name} active.") unless script.quiet
 			begin
@@ -3512,9 +3507,9 @@ def start_script(script_name,cli_vars=[],force=false)
 					eval(Script.self.labels[Script.self.current_label].to_s, script_binding, Script.self.name)
 					Script.self.get_next_label
 				end
-				Script.self.kill
+				script.kill
 			rescue SystemExit
-				Script.self.kill
+				script.kill
 			rescue SyntaxError
 				$stdout.puts "--- SyntaxError: #{$!}"
 				$stdout.puts $!.backtrace.first
@@ -3522,40 +3517,40 @@ def start_script(script_name,cli_vars=[],force=false)
 				$stderr.puts $!.backtrace
 				$stderr.flush
 				respond "--- Lich: cannot execute #{Script.self.name}, aborting."
-				Script.self.kill
+				script.kill
 			rescue ScriptError
 				$stdout.puts "--- ScriptError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- ScriptError: #{$!}"
 				$stderr.puts $!.backtrace
 				$stderr.flush
-				Script.self.kill
+				script.kill
 			rescue NoMemoryError
 				$stdout.puts "--- NoMemoryError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- NoMemoryError: #{$!}"
 				$stderr.puts $!.backtrace
 				$stderr.flush
-				Script.self.kill
+				script.kill
 			rescue LoadError
 				$stdout.puts "--- LoadError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- LoadError: #{$!}"
 				$stderr.puts $!.backtrace
 				$stderr.flush
-				Script.self.kill
+				script.kill
 			rescue SecurityError
 				$stdout.puts "--- SecurityError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- SecurityError: #{$!}"
-				$stderr.ptus $!.backtrace
+				$stderr.puts $!.backtrace
 				$stderr.flush
 				Script.self.kill
 			rescue ThreadError
 				$stdout.puts "--- ThreadError: #{$!}"
 				$stdout.puts $!.backtrace.first
 				$stderr.puts "--- ThreadError: #{$!}"
-				$stderr.ptus $!.backtrace
+				$stderr.puts $!.backtrace
 				$stderr.flush
 				Script.self.kill
 			rescue Exception
@@ -3603,79 +3598,84 @@ def force_start_script(script_name,cli_vars=[])
 end
 
 def start_exec_script(cmd_data, quiet=false)
-	new_script = ExecScript.new(cmd_data, quiet)
-	return false unless new_script
-	Thread.new {
-		new_script.thread_group.add(Thread.current)
-		script = Script.self
-		script_binding = ScriptBinder.new.create_block.binding
-		eval('script = Script.self', script_binding, Script.self.name)
-		Thread.current.priority = 1
-		respond("--- Lich: #{script.name} active.") unless script.quiet
-		begin
-			eval(cmd_data, script_binding, script.name.to_s)
-			Script.self.kill
-		rescue SystemExit
-			Script.self.kill
-		rescue SyntaxError
-			$stdout.puts "--- SyntaxError: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- SyntaxError: #{$!}"
-			$stderr.puts $!.backtrace
-			Script.self.kill
-			$stderr.flush
-		rescue ScriptError
-			$stdout.puts "--- ScriptError: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- ScriptError: #{$!}"
-			$stderr.ptus $!.backtrace
-			Script.self.kill
-			$stderr.flush
-		rescue NoMemoryError
-			$stdout.puts "--- NoMemoryError: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- NoMemoryError: #{$!}"
-			$stderr.puts $!.backtrace
-			Script.self.kill
-			$stderr.flush
-		rescue LoadError
-			respond("--- LoadError: #{$!}")
-			$stdout.puts "--- LoadError: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- LoadError: #{$!}"
-			$stderr.ptus $!.backtrace
-			Script.self.kill
-			$stderr.flush
-		rescue SecurityError
-			$stdout.puts "--- SecurityError: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- SecurityError: #{$!}"
-			$stderr.ptus $!.backtrace
-			Script.self.kill
-			$stderr.flush
-		rescue ThreadError
-			$stdout.puts "--- ThreadError: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- ThreadError: #{$!}"
-			$stderr.ptus $!.backtrace
-			Script.self.kill
-			$stderr.flush
-		rescue Exception
-			$stdout.puts "--- Exception: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- Exception: #{$!}"
-			$stderr.ptus $!.backtrace
-			Script.self.kill
-			$stderr.flush
-		rescue
-			$stdout.puts "--- Error: #{$!}"
-			$stdout.puts $!.backtrace.first
-			$stderr.puts "--- Error: #{$!}"
-			$stderr.ptus $!.backtrace
-			Script.self.kill
-			$stderr.flush
+	unless new_script = ExecScript.new(cmd_data, quiet)
+		respond '--- Lich: failed to start exec script'
+		return false
+	end
+	new_thread = Thread.new {
+		100.times { break if Script.self == new_script; sleep 0.01 }
+		if script = Script.self
+			Thread.current.priority = 1
+			respond("--- Lich: #{script.name} active.") unless script.quiet
+			begin
+				eval(cmd_data, nil, script.name.to_s)
+				Script.self.kill
+			rescue SystemExit
+				Script.self.kill
+			rescue SyntaxError
+				$stdout.puts "--- SyntaxError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- SyntaxError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue ScriptError
+				$stdout.puts "--- ScriptError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- ScriptError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue NoMemoryError
+				$stdout.puts "--- NoMemoryError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- NoMemoryError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue LoadError
+				respond("--- LoadError: #{$!}")
+				$stdout.puts "--- LoadError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- LoadError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue SecurityError
+				$stdout.puts "--- SecurityError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- SecurityError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue ThreadError
+				$stdout.puts "--- ThreadError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- ThreadError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue Exception
+				$stdout.puts "--- Exception: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- Exception: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue
+				$stdout.puts "--- Error: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- Error: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			end
+		else
+			respond 'start_exec_script screwed up...'
 		end
 	}
+	new_script.thread_group.add(new_thread)
+	true
 end
 
 def pause_script(*names)
@@ -6640,7 +6640,7 @@ main_thread = Thread.new {
 			login_button_box.pack_end(disconnect_button, false, false, 5)
 
 			game_liststore = Gtk::ListStore.new(String, String)
-			game_liststore.set_sort_column_id(1, Gtk::SORT_DESCENDING)
+			game_liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
 
 			game_renderer = Gtk::CellRendererText.new
 			game_renderer.background = 'white'
@@ -6657,7 +6657,7 @@ main_thread = Thread.new {
 			game_sw.add(game_treeview)
 
 			char_liststore = Gtk::ListStore.new(String, String)
-			char_liststore.set_sort_column_id(1, Gtk::SORT_DESCENDING)
+			char_liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
 
 			char_renderer = Gtk::CellRendererText.new
 			char_renderer.background = 'white'
