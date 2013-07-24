@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.85
+ version 3.86
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -4643,7 +4643,7 @@ def empty_hands
 		
 	end
 	if $lh_thingie
-		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|bow|arbalest/
+		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/
 			fput "wear my #{$lh_thingie}"
 		else
 			if Lich.lootsack.nil?
@@ -5423,7 +5423,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.85'
+$version = '3.86'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
