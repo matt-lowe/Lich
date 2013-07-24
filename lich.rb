@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.62
+ version 3.63
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -2514,7 +2514,7 @@ class Map
 			visited[v] = true
 			@@list[v].wayto.keys.each { |adj_room|
 				adj_room_i = adj_room.to_i
-				nd = shortest_distances[v] + @@list[v].timeto[adj_room]
+				nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
 				if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
 					shortest_distances[adj_room_i] = nd
 					previous[adj_room_i] = v
@@ -2547,7 +2547,7 @@ class Map
 			visited[v] = true
 			@@list[v].wayto.keys.each { |adj_room|
 				adj_room_i = adj_room.to_i
-				nd = shortest_distances[v] + @@list[v].timeto[adj_room]
+				nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
 				if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
 					shortest_distances[adj_room_i] = nd
 					previous[adj_room_i] = v
@@ -4812,7 +4812,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.62'
+$version = '3.63'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
