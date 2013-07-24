@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.95
+ version 3.96
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -3771,7 +3771,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				Script.self.downstream_buffer.unshift(save_stream)
 				Script.self.downstream_buffer.flatten!
 				return false
-			elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\./
+			elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down/
 				echo 'move: failed'
 				# return nil instead of false to show the direction shouldn't be removed from the map database
 				fill_hands if need_full_hands
@@ -3840,10 +3840,14 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				wait_while { stunned? }
 				put_dir.call
 				break
-			elsif line =~ /^Running heedlessly/
+			elsif line =~ /you slip (?:on a patch of ice )?and flail uselessly as you land on your rear(?:\.|!)$|You wobble and stumble only for a moment before landing flat on your face!$/
 				waitrt?
 				fput 'stand' unless standing?
 				waitrt?
+				if running?('ago2')
+					fput 'hide'
+					waitrt?
+				end
 				put_dir.call
 				break
 			end
@@ -4559,7 +4563,7 @@ def reget(*lines)
 		history = $_SERVERBUFFER_.dup
 	end
 	unless script.want_downstream_xml
-		history.collect! { |line| line = strip_xml(line) }.compact!
+		history.collect! { |line| line = strip_xml(line).chomp }.compact!
 	end
 	if lines.first.kind_of? Numeric or lines.first.to_i.nonzero?
 		num = [ lines.shift.to_i, history.length ].min
@@ -4743,29 +4747,29 @@ def status_tags(onoff="none")
 end
 
 def stop_script(*target_names)
-  numkilled = 0
-  target_names.each { |target_name|
-	condemned = (Script.running + Script.hidden).find { |s_sock| s_sock.name =~ /^#{target_name}/i }
-	if condemned.nil?
-		respond("--- Lich: '#{Script.self}' tried to stop '#{target_name}', but it isn't running!")
-	else
-		if condemned.name =~ /^#{Script.self.name}$/i
-			exit
+	numkilled = 0
+	target_names.each { |target_name| 
+		condemned = (Script.running + Script.hidden).find { |s_sock| s_sock.name =~ /^#{target_name}/i }
+		if condemned.nil?
+			respond("--- Lich: '#{Script.self}' tried to stop '#{target_name}', but it isn't running!")
+		else
+			if condemned.name =~ /^#{Script.self.name}$/i
+				exit
+			end
+			condemned.kill
+			respond("--- Lich: '#{condemned}' has been stopped by #{Script.self}.")
+			numkilled += 1
 		end
-		condemned.kill
-		respond("--- Lich: '#{condemned}' has been stopped by #{Script.self}.")
-		numkilled += 1
+	}
+	if numkilled == 0
+		return false
+	else
+		return numkilled
 	end
-  }
-  if numkilled == 0
-	  return false
-  else
-  	return numkilled
-  end
 end
 
 def running?(*snames)
-	snames.each { |checking| (return false) unless (Script.running.find { |lscr| lscr.name =~ /^#{checking}$/i } || Script.running.find { |lscr| lscr.name =~ /^#{checking}/i }) }
+	snames.each { |checking| (return false) unless (Script.running.find { |lscr| lscr.name =~ /^#{checking}$/i } || Script.running.find { |lscr| lscr.name =~ /^#{checking}/i } || Script.hidden.find { |lscr| lscr.name =~ /^#{checking}$/i } || Script.hidden.find { |lscr| lscr.name =~ /^#{checking}/i }) }
 	true
 end
 
@@ -5613,7 +5617,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.95'
+$version = '3.96'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
