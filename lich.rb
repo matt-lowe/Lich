@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.63
+ version 3.64
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -45,6 +45,7 @@ require 'socket'
 include Socket::Constants
 require 'rexml/document'
 require 'rexml/streamlistener'
+require 'zlib'
 include REXML
 begin
 	require 'win32/registry'
@@ -2171,6 +2172,14 @@ class GameObj
 	end
 	def GameObj.containers
 		@@containers.dup
+	end
+	def GameObj.dead
+		dead_list = Array.new
+		for obj in @@npcs
+			dead_list.push(obj) if obj.status == "dead"
+		end
+		return nil if dead_list.empty?
+		return dead_list
 	end
 end
 
@@ -4812,7 +4821,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.63'
+$version = '3.64'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
