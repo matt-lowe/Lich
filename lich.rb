@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.67
+ version 3.68
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -196,6 +196,7 @@ at_exit { [Script.running + Script.hidden].each { |script| script.kill }; Proces
 
 # fixme: warlock
 # fixme: terminal mode
+# fixme: spellshorts
 
 $injuries = Hash.new; ['nsys','leftArm','rightArm','rightLeg','leftLeg','head','rightFoot','leftFoot','rightHand','leftHand','rightEye','leftEye','back','neck','chest','abdomen'].each { |area| $injuries[area] = { 'wound' => 0, 'scar' => 0 } }
 $injury_mode = 0
@@ -843,7 +844,7 @@ end
 class Script
 	@@running ||= Array.new
 	attr_reader :name, :thread_group, :vars, :safe, :labels, :file_name, :label_order
-	attr_accessor :quiet_exit, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings
+	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
 		@file_name = file_name
@@ -853,11 +854,11 @@ class Script
 			@vars[0] = @vars[1..-1].join(' ')
 			cli_vars = nil
 		end
-		if vars.include?('quiet')
-			vars.delete('quiet')
-			@quiet_exit = true
-		else
-			@quiet_exit = false
+		if @vars.first =~ /^quiet$/i
+			@quiet = true
+			@vars.shift
+		else 
+			@quiet = false
 		end
 		@downstream_buffer = Array.new
 		@want_downstream = true
@@ -890,7 +891,7 @@ class Script
 				file = File.open(file_name)
 			end
 			if file.gets =~ /^[\t\s]*#?[\t\s]*(?:quiet|hush)\r?$/i
-				@quiet_exit = true
+				@quiet = true
 			end
 			file.rewind
 			ary = ("\n" + file.read).split(/\r?\n([\d_\w]+:)\s*\r?\n/)
@@ -958,7 +959,7 @@ class Script
 			@match_stack_strings.clear
 			@match_stack_strings = nil
 			@@running.delete(self)
-			respond("--- Lich: #{@name} has exited.") unless @quiet_exit
+			respond("--- Lich: #{@name} has exited.") unless @quiet
 			GC.start
 		}
 		@name
@@ -1092,7 +1093,7 @@ class ExecScript<Script
 		@hidden = false
 		@paused = false
 		@silent = false
-		@quiet_exit = quiet
+		@quiet = quiet
 		@safe = false
 		@no_echo = false
 		@thread_group = ThreadGroup.new
@@ -1667,9 +1668,7 @@ class Spells
 end
 
 class Spell
-	@@active ||= Array.new
 	@@list ||= Array.new
-	@@active_loaded ||= false
 	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type
 	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging)
 		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@stacks,@selfonly,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging = name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging
@@ -1685,61 +1684,58 @@ class Spell
 	end
 	def Spell.load(filename="#{$script_dir}spell-list.xml.txt")
 		begin
-			@@active.clear
 			@@list.clear
 			File.open(filename) { |file|
-				file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data| 
+				file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
 					spell = Hash.new
 					spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|stacks|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-					Spell.new(spell['number'],spell['name'],spell['type'],spell['duration'],(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'))
+					Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'))
 				}
 			}
 			return true
 		rescue
 			respond "--- Failed to load #{filename}"
-			respond $!
+			$stderr.puts $!
+			$stderr.puts $!.backtrace
 			return false
 		end
 	end
-	def Spell.serialize
-		spell = nil; @@active.each { |spell| spell.touch }
-		@@active
-	end
-	def Spell.active
-		@@active
-	end
-	def Spell.load_active=(data)
-		data.each { |oldobject|
-			spell = @@list.find { |newobject| oldobject.name == newobject.name }
-			unless @@active.include?(spell)
-				spell.timeleft = oldobject.timeleft
-				spell.active = true
-				@@active.push(spell)
+	def Spell.[](val)
+		Spell.load if @@list.empty?
+		if val.class == Spell
+			val
+		elsif (val.class == Fixnum) or (val.class == String and val.class =~ /^[0-9]+$/)
+			@@list.find { |spell| spell.num == val.to_i }
+		else
+			if ret = @@list.find { |spell| spell.name =~ /^#{val}$/i }
+				ret
+			elsif ret = @@list.find { |spell| spell.name =~ /^#{val}/i }
+				ret
+			else
+				@@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i }
 			end
-		}
-	end
-	def Spell.load_detailed=(data)
-		@@detailed = data
-	end
-	def Spell.detailed?
-		@@detailed
-	end
-	def Spell.increment_detailed
-		@@detailed = !@@detailed
-	end
-	def active=(val)
-		@active = val
+		end
 	end
 	def Spell.active
-		@@active
+		Spell.load if @@list.empty?
+		active = Array.new
+		@@list.each { |spell| active.push(spell) if spell.active? }
+		active
+	end
+	def Spell.active?(val)
+		Spell.load if @@list.empty?
+		Spell[val].active?
 	end
 	def Spell.list
+		Spell.load if @@list.empty?
 		@@list
 	end
 	def Spell.upmsgs
+		Spell.load if @@list.empty?
 		@@list.collect { |spell| spell.msgup }
 	end
 	def Spell.dnmsgs
+		Spell.load if @@list.empty?
 		@@list.collect { |spell| spell.msgdn }
 	end
 	def timeleft
@@ -1755,6 +1751,13 @@ class Spell
 		end
 		@timestamp = Time.now
 		@timeleft
+	end
+	def active=(val)
+		@active = val
+	end
+	def active?
+		touch
+		@active
 	end
 	def timeleft=(val)
 		touch
@@ -1774,24 +1777,6 @@ class Spell
 		@timestamp = Time.now
 		@timeleft
 	end
-	def Spell.[](val)
-		if val.class == Spell
-			val
-		elsif val.class == Fixnum
-			@@list.find { |spell| spell.num == val }
-		else
-			if ret = @@list.find { |spell| spell.name =~ /^#{val}$/i } then ret
-			elsif ret = @@list.find { |spell| spell.name =~ /^#{val}/i } then ret
-			else @@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i } end
-		end
-	end
-	def Spell.active?(val)
-		Spell[val].active?
-	end
-	def active?
-		touch
-		@active
-	end
 	def minsleft
 		touch
 	end
@@ -1809,14 +1794,12 @@ class Spell
 		else
 			if @timeleft > 250 then @timeleft = 249.983 end
 		end
-		@@active.push(self) unless @@active.include?(self)
 		@active = true
 	end
 	def putdown
 		@active = false
 		@timeleft = 0
 		@timestamp = Time.now
-		@@active.delete(self)
 	end
 	def remaining
 		self.touch.as_time
@@ -2266,6 +2249,7 @@ class Map
 		@@list[@id] = self
 	end
 	def Map.get_free_id
+		Map.load if @@list.empty?
 		free_id = 0
 		free_id += 1 until @@list[free_id].nil?
 		free_id
@@ -2280,6 +2264,7 @@ class Map
 		@@list.clear
 	end
 	def Map.uniq_new(id, title, desc, paths, wayto={}, timeto={}, geo=nil)
+		Map.load if @@list.empty?
 		chkre = /#{desc.strip.chop.gsub(/\.(?:\.\.)?/, '|')}/
 		unless duplicate = @@list.find { |obj| obj.title == title and obj.desc =~ chkre and obj.paths == paths }
 			return Map.new(id, title, desc, paths, wayto, timeto, geo)
@@ -2287,6 +2272,7 @@ class Map
 		return duplicate
 	end
 	def Map.uniq!
+		Map.load if @@list.empty?
 		deleted_rooms = Array.new
 		@@list.each { |room|
 			chkre = /#{desc.strip.chop.gsub(/\.(?:\.\.)?/, '|')}/
@@ -2301,9 +2287,11 @@ class Map
 		return deleted_rooms
 	end
 	def Map.list
+		Map.load if @@list.empty?
 		@@list
 	end
 	def Map.[](val)
+		Map.load if @@list.empty?
 		if (val.class == Fixnum) or (val.class == Bignum) or val =~ /^[0-9]+$/
 			@@list[val.to_i]
 		else
@@ -2313,11 +2301,13 @@ class Map
 		end
 	end
 	def Map.current
+		Map.load if @@list.empty?
 		ctitle = checkroom
 		cdescre = /#{Regexp.escape(checkroomdescrip.strip.chop).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
 		@@list.find { |room| room.desc =~ cdescre and room.title == ctitle and $room_exits_string.chomp == room.paths }
 	end
 	def Map.current_or_new
+		Map.load if @@list.empty?
 		Map.current || Map.new(Map.get_free_id, $room_title, $room_description, $room_exits_string)
 	end
 	def Map.reload
@@ -2351,6 +2341,7 @@ class Map
 	end
 	def Map.load_unique(file=($script_dir.to_s + 'unique_map_movements.txt'))
 		Map.load if @@list.empty?
+		nil
 	end
 	def Map.save(filename=($script_dir.to_s + 'map.dat'))
 		if File.exists?(filename)
@@ -2424,6 +2415,7 @@ class Map
 		GC.start
 	end
 	def Map.smart_check
+		Map.load if @@list.empty?
 		error_rooms = []
 		@@list.each { |room|
 			if room.wayto.keys.include?(room.id.to_s)
@@ -2466,6 +2458,7 @@ class Map
 		error_rooms
 	end
 	def Map.estimate_time(array)
+		Map.load if @@list.empty?
 		unless array.class == Array
 			raise Exception.exception("MapError"), "Map.estimate_time was given something not an array!"
 		end
@@ -2780,7 +2773,7 @@ def start_script(script_name,cli_vars=[],force=false)
 		new_script.add_thread(Thread.current)
 		script = Script.self
 		Thread.current.priority = 1
-		respond("--- Lich: #{script.name} active.") unless script.quiet_exit
+		respond("--- Lich: #{script.name} active.") unless script.quiet
 		begin
 			while Script.self.current_label
 				eval(Script.self.labels[Script.self.current_label].to_s)
@@ -2838,7 +2831,7 @@ def start_exec_script(cmd_data, quiet=false)
 		new_script.add_thread(Thread.current)
 		script = Script.self
 		Thread.current.priority = 1
-		respond("--- Lich: #{script.name} active.") unless script.quiet_exit
+		respond("--- Lich: #{script.name} active.") unless script.quiet
 		begin
 			eval(cmd_data, nil, script.name.to_s, -1)
 			Script.self.kill
@@ -4132,7 +4125,7 @@ def fput(message, *waitingfor)
 			if dead?
 				echo("You're dead...! You can't do that!")
 				sleep 1
-				Script.self.downstream_buffer.unshift(string)
+				script.downstream_buffer.unshift(string)
 				return false
 			elsif checkstunned
 				while checkstunned
@@ -4180,7 +4173,7 @@ end
 
 def quiet_exit
 	script = Script.self
-	script.quiet_exit = !(script.quiet_exit)
+	script.quiet = !(script.quiet)
 end
 
 def matchfindexact(*strings)
@@ -4833,7 +4826,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.67'
+$version = '3.68'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5776,7 +5769,6 @@ rescue
 	respond "Fatal (non-recoverable) error during execution: #{$!}" if $LICH_DEBUG
 	respond $!.backtrace.join("\r\n") if $LICH_DEBUG
 end
-
 
 [Script.running + Script.hidden].each { |script| script.kill }
 sleep 0.1
