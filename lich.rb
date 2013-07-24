@@ -852,7 +852,7 @@ class XMLParser
 					$_CLIENT_.puts "\034GSm#{sprintf('%-45s', GameObj.right_hand.name)}\r\n"
 					$_CLIENT_.puts "\034GSl#{sprintf('%-45s', GameObj.left_hand.name)}\r\n"
 					$_CLIENT_.puts "\034GSq#{sprintf('%010d', @server_time)}\r\n"
-					$_CLIENT_.puts "\034GSQ#{sprintf('%010d', @roundtime_end)}\r\n"
+					$_CLIENT_.puts "\034GSQ#{sprintf('%010d', @roundtime_end)}\r\n" if @roundtime_end > 0
 				end
 
 			end
@@ -1736,7 +1736,7 @@ class Char
 		health(*args)
 	end
 	def Char.mana(*args)
-		mana(*args)
+		checkmana(*args)
 	end
 	def Char.spirit(*args)
 		checkspirit(*args)
@@ -5655,7 +5655,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.97'
+$version = '3.98'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
