@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.73
+ version 3.74
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -1007,25 +1007,27 @@ class Alias
 	@@regex_string ||= String.new
 	@@alias_hash ||= Hash.new
 	def Alias.add(trigger, target)
+		trigger = Regexp.escape(trigger)
 		@@alias_hash[trigger.downcase] = target
 		@@regex_string = @@alias_hash.keys.join('|')
 	end
 	def Alias.delete(trigger)
+		trigger = Regexp.escape(trigger)
 		which = @@alias_hash.keys.find { |key| key == trigger.downcase }
 		@@alias_hash.delete(which) if which
 		@@regex_string = @@alias_hash.keys.join('|')
 	end
 	def Alias.find(trigger)
 		return nil if (trigger == nil) or trigger.empty? or @@regex_string.empty?
-		/^(?:<c>)?(#{@@regex_string})\b/i.match(trigger).captures.first
+		/^(?:<c>)?(#{@@regex_string})/i.match(trigger.strip).captures.first
 	end
 	def Alias.list
 		@@alias_hash.dup
 	end
 	def Alias.run(trig)
-		/^(?:<c>)?(#{@@regex_string})\b(?:\s*)?(.*)$/i.match(trig)
+		/^(?:<c>)?(#{@@regex_string})(?:\s*)?(.*)$/i.match(trig.strip)
 		trigger, extra = $1, $2
-		unless target = @@alias_hash[trigger].dup
+		unless target = @@alias_hash[Regexp.escape(trigger)].dup
 			respond '--- Lich: tried to run unkown alias (' + trig.to_s + ')'
 			return false
 		end
@@ -3429,10 +3431,14 @@ def move(dir='none')
 		moveflag = true
 		put(dir)
 		while feed = get
-			if feed =~ /can't go there|Where are you trying to go|What were you referring to\?| appears to be closed\.|I could not find what you were referring to\.|You can't climb that\.|How do you plan to do that here\?|You take a few steps towards|You're going to have to climb that\.|You cannot do that\.|You settle yourself on|You shouldn't annoy|You can't go to|That's probably not a very good idea|You can't do that|Maybe you should look at the [\w\s]+ and work with one at a time\.|You are already|An unseen force prevents you\.|You walk over to|You can't enter|You step over to|Sorry, you aren't allowed to enter here\.|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|seems to be closed\.|Please leave promptly\.|That looks like someplace only performers should go\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^You will have to climb that\.$|^Your attempt fails/
+			if feed =~ /can't go there|Where are you trying to go|What were you referring to\?|I could not find what you were referring to\.|You can't climb that\.|How do you plan to do that here\?|You take a few steps towards|You're going to have to climb that\.|You cannot do that\.|You settle yourself on|You shouldn't annoy|You can't go to|That's probably not a very good idea|You can't do that|Maybe you should look at the [\w\s]+ and work with one at a time\.|You are already|An unseen force prevents you\.|You walk over to|You can't enter|You step over to|Sorry, you aren't allowed to enter here\.|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|That looks like someplace only performers should go\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^You will have to climb that\.$|^Your attempt fails/
 				echo("Error, can't go in the direction specified!")
 				Script.self.downstream_buffer.unshift(feed)
 				return false
+			elsif feed =~ /(?:appears|seems) to be closed\.$/
+				fput dir.sub(/go|climb/, 'open')
+				put(dir)
+				next
 			elsif feed =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
 				sleep(1)
 				waitrt?
@@ -5128,7 +5134,7 @@ sock_keepalive_proc = proc { |sock|
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
 
-$version = '3.73'
+$version = '3.74'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
