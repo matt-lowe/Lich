@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.17'
+$version = '4.0.18'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2507,6 +2507,24 @@ class Spells
 	end
 	def Spells.load_serialized=(val)
 		@@minorelemental,@@majorelemental,@@minorspiritual,@@majorspiritual,@@wizard,@@sorcerer,@@ranger,@@paladin,@@empath,@@cleric,@@bard = val
+	end
+end
+
+class CMan
+	def CMan.method_missing(arg1, arg2='')
+		if arg2.class == Array
+			instance_eval("@@#{arg1}[#{arg2.join(',')}]", if Script.self then Script.self.name else "Lich" end)
+		elsif arg2.to_s =~ /^\d+$/
+			instance_eval("@@#{arg1}#{arg2}", if Script.self then Script.self.name else "Lich" end)
+		elsif arg2.empty?
+			begin
+				instance_eval("@@#{arg1}", if Script.self then Script.self.name else "Lich" end)
+			rescue
+				nil
+			end
+		else
+			instance_eval("@@#{arg1}'#{arg2}'", if Script.self then Script.self.name else "Lich" end)
+		end
 	end
 end
 
@@ -6389,6 +6407,9 @@ fix_game_host_port = proc { |gamehost,gameport|
 	elsif (gamehost == 'gs3.simutronics.net') and (gameport == '4900')
 		gamehost = 'storm.gs4.game.play.net'
 		gameport = '10024'
+	elsif (gamehost == 'prime.dr.game.play.net') and (gameport == '4901')
+		gamehost = 'dr.simutronics.net'
+		gameport = '11024'
 	end
 	[ gamehost, gameport ]
 }
