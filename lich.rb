@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.13'
+$version = '4.0.14'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6252,34 +6252,43 @@ def do_client(client_string)
 			respond 'built-in commands:'
 			respond "   #{$clean_lich_char}<script name>             start a script"
 			respond "   #{$clean_lich_char}pause <script name>       pause a script"
-			respond "   #{$clean_lich_char}p <script name>           \""
+			respond "   #{$clean_lich_char}p <script name>           ''"
+			respond "   #{$clean_lich_char}unpause <script name>     unpause a script"
+			respond "   #{$clean_lich_char}u <script name>           ''"
 			respond "   #{$clean_lich_char}kill <script name>        kill a script"
-			respond "   #{$clean_lich_char}k <script name>           \""
+			respond "   #{$clean_lich_char}k <script name>           ''"
 			respond "   #{$clean_lich_char}pause                     pause the most recently started script that isn't aready paused"
-			respond "   #{$clean_lich_char}p                         \""
+			respond "   #{$clean_lich_char}p                         ''"
+			respond "   #{$clean_lich_char}unpause                   unpause the most recently started script that is paused"
+			respond "   #{$clean_lich_char}u                         ''"
 			respond "   #{$clean_lich_char}kill                      kill the most recently started script"
-			respond "   #{$clean_lich_char}k                         \""
+			respond "   #{$clean_lich_char}k                         ''"
 			respond "   #{$clean_lich_char}pause all                 pause all scripts"
-			respond "   #{$clean_lich_char}pa                        \""
+			respond "   #{$clean_lich_char}pa                        ''"
 			respond "   #{$clean_lich_char}unpause all               unpause all scripts"
-			respond "   #{$clean_lich_char}ua                        \""
+			respond "   #{$clean_lich_char}ua                        ''"
+			respond "   #{$clean_lich_char}kill all                  kill all scripts"
+			respond "   #{$clean_lich_char}ka                        ''"
+			respond
 			respond "   #{$clean_lich_char}force <script name>       start a script even if it's already running"
 			respond "   #{$clean_lich_char}send <line>               send a line to all scripts as if it came from the game"
 			respond "   #{$clean_lich_char}send to <script> <line>   send a line to a specific script"
-			respond "   #{$clean_lich_char}list                      show the currently running scripts"
-			respond "   #{$clean_lich_char}l                         \""
-			respond "   #{$clean_lich_char}list all                  show the currently running scripts plus running scripts marked as hidden"
-			respond "   #{$clean_lich_char}la                        \""
+			respond
+			respond "   #{$clean_lich_char}favs add [global] <script name> [vars]   automatically start a script start each time Lich starts"
+			respond "   #{$clean_lich_char}favs delete [global] <script name>       "
+			respond "   #{$clean_lich_char}favs list                                "
+			respond
+			respond "   #{$clean_lich_char}alias add [global] <trigger>=<alias>   "
+			respond "   #{$clean_lich_char}alias delete [global] <trigger>        "
+			respond "   #{$clean_lich_char}alias list                             "
 			respond
 			respond 'If you liked this help message, you might also enjoy:'
 			respond "   #{$clean_lich_char}chat help      (lnet must be running)"
 			respond "   #{$clean_lich_char}magic help     (infomon must be running)"
-			respond "   #{$clean_lich_char}favs help"
-			respond "   #{$clean_lich_char}alias help"
-			respond "   #{$clean_lich_char}setting help"
 			respond "   #{$clean_lich_char}go2 help"
 			respond "   #{$clean_lich_char}repository help"
 			respond "   #{$clean_lich_char}updater help"
+			respond "   #{$clean_lich_char}setting help"
 			respond
 		else
 			script_name = Regexp.escape(cmd.split.first.chomp)
