@@ -31,7 +31,13 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.23'
+=begin
+
+	Lich is currently maintained by Tillmen (tillmen@lichproject.org)
+
+=end
+
+$version = '4.1.0'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -369,7 +375,9 @@ UNTRUSTED_START_EXEC_SCRIPT = proc { |cmd_data,flags|
 	flags[:trusted] = false
 	start_exec_script(cmd_data, flags)
 }
-
+UNTRUSTED_SCRIPT_EXISTS = proc { |scriptname|
+	Script.exists?(scriptname)
+}
 
 JUMP = Exception.exception('JUMP')
 JUMP_ERROR = Exception.exception('JUMP_ERROR')
@@ -1602,9 +1610,62 @@ class Script
 	@@running ||= Array.new
 	attr_reader :name, :vars, :safe, :labels, :file_name, :label_order, :thread_group, :trusted
 	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings
+	def Script.self
+		if script = @@running.find { |scr| scr.thread_group == Thread.current.group }
+			sleep "0.2".to_f while script.paused
+			script
+		else
+			nil
+		end
+	end
+	def Script.running
+		list = Array.new
+		for script in @@running
+			list.push(script) unless script.hidden
+		end
+		return list
+	end
+	def Script.index
+		Script.running
+	end
+	def Script.hidden
+		list = Array.new
+		for script in @@running
+			list.push(script) if script.hidden
+		end
+		return list
+	end
+	def Script.exists?(scriptname)
+		scriptname += '.lic' unless (scriptname =~ /\.lic$/i)
+		if $SAFE == 0
+			if File.exists?("#{$script_dir}#{scriptname}") and (File.dirname("#{$script_dir}#{scriptname}") == $script_dir.sub(/\/$/,''))
+				true
+			else
+				false
+			end
+		else
+			UNTRUSTED_SCRIPT_EXISTS.call(scriptname)
+		end
+	end
+	def Script.new_downstream_xml(line)
+		for script in @@running
+			script.downstream_buffer.push(line.chomp) if script.want_downstream_xml
+		end
+	end
+	def Script.new_upstream(line)
+		for script in @@running
+			script.upstream_buffer.push(line.chomp) if script.want_upstream
+		end
+	end
+	def Script.new_downstream(line)
+		for script in @@running
+			script.downstream_buffer.push(line.chomp) if script.want_downstream
+			# fixme: watchfor
+		end
+	end
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
-		@trusted = !LichSettings['untrusted_scripts'].include?(@name)
+		@trusted = LichSettings['trusted_scripts'].include?(@name)
 		@file_name = file_name
 		@vars = Array.new
 		unless cli_vars.empty?
@@ -1733,50 +1794,9 @@ class Script
 		@downstream_buffer.clear
 		to_return
 	end
-	def Script.self
-		if script = @@running.find { |scr| scr.thread_group == Thread.current.group }
-			sleep "0.2".to_f while script.paused
-			script
-		else
-			nil
-		end
-	end
-	def Script.running
-		list = Array.new
-		for script in @@running
-			list.push(script) unless script.hidden
-		end
-		return list
-	end
-	def Script.index
-		Script.running
-	end
-	def Script.hidden
-		list = Array.new
-		for script in @@running
-			list.push(script) if script.hidden
-		end
-		return list
-	end
 	def to_s
 		@name
 	end	
-	def Script.new_downstream(line)
-		for script in @@running
-			script.downstream_buffer.push(line.chomp) if script.want_downstream
-			# fixme: watchfor
-		end
-	end
-	def Script.new_downstream_xml(line)
-		for script in @@running
-			script.downstream_buffer.push(line.chomp) if script.want_downstream_xml
-		end
-	end
-	def Script.new_upstream(line)
-		for script in @@running
-			script.upstream_buffer.push(line.chomp) if script.want_upstream
-		end
-	end
 	def gets
 		if @want_downstream or @want_downstream_xml
 			sleep "0.05".to_f while @downstream_buffer.empty?
@@ -3974,6 +3994,7 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 					$stderr.flush
 					Script.self.kill
 				rescue SecurityError
+					$stdout.puts "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
 					$stdout.puts "--- SecurityError: #{$!}"
 					$stdout.puts $!.backtrace[0..1]
 					$stderr.puts "--- SecurityError: #{$!}"
@@ -4236,7 +4257,7 @@ def checkreallybleeding
 end
 
 def muckled?
-	muckled = checkwebbed or checkdead or checkstunned or checkdead
+	muckled = checkwebbed or checkdead or checkstunned
 	if defined?(checksleeping)
 		muckled = muckled or checksleeping
 	end
@@ -4833,11 +4854,15 @@ def maxmana
 end
 
 def percentmana(num=nil)
-	return 100 if XMLData.max_mana == 0
-	unless num.nil?
-		((XMLData.mana.to_f / XMLData.max_mana.to_f) * 100).to_i >= num.to_i
-	else 
+	if XMLData.max_mana == 0
+		percent = 100
+	else
 		((XMLData.mana.to_f / XMLData.max_mana.to_f) * 100).to_i
+	end
+	if num.nil?
+		percent
+	else 
+		percent >= num.to_i
 	end
 end
 
@@ -4854,10 +4879,10 @@ def maxhealth
 end
 
 def percenthealth(num=nil)
-	unless num.nil?
-		((health.to_f / maxhealth.to_f) * 100).to_i >= num.to_i
+	if num.nil?
+		((XMLData.health.to_f / XMLData.max_health.to_f) * 100).to_i
 	else
-		((health.to_f / maxhealth.to_f) * 100).to_i
+		((XMLData.health.to_f / XMLData.max_health.to_f) * 100).to_i >= num.to_i
 	end
 end
 
@@ -4894,10 +4919,15 @@ def maxstamina()
 end
 
 def percentstamina(num=nil)
-	if num.nil?
-		((XMLData.stamina.to_f / XMLData.max_stamina.to_f) * 100).to_i
+	if XMLData.max_stamina == 0
+		percent = 100
 	else
-		((XMLData.stamina.to_f / XMLData.max_stamina.to_f) * 100).to_i >= num.to_i
+		percent = ((XMLData.stamina.to_f / XMLData.max_stamina.to_f) * 100).to_i
+	end
+	if num.nil?
+		percent
+	else
+		percent >= num.to_i
 	end
 end
 
@@ -6488,6 +6518,7 @@ def do_client(client_string)
 				respond "       #{$clean_lich_char}settings list"
 				respond
 			end
+=begin
 		elsif cmd =~ /^trust\s+(.*)/i
 			script_name = $1
 			if LichSettings['untrusted_scripts'].delete(script_name)
@@ -6506,11 +6537,30 @@ def do_client(client_string)
 			else
 				respond "--- Lich: could not find script: #{script_name}"
 			end
-		elsif cmd =~ /^list\s?(?:un)?trust(?:ed)?$|^lt$/i
-			if LichSettings['untrusted_scripts'].nil? or LichSettings['untrusted_scripts'].empty?
-				respond "--- Lich: all scripts are trusted"
+=end
+		elsif cmd =~ /^trust\s+(.*)/i
+			script_name = $1
+			if File.exists?("#{$script_dir}#{script_name}.lic")
+				LichSettings['trusted_scripts'] ||= Array.new
+				LichSettings['trusted_scripts'].push(script_name) unless LichSettings['trusted_scripts'].include?(script_name)
+				LichSettings.save
+				respond "--- Lich: '#{script_name}' is now a trusted script."
 			else
-				respond "--- Lich: untrusted scripts: #{LichSettings['untrusted_scripts'].join(', ')}"
+				respond "--- Lich: could not find script: #{script_name}"
+			end
+		elsif cmd =~ /^distrust\s+(.*)/i
+			script_name = $1
+			if LichSettings['trusted_scripts'].delete(script_name)
+				LichSettings.save
+				respond "--- Lich: '#{script_name}' is no longer a trusted script."
+			else
+				respond "--- Lich: '#{script_name}' was not found in the trusted script list."
+			end
+		elsif cmd =~ /^list\s?(?:un)?trust(?:ed)?$|^lt$/i
+			if LichSettings['trusted_scripts'].nil? or LichSettings['untrusted_scripts'].empty?
+				respond "--- Lich: no scripts are trusted"
+			else
+				respond "--- Lich: trusted scripts: #{LichSettings['trusted_scripts'].join(', ')}"
 			end
 		elsif cmd =~ /^help$/i
 			respond
@@ -6518,6 +6568,7 @@ def do_client(client_string)
 			respond
 			respond 'built-in commands:'
 			respond "   #{$clean_lich_char}<script name>             start a script"
+			respond "   #{$clean_lich_char}force <script name>       start a script even if it's already running"
 			respond "   #{$clean_lich_char}pause <script name>       pause a script"
 			respond "   #{$clean_lich_char}p <script name>           ''"
 			respond "   #{$clean_lich_char}unpause <script name>     unpause a script"
@@ -6530,14 +6581,22 @@ def do_client(client_string)
 			respond "   #{$clean_lich_char}u                         ''"
 			respond "   #{$clean_lich_char}kill                      kill the most recently started script"
 			respond "   #{$clean_lich_char}k                         ''"
+			respond "   #{$clean_lich_char}list                      show running scripts (except hidden ones)"
+			respond "   #{$clean_lich_char}l                         ''"
 			respond "   #{$clean_lich_char}pause all                 pause all scripts"
 			respond "   #{$clean_lich_char}pa                        ''"
 			respond "   #{$clean_lich_char}unpause all               unpause all scripts"
 			respond "   #{$clean_lich_char}ua                        ''"
 			respond "   #{$clean_lich_char}kill all                  kill all scripts"
 			respond "   #{$clean_lich_char}ka                        ''"
+			respond "   #{$clean_lich_char}list all                  show all running scripts"
+			respond "   #{$clean_lich_char}la                        ''"
 			respond
-			respond "   #{$clean_lich_char}force <script name>       start a script even if it's already running"
+			respond "   #{$clean_lich_char}trust <script name>       let the script do whatever it wants"
+			respond "   #{$clean_lich_char}distrust <script name>    restrict the script from doing things that might harm your computer"
+			respond "   #{$clean_lich_char}list trusted              show what scripts are trusted"
+			respond "   #{$clean_lich_char}lt                        ''"
+			respond
 			respond "   #{$clean_lich_char}send <line>               send a line to all scripts as if it came from the game"
 			respond "   #{$clean_lich_char}send to <script> <line>   send a line to a specific script"
 			respond
@@ -6549,13 +6608,17 @@ def do_client(client_string)
 			respond "   #{$clean_lich_char}alias delete [global] <trigger>        "
 			respond "   #{$clean_lich_char}alias list                             "
 			respond
+			respond "   #{$clean_lich_char}setting add [global] <setting name> <value>"
+			respond "   #{$clean_lich_char}setting change [global] <setting name> <value>"
+			respond "   #{$clean_lich_char}setting delete [global] <setting name> [value]"
+			respond "   #{$clean_lich_char}setting list"
+			respond
 			respond 'If you liked this help message, you might also enjoy:'
 			respond "   #{$clean_lich_char}chat help      (lnet must be running)"
 			respond "   #{$clean_lich_char}magic help     (infomon must be running)"
 			respond "   #{$clean_lich_char}go2 help"
 			respond "   #{$clean_lich_char}repository help"
 			respond "   #{$clean_lich_char}updater help"
-			respond "   #{$clean_lich_char}setting help"
 			respond
 		else
 			script_name = Regexp.escape(cmd.split.first.chomp)
@@ -6890,6 +6953,7 @@ main_thread = Thread.new {
 	LichSettings['serverbuffer_min_size'] ||= 200
 	LichSettings['clientbuffer_max_size'] ||= 100
 	LichSettings['clientbuffer_min_size'] ||= 50
+	LichSettings['trusted_scripts'] ||= [ 'updater', 'infomon', 'lnet', 'narost' ]
 
 	$clean_lich_char = LichSettings['lich_char']
 	$lich_char = Regexp.escape("#{$clean_lich_char}")
@@ -6898,6 +6962,7 @@ main_thread = Thread.new {
 
 	if HAVE_GTK and ARGV.empty?
 		setting_quick_game_entry = LichSettings['quick_game_entry'] || Hash.new
+		setting_quick_game_entry.delete_if { |key,val| val.length != 5 }
 		done = false
 		Gtk.queue {
 
@@ -6920,13 +6985,6 @@ main_thread = Thread.new {
 				quick_game_entry_tab = Gtk::VBox.new
 				quick_game_entry_tab.pack_start(box, true, true, 0)
 			else
-				quick_pass_entry = Gtk::Entry.new
-				quick_pass_entry.visibility = false
-	
-				quick_pass_box = Gtk::HBox.new
-				quick_pass_box.pack_end(quick_pass_entry, false, false, 5)
-				quick_pass_box.pack_end(Gtk::Label.new('Password:'), false, false, 5)
-	
 				quick_table = Gtk::Table.new(setting_quick_game_entry.length, 3, true)
 				row = 0
 				setting_quick_game_entry.keys.sort.each { |char_name|
@@ -6949,13 +7007,12 @@ main_thread = Thread.new {
 							login_server.puts "K\n"
 							hashkey = login_server.gets
 							if 'test'[0].class == String
-								password = quick_pass_entry.text.split('').collect { |c| c.getbyte(0) }
+								password = setting_quick_game_entry[char_name][1].unpack('m').first.split('').collect { |c| c.getbyte(0) }
 								hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
 							else
-								password = quick_pass_entry.text.split('').collect { |c| c[0] }
+								password = setting_quick_game_entry[char_name][1].unpack('m').first.split('').collect { |c| c[0] }
 								hashkey = hashkey.split('').collect { |c| c[0] }
 							end
-							quick_pass_entry.text = String.new
 							password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
 							password = password.collect { |c| c.chr }.join
 							login_server.puts "A\t#{setting_quick_game_entry[char_name][0]}\t#{password}\n"
@@ -6966,21 +7023,21 @@ main_thread = Thread.new {
 								login_server.puts "M\n"
 								response = login_server.gets
 								if response =~ /^M\t/
-									login_server.puts "F\t#{setting_quick_game_entry[char_name][1]}\n"
+									login_server.puts "F\t#{setting_quick_game_entry[char_name][2]}\n"
 									response = login_server.gets
 									if response =~ /NORMAL|PREMIUM|TRIAL/
-										login_server.puts "G\t#{setting_quick_game_entry[char_name][1]}\n"
+										login_server.puts "G\t#{setting_quick_game_entry[char_name][2]}\n"
 										login_server.gets
-										login_server.puts "P\t#{setting_quick_game_entry[char_name][1]}\n"
+										login_server.puts "P\t#{setting_quick_game_entry[char_name][2]}\n"
 										login_server.gets
 										login_server.puts "C\n"
 										response = login_server.gets
-										login_server.puts "L\t#{setting_quick_game_entry[char_name][2]}\tSTORM\n"
+										login_server.puts "L\t#{setting_quick_game_entry[char_name][3]}\tSTORM\n"
 										response = login_server.gets
 										if response =~ /^L\t/
 											login_server.close unless login_server.closed?
 											launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-											if setting_quick_game_entry[char_name][3]
+											if setting_quick_game_entry[char_name][4]
 												launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
 											end
 											window.destroy
@@ -7019,7 +7076,6 @@ main_thread = Thread.new {
 				}
 	
 				quick_game_entry_tab = Gtk::VBox.new
-				quick_game_entry_tab.pack_start(quick_pass_box, false, false, 5)
 				quick_game_entry_tab.pack_start(quick_table, false, false, 5)
 			end
 
@@ -7132,7 +7188,7 @@ main_thread = Thread.new {
 						password = pass_entry.text.split('').collect { |c| c[0] }
 						hashkey = hashkey.split('').collect { |c| c[0] }
 					end
-					pass_entry.text = String.new
+					# pass_entry.text = String.new
 					password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
 					password = password.collect { |c| c.chr }.join
 					login_server.puts "A\t#{user_id_entry.text}\t#{password}\n"
@@ -7233,8 +7289,9 @@ main_thread = Thread.new {
 							launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=WIZ") }
 						end
 						if make_quick_option.active?
-							setting_quick_game_entry[char_treeview.selection.selected[1]] = [ user_id_entry.text, selected_game_code, char_code, wizard_option.active? ]
+							setting_quick_game_entry[char_treeview.selection.selected[1]] = [ user_id_entry.text, [pass_entry.text].pack('m'), selected_game_code, char_code, wizard_option.active? ]
 						end
+						pass_entry.text = String.new
 						window.destroy
 						done = true
 					else
