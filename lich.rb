@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.15'
+$version = '4.0.16'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -625,6 +625,8 @@ class XMLParser
 				if attributes['id'] == 'room'
 					@room_count += 1
 					$room_count += 1 
+				elsif attributes['id'] == 'bounty'
+					@bounty_task.strip!
 				end
 				@current_stream = String.new
 			elsif name == 'pushBold'
@@ -823,9 +825,13 @@ class XMLParser
 				end
 			elsif (name == 'container') and (attributes['id'] == 'stow')
 				@stow_container_id = attributes['target'].sub('#', '')
-			elsif (name == 'clearStream') and (attributes['id'] == 'spellfront')
-				@spellfront.clear
-			elsif (name == 'app') and @name = attributes['char']
+			elsif (name == 'clearStream')
+				if attributes['id'] == 'spellfront'
+					@spellfront.clear
+				elsif attributes['id'] == 'bounty'
+					@bounty_task = String.new
+				end
+			elsif (name == 'app') and (@name = attributes['char'])
 				if $fake_stormfront
 					# fixme: game name hardcoded as Gemstone IV; maybe doesn't make any difference to the client.
 					$_CLIENT_.puts "\034GSB0000000000#{attributes['char']}\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
@@ -932,7 +938,7 @@ class XMLParser
 			elsif @current_stream == 'spellfront'
 				@spellfront.push(text.strip)
 			elsif @current_stream == 'bounty'
-				@bounty_task = text.strip
+				@bounty_task += text
 			elsif @current_stream == 'society'
 				@society_task = text
 			elsif (@current_stream == 'inv') and @active_tags.include?('a')
@@ -4288,7 +4294,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			Script.self.downstream_buffer.flatten!
 			# return nil instead of false to show the direction shouldn't be removed from the map database
 			return nil
-		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
+		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$/
 			sleep 1
 			waitrt?
 			put_dir.call
@@ -6614,7 +6620,7 @@ main_thread = Thread.new {
 	             sge = nil
 	    $ZLIB_STREAM = false
 	 $SEND_CHARACTER = '>'
-	
+
 	LichSettings.load
 	LichSettings['lich_char'] ||= ';'
 	LichSettings['cache_serverbuffer'] = false if LichSettings['cache_serverbuffer'].nil?
@@ -7210,16 +7216,66 @@ main_thread = Thread.new {
 			clientbuffer_frame = Gtk::Frame.new('Client Buffer')
 			clientbuffer_frame.add(clientbuffer_box)
 
+			save_button = Gtk::Button.new(' Save ')
+			save_button.sensitive = false
+
+			save_button_box = Gtk::HBox.new
+			save_button_box.pack_end(save_button, false, false, 5)
+
 			options_tab = Gtk::VBox.new
 			options_tab.pack_start(lich_box, false, false, 5)
 			options_tab.pack_start(serverbuffer_frame, false, false, 5)
 			options_tab.pack_start(clientbuffer_frame, false, false, 5)
+			options_tab.pack_start(save_button_box, false, false, 5)
 
+			check_changed = proc {
+				Gtk.queue {
+					if (LichSettings['lich_char'] == lich_char_entry.text) and (LichSettings['cache_serverbuffer'] == cache_serverbuffer_button.active?) and (LichSettings['serverbuffer_max_size'] == serverbuffer_max_entry.text.to_i) and (LichSettings['serverbuffer_min_size'] == serverbuffer_min_entry.text.to_i) and (LichSettings['cache_clientbuffer'] == cache_clientbuffer_button.active?) and (LichSettings['clientbuffer_max_size'] == clientbuffer_max_entry.text.to_i) and (LichSettings['clientbuffer_min_size'] == clientbuffer_min_entry.text.to_i)
+						save_button.sensitive = false
+					else
+						save_button.sensitive = true
+					end
+				}
+			}
+
+			lich_char_entry.signal_connect('key-press-event') {
+				check_changed.call
+				false
+			}
+			serverbuffer_max_entry.signal_connect('key-press-event') {
+				check_changed.call
+				false
+			}
+			serverbuffer_min_entry.signal_connect('key-press-event') {
+				check_changed.call
+				false
+			}
+			clientbuffer_max_entry.signal_connect('key-press-event') {
+				check_changed.call
+				false
+			}
+			clientbuffer_min_entry.signal_connect('key-press-event') {
+				check_changed.call
+				false
+			}
 			cache_serverbuffer_button.signal_connect('clicked') {
 				serverbuffer_min_entry.sensitive = cache_serverbuffer_button.active?
+				check_changed.call
 			}
 			cache_clientbuffer_button.signal_connect('clicked') {
 				clientbuffer_min_entry.sensitive = cache_clientbuffer_button.active?
+				check_changed.call
+			}
+			save_button.signal_connect('clicked') {
+				LichSettings['lich_char']             = lich_char_entry.text
+				LichSettings['cache_serverbuffer']    = cache_serverbuffer_button.active?
+				LichSettings['serverbuffer_max_size'] = serverbuffer_max_entry.text.to_i
+				LichSettings['serverbuffer_min_size'] = serverbuffer_min_entry.text.to_i
+				LichSettings['cache_clientbuffer']    = cache_clientbuffer_button.active?
+				LichSettings['clientbuffer_max_size'] = clientbuffer_max_entry.text.to_i
+				LichSettings['clientbuffer_min_size'] = clientbuffer_min_entry.text.to_i
+				LichSettings.save
+				save_button.sensitive = false
 			}
 
 			#
@@ -7451,6 +7507,7 @@ main_thread = Thread.new {
 		#
 		# offline mode
 		#
+		$stderr.puts "info: offline mode"
 
 		$offline_mode = true
 		begin
@@ -7479,8 +7536,10 @@ main_thread = Thread.new {
 		end
 		frontend_cmd += " /GGS /H127.0.0.1 /P#{localport} /Kfake_login_key"
 		frontend_cmd = "#{wine_bin} #{frontend_cmd}" if wine_bin
+		$stderr.puts "info: frontend_cmd: #{frontend_cmd}"
+		$stderr.flush
 		Thread.new {
-			Dir.chdir(frontend_dir)
+			Dir.chdir(frontend_dir) rescue()
 			system(frontend_cmd)
 		}
 		timeout_thr = Thread.new {
