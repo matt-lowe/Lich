@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.79
+ version 3.80
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -649,7 +649,7 @@ class SF_XML
 					$stance_value = attributes['value'].to_i
 					$_CLIENT_.puts "\034GSg#{sprintf('%010d', $stance_value)}\r\n" if $send_fake_tags
 				elsif attributes['id'] == 'mana'
-					last_mana = $mana
+					last_mana = $mana.to_i
 					$mana, $max_mana = attributes['text'].scan(/-?\d+/)
 					$mana = $mana.to_i
 					$max_mana = $max_mana.to_i
@@ -5410,7 +5410,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.79'
+$version = '3.80'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
