@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.11'
+$version = '4.0.12'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -98,7 +98,7 @@ if arg = ARGV.find { |a| (a == '-d') or (a == '--directory') }
 	$lich_dir = ARGV[i]
 	ARGV.delete_at(i)
 	unless $lich_dir and File.exists?($lich_dir)
-		$stdout.puts "warning: given Lich directory does not exist: #{$lich_dir}"
+		$stdout.puts "warning: given Lich directory does not exist: #{$lich_dir}" rescue()
 		$lich_dir = nil
 	end
 end
@@ -120,14 +120,14 @@ if arg = ARGV.find { |a| a == '--script-dir' }
 		$script_dir = $script_dir.tr('\\', '/')
 		$script_dir += '/' unless $script_dir[-1..-1] == '/'
 	else
-		$stdout.puts "warning: given script directory does not exist: #{$script_dir}"
+		$stdout.puts "warning: given script directory does not exist: #{$script_dir}" rescue()
 		$script_dir = nil
 	end
 end
 unless $script_dir
 	$script_dir = "#{$lich_dir}scripts/"
 	unless File.exists?($script_dir)
-		$stdout.puts "info: creating directory: #{$script_dir}"
+		$stdout.puts "info: creating directory: #{$script_dir}" rescue()
 		Dir.mkdir($script_dir)
 	end
 end
@@ -141,14 +141,14 @@ if arg = ARGV.find { |a| a == '--data-dir' }
 		$data_dir = $data_dir.tr('\\', '/')
 		$data_dir += '/' unless $data_dir[-1..-1] == '/'
 	else
-		$stdout.puts "warning: given data directory does not exist: #{$data_dir}"
+		$stdout.puts "warning: given data directory does not exist: #{$data_dir}" rescue()
 		$data_dir = nil
 	end
 end
 unless $data_dir
 	$data_dir = "#{$lich_dir}data/"
 	unless File.exists?($data_dir)
-		$stdout.puts "info: creating directory: #{$data_dir}"
+		$stdout.puts "info: creating directory: #{$data_dir}" rescue()
 		Dir.mkdir($data_dir)
 	end
 end
@@ -162,14 +162,14 @@ if arg = ARGV.find { |a| a == '--temp-dir' }
 		$temp_dir = $temp_dir.tr('\\', '/')
 		$temp_dir += '/' unless $temp_dir[-1..-1] == '/'
 	else
-		$stdout.puts "warning: given temp directory does not exist: #{$temp_dir}"
+		$stdout.puts "warning: given temp directory does not exist: #{$temp_dir}" rescue()
 		$temp_dir = nil
 	end
 end
 unless $temp_dir
 	$temp_dir = "#{$lich_dir}temp/"
 	unless File.exists?($temp_dir)
-		$stdout.puts "info: creating directory: #{$temp_dir}"
+		$stdout.puts "info: creating directory: #{$temp_dir}" rescue()
 		Dir.mkdir($temp_dir)
 	end
 end
@@ -183,7 +183,7 @@ if arg = ARGV.find { |a| a == '--hosts-dir' }
 		$hosts_dir = $hosts_dir.tr('\\', '/')
 		$hosts_dir += '/' unless $hosts_dir[-1..-1] == '/'
 	else
-		$stdout.puts "warning: given hosts directory does not exist: #{$hosts_dir}"
+		$stdout.puts "warning: given hosts directory does not exist: #{$hosts_dir}" rescue()
 		$hosts_dir = nil
 	end
 else
@@ -236,13 +236,13 @@ begin
 rescue LoadError
 	HAVE_REGISTRY = false
 	if RUBY_PLATFORM =~ /win|mingw/i
-		$stdout.puts "warning: failed to load win32/registry: #{$!}"
+		$stdout.puts "warning: failed to load win32/registry: #{$!}" rescue()
 		$stderr.puts "warning: failed to load win32/registry: #{$!}"
 	end
 rescue
 	HAVE_REGISTRY = false
 	if RUBY_PLATFORM =~ /win|mingw/i
-		$stdout.puts "warning: failed to load win32/registry: #{$!}"
+		$stdout.puts "warning: failed to load win32/registry: #{$!}" rescue()
 		$stderr.puts "warning: failed to load win32/registry: #{$!}"
 	end
 end
@@ -266,49 +266,49 @@ begin
 						begin
 							block.call
 						rescue
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue SyntaxError
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue SystemExit
 							nil
 						rescue SecurityError
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue ThreadError
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue Exception
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue ScriptError
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue LoadError
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue NoMemoryError
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
 						rescue
-							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stdout.puts "error in Gtk.queue: #{$!}" rescue()
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 							$stderr.flush
@@ -338,11 +338,11 @@ begin
 	$stderr.puts "info: HAVE_GTK: true"
 rescue LoadError
 	HAVE_GTK = false
-	$stdout.puts "warning: failed to load GTK bindings: #{$!}"
+	$stdout.puts "warning: failed to load GTK bindings: #{$!}" rescue()
 	$stderr.puts "warning: failed to load GTK bindings: #{$!}"
 rescue
 	HAVE_GTK = false
-	$stdout.puts "warning: failed to load GTK bindings: #{$!}"
+	$stdout.puts "warning: failed to load GTK bindings: #{$!}" rescue()
 	$stderr.puts "warning: failed to load GTK bindings: #{$!}"
 end
 
@@ -6688,7 +6688,7 @@ main_thread = Thread.new {
 								if response =~ /^M\t/
 									login_server.puts "F\t#{LichSettings['quick_game_entry'][char_name][1]}\n"
 									response = login_server.gets
-									if response =~ /NORMAL|PREMIUM/
+									if response =~ /NORMAL|PREMIUM|TRIAL/
 										login_server.puts "G\t#{LichSettings['quick_game_entry'][char_name][1]}\n"
 										login_server.gets
 										login_server.puts "P\t#{LichSettings['quick_game_entry'][char_name][1]}\n"
@@ -7268,7 +7268,7 @@ main_thread = Thread.new {
 			begin
 				launch_data = File.open(launch_file) { |file| file.readlines }.collect { |line| line.chomp }
 			rescue
-				$stdout.puts "error: failed to read launch_file: #{$!}"
+				$stdout.puts "error: failed to read launch_file: #{$!}" rescue()
 				$stderr.puts "info: launch_file: #{launch_file}"
 				$stderr.puts "error: failed to read launch_file: #{$!}"
 				$stderr.puts $!.backtrace
@@ -7276,27 +7276,27 @@ main_thread = Thread.new {
 			end
 		end
 		unless launcher_cmd = get_real_launcher_cmd.call
-			$stdout.puts 'error: failed to find the Simutronics launcher'
+			$stdout.puts 'error: failed to find the Simutronics launcher' rescue()
 			$stderr.puts 'error: failed to find the Simutronics launcher'
 			exit(1)
 		end
 		unless gamecode = launch_data.find { |line| line =~ /GAMECODE=/ }
-			$stdout.puts "error: launch_data contains no GAMECODE info"
+			$stdout.puts "error: launch_data contains no GAMECODE info" rescue()
 			$stderr.puts "error: launch_data contains no GAMECODE info"
 			exit(1)
 		end
 		unless gameport = launch_data.find { |line| line =~ /GAMEPORT=/ }
-			$stdout.puts "error: launch_data contains no GAMEPORT info"
+			$stdout.puts "error: launch_data contains no GAMEPORT info" rescue()
 			$stderr.puts "error: launch_data contains no GAMEPORT info"
 			exit(1)
 		end
 		unless gamehost = launch_data.find { |opt| opt =~ /GAMEHOST=/ }
-			$stdout.puts "error: launch_data contains no GAMEHOST info"
+			$stdout.puts "error: launch_data contains no GAMEHOST info" rescue()
 			$stderr.puts "error: launch_data contains no GAMEHOST info"
 			exit(1)
 		end
 		unless game = launch_data.find { |opt| opt =~ /GAME=/ }
-			$stdout.puts "error: launch_data contains no GAME info"
+			$stdout.puts "error: launch_data contains no GAME info" rescue()
 			$stderr.puts "error: launch_data contains no GAME info"
 			exit(1)
 		end
@@ -7329,7 +7329,7 @@ main_thread = Thread.new {
 		begin
 			listener = TCPServer.new("localhost", nil)
 		rescue
-			$stdout.puts "--- error: cannot bind listen socket to local port: #{$!}"
+			$stdout.puts "--- error: cannot bind listen socket to local port: #{$!}" rescue()
 			$stderr.puts "error: cannot bind listen socket to local port: #{$!}"
 			$stderr.puts $!.backtrace
 			exit(1)
@@ -7349,7 +7349,7 @@ main_thread = Thread.new {
 		Thread.new { system(launcher_cmd) }
 		timeout_thr = Thread.new {
 			sleep 30
-			$stdout.puts "error: timeout waiting for client to connect"
+			$stdout.puts "error: timeout waiting for client to connect" rescue()
 			$stderr.puts "error: timeout waiting for client to connect"
 			exit(1)
 		}
@@ -7369,7 +7369,7 @@ main_thread = Thread.new {
 	elsif game_host and game_port
 		hosts_dir ||= find_hosts_dir
 		unless hosts_dir and File.exists?(hosts_dir)
-			$stdout.puts "error: hosts_dir does not exist: #{hosts_dir}"
+			$stdout.puts "error: hosts_dir does not exist: #{hosts_dir}" rescue()
 			$stderr.puts "error: hosts_dir does not exist: #{hosts_dir}"
 			exit
 		end
@@ -7385,7 +7385,7 @@ main_thread = Thread.new {
 		rescue
 			sleep 1
 			if (error_count += 1) >= 30
-				$stdout.puts 'error: failed to bind to the proper port'
+				$stdout.puts 'error: failed to bind to the proper port' rescue()
 				$stderr.puts 'error: failed to bind to the proper port'
 				exit!
 			else
@@ -7410,21 +7410,21 @@ main_thread = Thread.new {
 =end
 		timeout_thread = Thread.new {
 			sleep 120
-			$stdout.puts 'error: timed out waiting for client to connect'
+			$stdout.puts 'error: timed out waiting for client to connect' rescue()
 			$stderr.puts 'error: timed out waiting for client to connect'
 			heal_hosts(hosts_dir)
 			exit(1)
 		}
-		$stdout.puts "Pretending to be #{game_host}"
-		$stdout.puts "Listening on port #{game_port}"
-		$stdout.puts "Waiting for the client to connect..."
+		$stdout.puts "Pretending to be #{game_host}" rescue()
+		$stdout.puts "Listening on port #{game_port}" rescue()
+		$stdout.puts "Waiting for the client to connect..." rescue()
 		$stderr.puts "info: pretending to be #{game_host}"
 		$stderr.puts "info: listening on port #{game_port}"
 		$stderr.puts "info: waiting for the client to connect..."
 		$_CLIENT_ = listener.accept
 		timeout_thread.kill
 		timeout_thread = nil
-		$stdout.puts "Connection with the local game client is open."
+		$stdout.puts "Connection with the local game client is open." rescue()
 		$stderr.puts "info: connection with the game client is open"
 		heal_hosts(hosts_dir)
 		if test_mode
@@ -7445,7 +7445,7 @@ main_thread = Thread.new {
 		begin
 			listener = TCPServer.new("localhost", nil)
 		rescue
-			$stdout.puts "Cannot bind listening socket to local port: #{$!}"
+			$stdout.puts "Cannot bind listening socket to local port: #{$!}" rescue()
 			$stderr.puts "Cannot bind listening socket to local port: #{$!}"
 			exit(1)
 		end
@@ -7474,7 +7474,7 @@ main_thread = Thread.new {
 		}
 		timeout_thr = Thread.new {
 			sleep 30
-			$stdout.puts "timeout waiting for connection"
+			$stdout.puts "timeout waiting for connection" rescue()
 			$stderr.puts "error: timeout waiting for connection"
 			exit(1)
 		}
@@ -7535,6 +7535,11 @@ main_thread = Thread.new {
 	end
 
 	undef :exit!
+
+	$stdout = $_CLIENT_
+	
+	$_CLIENT_.sync = true
+	$_SERVER_.sync = true
 
 	client_thread = Thread.new {
 		$login_time = Time.now
@@ -7705,11 +7710,6 @@ main_thread = Thread.new {
 	
 	server_thread.priority = 4
 	client_thread.priority = 3
-	
-	$stdout = $_CLIENT_
-	
-	$_CLIENT_.sync = true
-	$_SERVER_.sync = true
 	
 	$_CLIENT_.puts "\n--- Lich v#{$version} is active.  Type #{$clean_lich_char}help for usage info.\n\n"
 	
