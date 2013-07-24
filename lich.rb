@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.75
+ version 3.76
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -751,7 +751,7 @@ class SF_XML
 									if server_string =~ /<output class=['"]['"]\/>/
 										$nerve_tracker_active = 'no'
 										$nerve_tracker_num -= 1
-										DownstreamHook.remove('nerve_tracker') if $nerve_tarcker_num < 1
+										DownstreamHook.remove('nerve_tracker') if $nerve_tracker_num < 1
 										$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, make_wound_gsl, make_scar_gsl)}\r\n" if $send_fake_tags
 										server_string
 									elsif server_string =~ /a case of uncontrollable convulsions/
@@ -5188,7 +5188,7 @@ sock_keepalive_proc = proc { |sock|
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
 
-$version = '3.75'
+$version = '3.76'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
