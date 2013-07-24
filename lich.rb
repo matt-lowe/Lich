@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.80
+ version 3.81
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -5046,7 +5046,7 @@ def sf_to_wiz(line)
 		$sftowiz_multiline = nil
 	
 		if line =~ /<LaunchURL src="(\/gs4\/play\/cm\/loader.asp[^"]*)" \/>/
-			$_CLIENT_.puts "\034GSw00005\r\nhttps://www.play.net${$1}\r\n"
+			$_CLIENT_.puts "\034GSw00005\r\nhttps://www.play.net#{$1}\r\n"
 		end
 		if line =~ /<pushStream id="thoughts"[^>]*><a[^>]*>([A-Z][a-z]+)<\/a>(.*?)<popStream\/>/m
 			line = line.sub(/<pushStream id="thoughts"[^>]*><a[^>]*>[A-Z][a-z]+<\/a>.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}")
@@ -5410,7 +5410,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.80'
+$version = '3.81'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
