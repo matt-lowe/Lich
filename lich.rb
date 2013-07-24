@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.22'
+$version = '4.0.23'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -364,6 +364,11 @@ UNTRUSTED_MAP_LOAD = proc { |var| Map.load }
 UNTRUSTED_MAP_SAVE = proc { |var| Map.save }
 UNTRUSTED_SPELL_LOAD = proc { |var| Spell.load }
 UNTRUSTED_START_SCRIPT = proc { |script_name,cli_vars,force| start_script(script_name,cli_vars,force) }
+UNTRUSTED_START_EXEC_SCRIPT = proc { |cmd_data,flags|
+	flags = Hash.new unless flags.class == Hash
+	flags[:trusted] = false
+	start_exec_script(cmd_data, flags)
+}
 
 
 JUMP = Exception.exception('JUMP')
@@ -1839,13 +1844,17 @@ end
 
 class ExecScript<Script
 	attr_reader :cmd_data
-	def initialize(cmd_data, quiet=false)
+	def initialize(cmd_data, flags=Hash.new)
 		num = '1'
 		while @@running.find { |script| script.name == "exec%s" % num }
 			num.succ!
 		end
 		@name = "exec#{num}"
-		@trusted = true
+		if flags[:trusted].nil?
+			@trusted = true
+		else
+			@trusted = flags[:trusted]
+		end
 		@cmd_data = cmd_data
 		@vars = Array.new
 		@downstream_buffer = LimitedArray.new
@@ -1857,7 +1866,11 @@ class ExecScript<Script
 		@hidden = false
 		@paused = false
 		@silent = false
-		@quiet = quiet
+		if flags[:quiet].nil?
+			@quiet = false
+		else
+			@quiet = flags[:quiet]
+		end
 		@safe = false
 		@no_echo = false
 		@thread_group = ThreadGroup.new
@@ -3868,7 +3881,7 @@ def goto(label)
 	raise JUMP
 end
 
-def start_script(script_name,cli_vars=[],force=false)
+def start_script(script_name,cli_vars=[],flags=Hash.new)
 	# fixme: look in wizard script directory
 	if $SAFE == 0
 		file_name = nil
@@ -3887,7 +3900,7 @@ def start_script(script_name,cli_vars=[],force=false)
 			respond("--- Lich: could not find script `#{script_name}' in directory #{$script_dir}!")
 			return false
 		end
-		if not force and (Script.running + Script.hidden).find { |scr| scr.name == file_name.sub(/\..{1,3}$/, '') }
+		if (flags[:force] != true) and (Script.running + Script.hidden).find { |scr| scr.name == file_name.sub(/\..{1,3}$/, '') }
 			respond("--- Lich: #{script_name} is already running (use #{$clean_lich_char}force [scriptname] if desired).")
 			return false
 		end
@@ -3912,6 +3925,7 @@ def start_script(script_name,cli_vars=[],force=false)
 			respond "--- Lich: failed to start script (#{script_name})"
 			return false
 		end
+		new_script.quiet = true if flags[:quiet]
 		new_thread = Thread.new {
 			100.times { break if Script.self == new_script; sleep 0.01 }
 			if script = Script.self
@@ -4005,7 +4019,7 @@ def start_script(script_name,cli_vars=[],force=false)
 		new_script.thread_group.add(new_thread)
 		true
 	else
-		UNTRUSTED_START_SCRIPT.call(script_name, cli_vars, force)
+		UNTRUSTED_START_SCRIPT.call(script_name, cli_vars, flags)
 	end
 end
 
@@ -4017,88 +4031,97 @@ def start_scripts(*script_names)
 end
 
 def force_start_script(script_name,cli_vars=[])
-	start_script(script_name,cli_vars,true)
+	start_script(script_name,cli_vars,flags={ :force => true })
 end
 
-def start_exec_script(cmd_data, quiet=false)
-	unless new_script = ExecScript.new(cmd_data, quiet)
-		respond '--- Lich: failed to start exec script'
-		return false
-	end
-	new_thread = Thread.new {
-		100.times { break if Script.self == new_script; sleep 0.01 }
-		if script = Script.self
-			Thread.current.priority = 1
-			respond("--- Lich: #{script.name} active.") unless script.quiet
-			begin
-				eval(cmd_data, nil, script.name.to_s)
-				Script.self.kill
-			rescue SystemExit
-				Script.self.kill
-			rescue SyntaxError
-				$stdout.puts "--- SyntaxError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- SyntaxError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue ScriptError
-				$stdout.puts "--- ScriptError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- ScriptError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue NoMemoryError
-				$stdout.puts "--- NoMemoryError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- NoMemoryError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue LoadError
-				respond("--- LoadError: #{$!}")
-				$stdout.puts "--- LoadError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- LoadError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue SecurityError
-				$stdout.puts "--- SecurityError: #{$!}"
-				$stdout.puts $!.backtrace[0..1]
-				$stderr.puts "--- SecurityError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue ThreadError
-				$stdout.puts "--- ThreadError: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- ThreadError: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue Exception
-				$stdout.puts "--- Exception: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- Exception: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			rescue
-				$stdout.puts "--- Error: #{$!}"
-				$stdout.puts $!.backtrace.first
-				$stderr.puts "--- Error: #{$!}"
-				$stderr.puts $!.backtrace
-				$stderr.flush
-				Script.self.kill
-			end
-		else
-			respond 'start_exec_script screwed up...'
+def start_exec_script(cmd_data, flags=Hash.new)
+	flags = { :quiet => true } if flags == true
+	if $SAFE == 0
+		unless new_script = ExecScript.new(cmd_data, flags)
+			respond '--- Lich: failed to start exec script'
+			return false
 		end
-	}
-	new_script.thread_group.add(new_thread)
-	true
+		new_thread = Thread.new {
+			100.times { break if Script.self == new_script; sleep 0.01 }
+			if script = Script.self
+				Thread.current.priority = 1
+				respond("--- Lich: #{script.name} active.") unless script.quiet
+				begin
+					if script.trusted
+						eval(cmd_data, nil, script.name.to_s)
+					else
+						proc { eval("$SAFE = 3 if $SAFE < 3\n#{cmd_data}", nil, script.name.to_s) }.call
+					end
+					Script.self.kill
+				rescue SystemExit
+					Script.self.kill
+				rescue SyntaxError
+					$stdout.puts "--- SyntaxError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- SyntaxError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue ScriptError
+					$stdout.puts "--- ScriptError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- ScriptError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue NoMemoryError
+					$stdout.puts "--- NoMemoryError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- NoMemoryError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue LoadError
+					respond("--- LoadError: #{$!}")
+					$stdout.puts "--- LoadError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- LoadError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue SecurityError
+					$stdout.puts "--- SecurityError: #{$!}"
+					$stdout.puts $!.backtrace[0..1]
+					$stderr.puts "--- SecurityError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue ThreadError
+					$stdout.puts "--- ThreadError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- ThreadError: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue Exception
+					$stdout.puts "--- Exception: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- Exception: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				rescue
+					$stdout.puts "--- Error: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- Error: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
+					Script.self.kill
+				end
+			else
+				respond 'start_exec_script screwed up...'
+			end
+		}
+		new_script.thread_group.add(new_thread)
+		true
+	else
+		UNTRUSTED_START_EXEC_SCRIPT.call(cmd_data, flags)
+	end
 end
 
 def pause_script(*names)
@@ -6306,10 +6329,9 @@ def do_client(client_string)
 		elsif eobj = /^(?:exec|e)(q)? (.+)$/.match(cmd)
 			cmd_data = cmd.sub(/^(?:exec|execq|e|eq) /i, '')
 			if eobj.captures.first.nil?
-				start_exec_script(cmd_data, false)
+				start_exec_script(cmd_data, flags={ :quiet => false, :trusted => true })
 			else
-				# quiet mode
-				start_exec_script(cmd_data, true)
+				start_exec_script(cmd_data, flags={ :quiet => true, :trusted => true })
 			end
 		elsif cmd =~ /^favs?(?: |$)(.*)?/i
 			args = $1.split(' ')
