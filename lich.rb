@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.92
+ version 3.93
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -3777,6 +3777,18 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				Script.self.downstream_buffer.unshift(save_stream)
 				Script.self.downstream_buffer.flatten!
 				return nil
+			elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
+				sleep 1
+				waitrt?
+				put_dir.call
+				break
+			elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground/
+				sleep 1
+				waitrt?
+				fput 'stand' unless standing?
+				waitrt?
+				put_dir.call
+				break
 			elsif line =~ /^You will have to climb that\.$|^You're going to have to climb that\./
 				dir.gsub!('go', 'climb')
 				put_dir.call
@@ -5603,7 +5615,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.92'
+$version = '3.93'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
