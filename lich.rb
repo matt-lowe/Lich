@@ -46,6 +46,7 @@ include Socket::Constants
 require 'rexml/document'
 require 'rexml/streamlistener'
 require 'zlib'
+require 'stringio'
 include REXML
 begin
 	require 'win32/registry'
