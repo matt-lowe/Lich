@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.89
+ version 3.90
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -5403,7 +5403,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.89'
+$version = '3.90'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -6019,6 +6019,9 @@ client_thread = Thread.new {
 		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
 		client_string = "<c>_flag Display Inventory Boxes 1\r\n"
+		$_CLIENTBUFFER_.push(client_string)
+		$_SERVER_.write(client_string)
+		client_string = "<c>_flag Display Dialog Boxes 0\r\n"
 		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
 		#
