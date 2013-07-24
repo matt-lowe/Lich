@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.93
+ version 3.94
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -3438,6 +3438,7 @@ end
 
 def muckled?
 	muckled = checkwebbed or checkdead or checkstunned
+	# fixme: checksleeping and checkbound will never be defined when muckled? is defined
 	if defined?(checksleeping)
 		muckled = muckled or checksleeping
 	end
@@ -4864,7 +4865,7 @@ def fill_hands
 	end
 	if $lh_thingie
 		waitrt?
-		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|bow/
+		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis/
 			fput "remove my #{$lh_thingie}"
 		elsif Lich.lootsack.nil?
 			fput "get my #{$lh_thingie}"
@@ -5615,7 +5616,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.93'
+$version = '3.94'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
