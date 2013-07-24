@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.88
+ version 3.89
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -3540,17 +3540,20 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 	line_count = 0
 	room_count = $room_count
 	giveup_time = Time.now.to_i + giveup_seconds.to_i
+	save_stream = Array.new
 
 	put_dir = proc {
 		if $room_count > room_count
 			fill_hands if need_full_hands
+			Script.self.downstream_buffer.unshift(save_stream)
+			Script.self.downstream_buffer.flatten!
 			return true
 		end
 		waitrt?
 		wait_while { stunned? }
 		giveup_time = Time.now.to_i + giveup_seconds.to_i
 		line_count = 0
-		clear
+		save_stream.push(clear)
 		put dir
 	}
 
@@ -3559,17 +3562,20 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 	loop {
 		sleep "0.1".to_f
 		for line in clear
+			save_stream.push(line)
 			line_count += 1
 			if line =~ /^You can't go there|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails/
 				echo 'move: failed'
-				Script.self.downstream_buffer.unshift(line)
 				fill_hands if need_full_hands
+				Script.self.downstream_buffer.unshift(save_stream)
+				Script.self.downstream_buffer.flatten!
 				return false
 			elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\./
 				echo 'move: failed'
-				Script.self.downstream_buffer.unshift(line)
 				# return nil instead of false to show the direction shouldn't be removed from the map database
 				fill_hands if need_full_hands
+				Script.self.downstream_buffer.unshift(save_stream)
+				Script.self.downstream_buffer.flatten!
 				return nil
 			elsif line =~ /^You will have to climb that\.$|^You're going to have to climb that\./
 				dir.gsub!('go', 'climb')
@@ -3587,6 +3593,8 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			elsif line =~ /(?:appears|seems) to be closed\.$/
 				if tried_open
 					fill_hands if need_full_hands
+					Script.self.downstream_buffer.unshift(save_stream)
+					Script.self.downstream_buffer.flatten!
 					return false
 				else
 					tried_open = true
@@ -3629,16 +3637,22 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 		end
 		if $room_count > room_count
 			fill_hands if need_full_hands
+			Script.self.downstream_buffer.unshift(save_stream)
+			Script.self.downstream_buffer.flatten!
 			return true
 		end
 		if Time.now.to_i >= giveup_time
 			echo "move: no recognized response in #{giveup_seconds} seconds.  giving up."
 			fill_hands if need_full_hands
+			Script.self.downstream_buffer.unshift(save_stream)
+			Script.self.downstream_buffer.flatten!
 			return nil
 		end
 		if line_count >= giveup_lines
 			echo "move: no recognized response after #{line_count} lines.  giving up."
 			fill_hands if need_full_hands
+			Script.self.downstream_buffer.unshift(save_stream)
+			Script.self.downstream_buffer.flatten!
 			return nil
 		end
 	}
@@ -5389,7 +5403,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.88'
+$version = '3.89'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
