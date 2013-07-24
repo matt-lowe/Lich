@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
-# version 3.60
+=begin
+ version 3.61
+=end
 #####
 # Copyright (C) 2005-2006 Murray Miron
 # All rights reserved.
@@ -980,12 +982,9 @@ class Script
 		end
 	end
 	def gets
-		if @want_downstream
+		if @want_downstream or @want_downstream_xml
 			sleep 0.05 while @downstream_buffer.length < 1
 			@downstream_buffer.shift
-		elsif @want_downstream_xml
-			sleep 0.05 while @downstream_xml_buffer.length < 1
-			@downstream_xml_buffer.shift
 		else
 			echo 'this script is set as unique but is waiting for game data...'
 			sleep 2
@@ -4343,6 +4342,9 @@ begin
 	alias :toggle_status :status_tags
 	alias :encumbrance? :checkencumbrance
 	alias :bounty? :checkbounty
+	alias $_PSINET_ $_CLIENT_
+	alias $_PSINETSTRING_ $_CLIENTSTRING_
+	alias $_PSINETBUFFER_ $_CLIENTBUFFER_
 rescue
 	STDERR.puts($!)
 	STDERR.puts($!.backtrace)
@@ -4761,7 +4763,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.60'
+$version = '3.61'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -4819,21 +4821,6 @@ _VERSION_
 
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
-
-
-if File.exists?('lich-update.rb')
-	nil
-end
-
-
-
-
-
-
-
-
-
-
 
 if RUBY_PLATFORM =~ /win/i
 	wine_dir = nil
