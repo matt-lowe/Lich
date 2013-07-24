@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.16'
+$version = '4.0.17'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3226,7 +3226,7 @@ class Map
 							room['wayto'][target] = StringProc.new(way.gsub('&gt;','>').gsub('&lt;','<'))
 						end
 						room['timeto'][target] = cost.to_f
-					elsif line =~ /<tsoran\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\s*\/>/
+					elsif line =~ /<(?:image|narost)\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\s*\/>/
 						map_name, map_x, map_y, map_roomsize = $1, $2.to_i, $3.to_i, $4.to_i
 					elsif line =~ /<\/room>/
 						new_room = Map.new(room['id'].to_i, room['title'], room['description'], room['paths'], room['wayto'], room['timeto'])
@@ -3296,7 +3296,7 @@ class Map
 				room.title.each { |title| file.write "	<title>#{title.gsub('<', '&lt;').gsub('>', '&gt;')}</title>\n" }
 				room.desc.each { |desc| file.write "	<description>#{desc.gsub('<', '&lt;').gsub('>', '&gt;')}</description>\n" }
 				room.paths.each { |paths| file.write "	<paths>#{paths.gsub('<', '&lt;').gsub('>', '&gt;')}</paths>\n" }
-				file.write "	<tsoran name=\"#{room.map_name}\" x=\"#{room.map_x}\" y=\"#{room.map_y}\" size=\"#{room.map_roomsize}\" />\n" if room.map_name
+				file.write "	<image name=\"#{room.map_name}\" x=\"#{room.map_x}\" y=\"#{room.map_y}\" size=\"#{room.map_roomsize}\" />\n" if room.map_name
 				room.wayto.keys.each { |target|
 					if room.timeto[target]
 						cost = " cost=\"#{room.timeto[target]}\""
@@ -3884,8 +3884,8 @@ end
 
 def fix_injury_mode
 	unless XMLData.injury_mode == 2
-		$_SERVER.puts '_injury 2'
-		30.times { sleep "0.1".to_f; break if XMLData.injury_mode == 2 }
+		$_SERVER_.puts '_injury 2'
+		150.times { sleep "0.05".to_f; break if XMLData.injury_mode == 2 }
 	end
 end
 
