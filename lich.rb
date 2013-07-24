@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.76
+ version 3.77
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -616,12 +616,12 @@ class SF_XML
 			elsif (name == 'a') or (name == 'right') or (name == 'left')
 				@@obj_exist = attributes['exist']
 				@@obj_noun = attributes['noun']
-				if @@active_tags.include?('inv') and @@active_ids.include?('stow') and @@stow_container.nil?
-					@@stow_container = attributes['exist']
+			elsif name == 'clearContainer'
+				if attributes['id'] == 'stow'
 					GameObj.clear_container(@@stow_container)
+				else
+					GameObj.clear_container(attributes['id'])
 				end
-			elsif (name == 'clearContainer') and (attributes['id'] == 'stow')
-				@@stow_container = nil
 			elsif name == 'progressBar'
 				if attributes['id'] == 'pbarStance'
 					$stance_text = attributes['text'].split.first
@@ -802,7 +802,6 @@ class SF_XML
 				end
 			elsif @@room_window_disabled and (name == 'dir') and @@active_tags.include?('compass')
 				$room_exits.push(LONGDIR[attributes['value']])
-				#$room_exits_string.concat(LONGDIR[attributes['value']] + ', ')
 			elsif name == 'radio'
 				if attributes['id'] == 'injrRad'
 					$injury_mode = 0 if attributes['value'] == '1'
@@ -817,6 +816,8 @@ class SF_XML
 				elsif attributes['id'] == 'encumblurb'
 					$encumbrance_full_text = attributes['value']
 				end
+			elsif (name == 'container') and (attributes['id'] == 'stow')
+				@@stow_container = attributes['target'].sub('#', '')
 			elsif name == 'app'
 				Char.init(attributes['char']) if attributes['char'] and !attributes['char'].strip.empty?
 				if $fake_stormfront
@@ -910,8 +911,14 @@ class SF_XML
 					$room_exits_string.concat(text)
 					$room_exits.push(text) if @@active_tags.include?('d')
 				end
-			elsif @@active_tags.include?('a') and @@active_tags.include?('inv') and @@active_ids.include?('stow') and not @@stow_container.nil? and @@stow_container != @@obj_exist
-				obj = GameObj.new_inv(@@obj_exist, @@obj_noun, text, @@stow_container)
+			elsif @@active_tags.include?('inv') and @@active_tags.include?('a')
+				container_id = @@active_ids.find { |id| !id.nil? }
+				if container_id.to_s == 'stow'
+					container_id = @@stow_container
+				end
+				unless container_id.nil? or (container_id == @@obj_exist)
+					obj = GameObj.new_inv(@@obj_exist, @@obj_noun, text, container_id)
+				end
 			elsif @@current_stream == 'spellfront'
 				$spellfront = text.split("\n")
 			elsif @@current_stream == 'bounty'
@@ -1306,10 +1313,6 @@ class Script
 	def safe?
 		@safe
 	end
-	# for backwards compatability
-	def Script.namescript_incoming(line)
-		Script.new_downstream(line)
-	end
 	def feedme_upstream
 		@want_upstream = !@want_upstream
 	end
@@ -1320,6 +1323,10 @@ class Script
 	def match_stack_clear
 		@match_stack_labels.clear
 		@match_stack_strings.clear
+	end
+	# for backwards compatability
+	def Script.namescript_incoming(line)
+		Script.new_downstream(line)
 	end
 end
 
@@ -2236,7 +2243,8 @@ class GameObj
 	@@npcs ||= Array.new
 	@@pcs ||= Array.new
 	@@inv ||= Array.new
-	@@containers ||= Hash.new
+	@@contents ||= Hash.new
+	@@stow_container = nil
 	@@right_hand ||= nil
 	@@left_hand ||= nil
 	@@room_desc ||= Array.new
@@ -2248,7 +2256,7 @@ class GameObj
 	attr_accessor :noun, :name, :status
 	def initialize(id, noun, name, status=nil)
 		@id = id
-		@noun = noun
+		@noun = noun.sub('lapis lazuli', 'lapis')
 		@name = name
 		@status = status
 	end
@@ -2276,7 +2284,7 @@ class GameObj
 	def GameObj.new_inv(id, noun, name, container=nil)
 		obj = GameObj.new(id, noun, name)
 		if container
-			@@containers[container].push(obj)
+			@@contents[container].push(obj)
 		else
 			@@inv.push(obj)
 		end
@@ -2312,9 +2320,6 @@ class GameObj
 	end
 	def GameObj.left_hand
 		@@left_hand.dup
-	end
-	def contents
-		@@containers[@id]
 	end
 	def GameObj.clear_loot
 		@@loot.clear
@@ -2407,13 +2412,7 @@ class GameObj
 		end
 	end
 	def GameObj.clear_container(container_id)
-		@@containers[container_id] = Array.new
-	end
-	def GameObj.add_to_container(container_id, obj)
-		@@containers[container_id].push(obj)
-	end
-	def GameObj.containers
-		@@containers.dup
+		@@contents[container_id] = Array.new
 	end
 	def GameObj.dead
 		dead_list = Array.new
@@ -2422,6 +2421,12 @@ class GameObj
 		end
 		return nil if dead_list.empty?
 		return dead_list
+	end
+	def GameObj.containers
+		@@contents.dup
+	end
+	def contents
+		@@contents[@id].dup
 	end
 end
 
@@ -3577,7 +3582,7 @@ def move(dir='none')
 			elsif feed =~ /You head over to the .+ Table/
 				Script.self.downstream_buffer.unshift(feed)
 				return feed
-			elsif feed =~ /Running heedlessly through the icy terrain, you slip on a patch of ice and flail uselessly as you land on your rear!/
+			elsif feed =~ /Running heedlessly through the icy terrain, you slip on a patch of ice and flail uselessly as you land on your rear!|As you try to .*, your feet fail to find traction on the ice, sending you into a sliding frenzy.  You wobble and stumble only for a moment before landing flat on your face!/
 				waitrt?
 				fput('stand') unless standing?; waitrt?; fput(dir); next
 			else
@@ -4445,7 +4450,7 @@ end
 def send_scripts(*messages)
 	messages.flatten!
 	messages.each { |message|
-		Script.namescript_incoming(message)
+		Script.new_downstream(message)
 	}
 	true
 end
@@ -5113,6 +5118,42 @@ def do_client(client_string)
 				# quiet mode
 				start_exec_script(cmd_data, true)
 			end
+		elsif cmd =~ /^help$/i
+			respond
+			respond "Lich v#{$version}"
+			respond
+			respond 'built-in commands:'
+			respond "   #{$clean_lich_char}<script name>             start a script"
+			respond "   #{$clean_lich_char}pause <script name>       pause a script"
+			respond "   #{$clean_lich_char}p <script name>"
+			respond "   #{$clean_lich_char}kill <script name>        kill a script"
+			respond "   #{$clean_lich_char}k <script name>"
+			respond "   #{$clean_lich_char}pause                     pause the most recently started script that isn't aready paused"
+			respond "   #{$clean_lich_char}p"
+			respond "   #{$clean_lich_char}kill                      kill the most recently started script"
+			respond "   #{$clean_lich_char}k"
+			respond "   #{$clean_lich_char}pause all                 pause all scripts"
+			respond "   #{$clean_lich_char}pa"
+			respond "   #{$clean_lich_char}unpause all               unpause all scripts"
+			respond "   #{$clean_lich_char}ua"
+			respond "   #{$clean_lich_char}force <script name>       start a script even if it's already running"
+			respond "   #{$clean_lich_char}send <line>               send a line to all scripts as if it came from the game"
+			respond "   #{$clean_lich_char}send to <script> <line>   send a line to a specific script"
+			respond "   #{$clean_lich_char}list                      show the currently running scripts"
+			respond "   #{$clean_lich_char}l"
+			respond "   #{$clean_lich_char}list all                  show the currently running scripts plus running scripts marked as hidden"
+			respond "   #{$clean_lich_char}la"
+			respond
+			respond 'If you liked this help message, you might also enjoy:'
+			respond "   #{$clean_lich_char}chat help      (lnet must be running)"
+			respond "   #{$clean_lich_char}magic help     (infomon must be running)"
+			respond "   #{$clean_lich_char}favs help"
+			respond "   #{$clean_lich_char}alias help"
+			respond "   #{$clean_lich_char}setting help"
+			respond "   #{$clean_lich_char}go2 help"
+			respond "   #{$clean_lich_char}repository help"
+			respond "   #{$clean_lich_char}updater help"
+			respond
 		else
 			script_name = Regexp.escape(cmd.split.first.chomp)
 			vars = cmd.split[1..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).collect { |val| val.gsub(/(?!\\)?"/,'') }
@@ -5188,7 +5229,7 @@ sock_keepalive_proc = proc { |sock|
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
 
-$version = '3.76'
+$version = '3.77'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5801,6 +5842,9 @@ client_thread = Thread.new {
 		# ask the server for both wound and scar information
 		#
 		client_string = "<c>_injury 2\r\n"
+		$_CLIENTBUFFER_.push(client_string)
+		$_SERVER_.write(client_string)
+		client_string = "<c>_flag Display Inventory Boxes 1\r\n"
 		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
 		#
