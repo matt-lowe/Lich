@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.7'
+$version = '4.0.8'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1660,9 +1660,6 @@ class Script
 		@match_stack_labels.clear
 		@match_stack_strings.clear
 	end
-	def create_block
-		Proc.new { }
-	end
 	# for backwards compatability
 	def Script.namescript_incoming(line)
 		Script.new_downstream(line)
@@ -1891,6 +1888,12 @@ class WizardScript<Script
 		@thread_group = ThreadGroup.new
 		@@running.push(self)
 		return self
+	end
+end
+
+class ScriptBinder
+	def create_block
+		Proc.new { }
 	end
 end
 
@@ -3562,7 +3565,7 @@ def start_script(script_name,cli_vars=[],force=false)
 			new_script = Script.new(file_name, cli_vars)
 		end
 		if new_script.labels.length > 1
-			script_binding = new_script.create_block.binding
+			script_binding = ScriptBinder.new.create_block.binding
 		else
 			script_binding = nil
 		end
@@ -4227,7 +4230,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				sleep 0.3
 			end
 			put_dir.call
-		elsif line =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!|Shouldn't you be standing first|Try standing up\./
+		elsif line =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!|Shouldn't you be standing first|Try standing up\.|Perhaps you should stand up/
 			fput 'stand'
 			waitrt?
 			put_dir.call
@@ -7343,15 +7346,17 @@ main_thread = Thread.new {
 		# offline mode
 		#
 
-		# fixme: wizard only
-
 		$offline_mode = true
 		if ARGV.any? { |arg| (arg == '-s') or (arg == '--stormfront') }
 			$frontend = 'stormfront'
 			$fake_stormfront = false
+			frontend_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\STORM32\Directory')
+			frontend_cmd = "\"#{frontend_dir}\\StormFront.exe\" /H=127.0.0.1 /P=#{localport} /K=bf653b6a343ea3904ba8e1b75b88fa50"
 		else
 			$frontend = 'wizard'
 			$fake_stormfront = true
+			frontend_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\WIZ32\Directory')
+			frontend_cmd = "\"#{frontend_dir}\\wizard.exe\" /GGS /H127.0.0.1 /P#{localport}"
 		end
 		begin
 			listener = TCPServer.new("localhost", nil)
@@ -7366,16 +7371,18 @@ main_thread = Thread.new {
 			$stderr.puts "Cannot set SO_REUSEADDR sockopt"
 		end
 		localport = listener.addr[1]
-		wizard_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\WIZ32\Directory')
-		wizard_cmd = "\"#{wizard_dir}\\wizard.exe\" /GGS /Hlocalhost /P#{localport}"
-		wizard_cmd = "#{wine_bin} #{wizard_cmd}" if wine_bin
-		Thread.new { system(wizard_cmd) }
+		frontend_cmd = "#{wine_bin} #{frontend_cmd}" if wine_bin
+		Thread.new {
+			Dir.chdir(frontend_dir)
+			system(frontend_cmd)
+		}
 		timeout_thr = Thread.new {
 			sleep 30
 			$stdout.puts "timeout waiting for connection"
 			$stderr.puts "error: timeout waiting for connection"
 			exit(1)
 		}
+		Dir.chdir($lich_dir)
 		$_CLIENT_ = listener.accept
 		begin
 			timeout_thr.kill
