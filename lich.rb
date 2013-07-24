@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.87
+ version 3.88
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -485,8 +485,8 @@ $injury_mode = 0
 
 $prepared_spell = 'None'
 
-$roundtime_end = Time.now.to_i
-$cast_roundtime_end = Time.now.to_i
+$roundtime_end = 0
+$cast_roundtime_end = 0
 $last_pulse = Time.now.to_i
 $server_time = Time.now.to_i
 $server_time_offset = 0
@@ -3529,155 +3529,119 @@ def out
 	'out'
 end
 
-def move(dir='none')
-	# You'll need to swim that.
-	# You really can't swim holding a buckler.
-	# How do you intend to get the doorman's attention?  After all, no one can see you right now.
-	tried_open = false
-	attempts = 0
+def move(dir='none', giveup_seconds=30, giveup_lines=30)
 	if dir == 'none'
-		echo('Error! Move without a direction to move in!')
+		echo 'move: no direction given'
 		return false
-	else
-		roomcount = $room_count
+	end
+
+	need_full_hands = false
+	tried_open = false
+	line_count = 0
+	room_count = $room_count
+	giveup_time = Time.now.to_i + giveup_seconds.to_i
+
+	put_dir = proc {
+		if $room_count > room_count
+			fill_hands if need_full_hands
+			return true
+		end
+		waitrt?
+		wait_while { stunned? }
+		giveup_time = Time.now.to_i + giveup_seconds.to_i
+		line_count = 0
 		clear
-		moveflag = true
-		put(dir)
-		while feed = get
-			if feed =~ /can't go there|Where are you trying to go|What were you referring to\?|I could not find what you were referring to\.|You can't climb that\.|How do you plan to do that here\?|You take a few steps towards|You're going to have to climb that\.|You cannot do that\.|You settle yourself on|You shouldn't annoy|You can't go to|That's probably not a very good idea|You can't do that|Maybe you should look at the [\w\s]+ and work with one at a time\.|You are already|An unseen force prevents you\.|You walk over to|You can't enter|You step over to|Sorry, you aren't allowed to enter here\.|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|That looks like someplace only performers should go\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^You will have to climb that\.$|^Your attempt fails/
-				echo("Error, can't go in the direction specified!")
-				Script.self.downstream_buffer.unshift(feed)
+		put dir
+	}
+
+	put_dir.call
+
+	loop {
+		sleep "0.1".to_f
+		for line in clear
+			line_count += 1
+			if line =~ /^You can't go there|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails/
+				echo 'move: failed'
+				Script.self.downstream_buffer.unshift(line)
+				fill_hands if need_full_hands
 				return false
-			elsif feed =~ /(?:appears|seems) to be closed\.$/
-				return false if tried_open
-				fput dir.sub(/go|climb/, 'open')
-				put(dir)
-				tried_open = true
-				next
-			elsif feed =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
-				sleep(1)
+			elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\./
+				echo 'move: failed'
+				Script.self.downstream_buffer.unshift(line)
+				# return nil instead of false to show the direction shouldn't be removed from the map database
+				fill_hands if need_full_hands
+				return nil
+			elsif line =~ /^You will have to climb that\.$|^You're going to have to climb that\./
+				dir.gsub!('go', 'climb')
+				put_dir.call
+				break
+			elsif line =~ /^You can't climb that\./
+				dir.gsub!('climb', 'go')
+				put_dir.call
+				break
+			elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\./
+				need_full_hands = true
+				empty_hands
+				put_dir.call
+				break
+			elsif line =~ /(?:appears|seems) to be closed\.$/
+				if tried_open
+					fill_hands if need_full_hands
+					return false
+				else
+					tried_open = true
+					fput dir.sub(/go|climb/, 'open')
+					put_dir.call
+					break
+				end
+			elsif line =~ /^You can't enter .+ and remain hidden or invisible\.|if he can't see you!$/
+				fput 'unhide'
+				put_dir.call
+				break
+			elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
+				if $2.to_i > 1
+					sleep ($2.to_i - 0.2)
+				else
+					sleep 0.3
+				end
+				put_dir.call
+				break
+			elsif line =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!|Shouldn't you be standing first/
+				fput 'stand'
 				waitrt?
-				put(dir)
-				next
-			elsif feed =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground/
-				#
-				# Climbing well, you adeptly move along the landslide.  As your confidence rises, your concentration lapses and then you miss a foothold.  Screaming, you plunge towards the ground below.
-				# You smack the ground with a sickening thud.
-				# 
-				# It quickly becomes apparent that you will not finish the climb.  Aching, your legs give way, slipping on a rock.  You see the world spin around you as you fall...
-				# You smack the ground with a sickening thud.
-				# 
-				# Tentatively, you attempt to climb the cleft.  After only a few feet, you lose your grip and fall...
-				# You smack the ground with a sickening thud.
-				# 
-				# Tentatively, you attempt to climb the landslide.  After only a few feet, you slip!  You catch yourself just barely, scrambling back to where you started.
-				#
-				# You start to climb down the oak, but quickly realize that you're taking a poor approach.  You quickly retreat back upwards to the ground to reassess the situation.
-				# You leap up and grab a handhold at the top of the rock, strain mightily to pull yourself up, but failing, drop back to the ground panting.
-				sleep(1)
+				put_dir.call
+				break
+			elsif line =~ /^Sorry, you may only type ahead/
+				sleep 1
+				put_dir.call
+				break
+			elsif line == 'You are still stunned.'
+				wait_while { stunned? }
+				put_dir.call
+				break
+			elsif line =~ /^Running heedlessly/
 				waitrt?
 				fput 'stand' unless standing?
 				waitrt?
-				put(dir)
-				next
-			elsif feed =~ /Sorry, you may only type ahead/
-				sleep(1)
-				clear
-				put(dir)
-				next
-			elsif feed =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!/
-				clear
-				put("stand")
-				while feed = get
-					if feed =~ /struggle.+stand/
-						clear
-						put("stand")
-						next
-					elsif feed =~ /stand back up|You scoot your chair back and stand up\./
-						clear
-						put("#{dir}")
-						break
-					elsif feed =~ /\.\.\.wait /
-						wait = $'.split.first.to_i
-						sleep(wait)
-						clear
-						put("stand")
-						next
-					elsif feed =~ /Sorry, you may only type ahead/
-						sleep(1)
-						clear
-						put("stand")
-						next
-					elsif feed =~ /can't do that while|can't seem to|don't seem|stunned/
-						sleep(1)
-						clear
-						put("stand")
-						next
-					elsif feed =~ /are already standing/
-						clear
-						put("#{dir}")
-						break
-					else
-						stand_attempts = 0 if stand_attempts.nil?
-						if stand_attempts >= 10
-							echo("Error! #{stand_attempts} unrecognized responses, assuming a script hang...")
-							Script.self.downstream_buffer.unshift(feed)
-							return false
-						end
-						stand_attempts += 1
-						sleep(1)
-						clear
-						put("stand")
-						next
-					end
-				end
-			elsif feed =~ /\.\.\.wait |Wait /
-				wait_time = $'.split.first.to_i
-				sleep(wait_time)
-				clear
-				put("#{dir}")
-				next
-			elsif feed =~ /stunned/
-				wait_while { stunned? }
-				clear
-				put("#{dir}")
-				next
-			elsif feed =~ /can't do that|can't seem to|don't seem /
-				sleep(1)
-				clear
-				put("#{dir}")
-				next
-			elsif feed =~ /Please rephrase that command/
-				echo("error! Cannot go '#{dir}', game did not understand the command.")
-				Script.self.downstream_buffer.unshift(feed)
-				return false
-			elsif feed =~ /seems as though all the tables here are/
-				sleep 1
-				clear
-				put("#{dir}")
-				next
-			elsif feed =~ /You head over to the .+ Table/
-				Script.self.downstream_buffer.unshift(feed)
-				return feed
-			elsif feed =~ /Running heedlessly through the icy terrain, you slip on a patch of ice and flail uselessly as you land on your rear!|As you try to .*, your feet fail to find traction on the ice, sending you into a sliding frenzy.  You wobble and stumble only for a moment before landing flat on your face!/
-				waitrt?
-				fput('stand') unless standing?; waitrt?; fput(dir); next
-			else
-				if attempts >= 35
-					echo("#{attempts} unrecognized lines, assuming a script hang; move command has exited.")
-					Script.self.downstream_buffer.unshift(feed)
-					return false
-				else
-					if $room_count > roomcount
-						Script.self.downstream_buffer.unshift(feed)
-						return feed
-					else
-						attempts += 1; next
-					end
-				end
+				put_dir.call
+				break
 			end
 		end
-	end
+		if $room_count > room_count
+			fill_hands if need_full_hands
+			return true
+		end
+		if Time.now.to_i >= giveup_time
+			echo "move: no recognized response in #{giveup_seconds} seconds.  giving up."
+			fill_hands if need_full_hands
+			return nil
+		end
+		if line_count >= giveup_lines
+			echo "move: no recognized response after #{line_count} lines.  giving up."
+			fill_hands if need_full_hands
+			return nil
+		end
+	}
 end
 
 def fetchloot(userbagchoice=Lich.lootsack)
@@ -4665,6 +4629,7 @@ def fill_hands
 	$lh_thingie ||= nil
 	$close_lootsack ||= nil
 	if $rh_thingie
+		waitrt?
 		if Lich.lootsack.nil?
 			fput "get my #{$rh_thingie}"
 		else
@@ -4672,6 +4637,7 @@ def fill_hands
 		end
 	end
 	if $lh_thingie
+		waitrt?
 		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|bow/
 			fput "remove my #{$lh_thingie}"
 		elsif Lich.lootsack.nil?
@@ -5423,7 +5389,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.87'
+$version = '3.88'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
