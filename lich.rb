@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.90
+ version 3.91
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -1179,7 +1179,7 @@ class Script
 				@quiet = true
 			end
 			file.rewind
-			ary = ("\n" + file.read).split(/\r?\n([\d_\w]+:)\s*\r?\n/)
+			data = file.read.split(/\r?\n/)
 		ensure	
 			file.close
 			file = nil
@@ -1187,14 +1187,16 @@ class Script
 		end
 		@current_label = '~start'
 		@label_order.push(@current_label)
-		for line in ary
+		for line in data
 			if line =~ /^([\d_\w]+):$/
 				@current_label = $1
 				@label_order.push(@current_label)
+				@labels[@current_label] = String.new
 			else
-				@labels[@current_label] = line
+				@labels[@current_label] += "#{line}\n"
 			end
 		end
+		data = nil
 		@current_label = @label_order[0]
 		@thread_group = ThreadGroup.new
 		return self
@@ -5403,7 +5405,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.90'
+$version = '3.91'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
