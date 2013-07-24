@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.0'
+$version = '4.1.1'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4857,7 +4857,7 @@ def percentmana(num=nil)
 	if XMLData.max_mana == 0
 		percent = 100
 	else
-		((XMLData.mana.to_f / XMLData.max_mana.to_f) * 100).to_i
+		percent = ((XMLData.mana.to_f / XMLData.max_mana.to_f) * 100).to_i
 	end
 	if num.nil?
 		percent
