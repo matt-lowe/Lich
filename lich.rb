@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.82
+ version 3.83
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -1669,6 +1669,9 @@ class Society
 	end
 	def Society.rank
 		@@rank
+	end
+	def Society.task
+		$society_task
 	end
 end
 
@@ -3566,7 +3569,7 @@ def move(dir='none')
 				#
 				sleep(1)
 				waitrt?
-				fput 'stand' unless staining?
+				fput 'stand' unless standing?
 				waitrt?
 				put(dir)
 				next
@@ -5412,7 +5415,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.82'
+$version = '3.83'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
