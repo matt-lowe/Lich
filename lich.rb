@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.94
+ version 3.95
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -3798,7 +3798,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				dir.gsub!('climb', 'go')
 				put_dir.call
 				break
-			elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\./
+			elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$/
 				need_full_hands = true
 				empty_hands
 				put_dir.call
@@ -4778,10 +4778,7 @@ def respond(first = "", *messages)
 			str += sprintf("%s\r\n", first.to_s.chomp)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
-		if $stormfront and not $fake_stormfront
-			str.gsub!('<', '&lt;')
-			str.gsub!('>', '&gt;')
-		end
+		str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"\"/>\r\n" unless $fake_stormfront
 		$_CLIENT_.puts(str)
 	rescue
 		puts $!.to_s if $LICH_DEBUG
@@ -5616,7 +5613,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.94'
+$version = '3.95'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
