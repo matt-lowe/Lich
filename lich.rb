@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.4'
+$version = '4.1.5'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1080,6 +1080,7 @@ class DownstreamHook
 			return false
 		end
 		unless $SAFE == 0
+			respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
 			respond '--- SecurityError: an untrusted script tried to add a DownstreamHook'
 			return false
 		end
@@ -2986,17 +2987,17 @@ class Spell
 				unless checkprep == 'None'
 					dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 					unless checkmana(eval(@manaCost))
-						@@cast_lock = false if @@cast_lock == Script.self.name
+						@@cast_lock = false
 						echo 'cast: not enough mana'
 						return false
 					end
 					unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
-						@@cast_lock = false if @@cast_lock == Script.self.name
+						@@cast_lock = false
 						echo 'cast: not enough spirit'
 						return false
 					end
 					unless checkstamina(eval(@staminaCost))
-						@@cast_lock = false if @@cast_lock == Script.self.name
+						@@cast_lock = false
 						echo 'cast: not enough stamina'
 						return false
 					end
@@ -3011,11 +3012,11 @@ class Spell
 						dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 						unless checkmana(eval(@manaCost))
 							echo 'cast: not enough mana'
-							$cast_lock = false
+							@@cast_lock = false
 							return false
 						end
 					elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$/
-						$cast_lock = false if @@cast_lock == Script.self.name
+						@@cast_lock = false
 						return false
 					end
 				}
@@ -3030,7 +3031,7 @@ class Spell
 			if cast_result == 'Cast at what?'
 				dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 			end
-			@@cast_lock = false if @@cast_lock == Script.self.name
+			@@cast_lock = false
 			cast_result
 		end
 	end
