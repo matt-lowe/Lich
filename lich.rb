@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.68
+ version 3.69
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -202,6 +202,8 @@ $injuries = Hash.new; ['nsys','leftArm','rightArm','rightLeg','leftLeg','head','
 $injury_mode = 0
 
 $prepared_spell = 'None'
+$roundtime_end = Time.now.to_i
+$cast_roundtime_end = Time.now.to_i
 
 # $poisons = Array.new
 # $diseases = Array.new
@@ -313,7 +315,6 @@ class NilClass
 		true
 	end
 end
-
 
 class Array
 	attr_accessor :max_shove_size
@@ -3276,7 +3277,7 @@ def move(dir='none')
 		moveflag = true
 		put(dir)
 		while feed = get
-			if feed =~ /can't go there|Where are you trying to go|What were you referring to\?| appears to be closed\.|I could not find what you were referring to\.|You can't climb that\./
+			if feed =~ /can't go there|Where are you trying to go|What were you referring to\?| appears to be closed\.|I could not find what you were referring to\.|You can't climb that\.|How do you plan to do that here\?|You take a few steps towards|You're going to have to climb that\.|You cannot do that\.|You settle yourself on|You shouldn't annoy|You can't go to|That's probably not a very good idea|You can't do that|Maybe you should look at the [\w\s]+ and work with one at a time\.|You are already|An unseen force prevents you\.|You walk over to|You can't enter|You step over to|Sorry, you aren't allowed to enter here\.|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|seems to be closed\.|Please leave promptly\.|That looks like someplace only performers should go\./
 				echo("Error, can't go in the direction specified!")
 				Script.self.downstream_buffer.unshift(feed)
 				return false
@@ -3290,7 +3291,7 @@ def move(dir='none')
 				clear
 				put(dir)
 				next
-			elsif feed =~ /will have to stand up first|must be standing first/
+			elsif feed =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!/
 				clear
 				put("stand")
 				while feed = get
@@ -3392,7 +3393,7 @@ def fetchloot(userbagchoice=Lich.lootsack)
 	if Lich.excludeloot.empty?
 		regexpstr = nil
 	else
-		regexpstr = Lich.excludeloot.join('|')
+		regexpstr = Lich.excludeloot.split(', ').join('|')
 	end
 	if checkright and checkleft
 		stowed = GameObj.right_hand.noun
@@ -3407,7 +3408,7 @@ def fetchloot(userbagchoice=Lich.lootsack)
 		end
 	}
 	if stowed
-		fput("take my #{stowed} from my #{Lich.lootsack}")
+		fput "take my #{stowed} from my #{Lich.lootsack}"
 	end
 end
 
@@ -4826,7 +4827,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.68'
+$version = '3.69'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5769,7 +5770,6 @@ rescue
 	respond "Fatal (non-recoverable) error during execution: #{$!}" if $LICH_DEBUG
 	respond $!.backtrace.join("\r\n") if $LICH_DEBUG
 end
-
 [Script.running + Script.hidden].each { |script| script.kill }
 sleep 0.1
 exit
