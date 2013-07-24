@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.6'
+$version = '4.0.7'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2460,9 +2460,11 @@ end
 
 class Spell
 	@@list ||= Array.new
+	@@cast_lock = false
 	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type
-	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging)
-		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@stacks,@selfonly,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging = name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging
+	attr_accessor :stance, :channel
+	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
+		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@stacks,@selfonly,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
 		if num.to_i.nonzero? then @num = num.to_i else @num = num end
 		@timestamp = Time.now
 		@active = false
@@ -2479,8 +2481,8 @@ class Spell
 			File.open(filename) { |file|
 				file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
 					spell = Hash.new
-					spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|stacks|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-					Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'))
+					spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|stacks|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+					Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
 				}
 			}
 			return true
@@ -2503,7 +2505,7 @@ class Spell
 			elsif (ret = @@list.find { |spell| spell.name =~ /^#{val}/i })
 				ret
 			else
-				(@@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i })
+				@@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i }
 			end
 		end
 	end
@@ -2601,6 +2603,88 @@ class Spell
 	end
 	def affordable?
 		 mana(eval(@manaCost)) and checkspirit(@spiritCost.to_i + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(@staminaCost)
+	end
+	def cast(target=nil)
+		if @type.nil?
+			echo "cast: spell missing type (#{@name})"
+			return false
+		end
+		unless checkmana(eval(@manaCost))
+			echo 'cast: not enough mana'
+			return false
+		end
+		unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+			echo 'cast: not enough spirit'
+			return false
+		end
+		unless checkstamina(eval(@staminaCost))
+			echo 'cast: not enough stamina'
+			return false
+		end
+		wait_while { @@cast_lock and (locking_script = (Script.hidden + Script.running).find { |s| s.name == @@cast_lock }) and not locking_script.paused and (locking_script.name != Script.self.name) }
+		@@cast_lock = Script.self.name
+		if @channel
+			cast_cmd = 'channel'
+		else
+			cast_cmd = 'cast'
+		end
+		if (target.nil? or target.empty?) and (@type =~ /attack/i)
+			cast_cmd += ' target'
+		else
+			cast_cmd += " #{target}"
+		end
+		waitrt?
+		waitcastrt?
+		unless checkprep == @name
+			unless checkprep == 'None'
+				dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
+				unless checkmana(eval(@manaCost))
+					@@cast_lock = false
+					echo 'cast: not enough mana'
+					return false
+				end
+				unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+					@@cast_lock = false
+					echo 'cast: not enough spirit'
+					return false
+				end
+				unless checkstamina(eval(@staminaCost))
+					@@cast_lock = false
+					echo 'cast: not enough stamina'
+					return false
+				end
+			end
+			loop {
+				waitrt?
+				waitcastrt?
+				prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$/
+				if prepare_result =~ /^Your spell(?:song)? is ready\./
+					break
+				elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
+					dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
+					unless checkmana(eval(@manaCost))
+						echo 'cast: not enough mana'
+						$cast_lock = false
+						return false
+					end
+				elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$/
+					$cast_lock = false
+					return false
+				end
+			}
+		end
+		if @stance and checkstance != 'offensive'
+			dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
+		end
+		cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$/
+		if @stance and checkstance !~ /^guarded$|^defensive$/
+			dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
+		end
+		if cast_result == 'Cast at what?'
+			dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
+		end
+		@@cast_lock = false
+		cast_result
 	end
 end
 
@@ -4747,65 +4831,16 @@ def pause(num=1)
 	end
 end
 
-def cast(spell,*targets)
-	pushback_ary = []
-	regex = Regexp.new(["Spell Hindrance for",
-		"(?:Cast|Sing) Roundtime [0-9]+ Seconds",
-		"You don't have a spell prepared!",
-		"You already have a spell readied!",
-		"The searing pain in your throat makes that impossible",
-	].join('|'), "i")
-
-	if !Spell[spell.to_i].nil?
-		cost = eval(Spell[spell.to_i].cost)
-	elsif spell == 1030
-		if targets.empty?
-			cost = 20
-		else
-			cost = 15
-		end
+def cast(spell, target=nil)
+	if spell.class == Spell
+		spell.cast(target)
+	elsif ( (spell.class == Fixnum) or (spell.to_s =~ /^[0-9]+$/) ) and (find_spell = Spell[spell.to_i])
+		find_spell.cast(target)
+	elsif (spell.class == String) and (find_spell = Spell[spell])
+		find_spell.cast(target)
 	else
-		cost = spell.to_s[-2..-1].to_i
-	end
-	if targets.empty?
-		while mana?(cost)
-			fput "incant #{spell}"
-			chk = ""
-			while chk !~ regex
-				chk = get
-				pushback_ary.push chk
-			end
-			unless chk =~ /spell hindrance for|The searing pain in your throat makes that impossible|don't have a spell prep/i
-				sleep(3)
-				Script.self.downstream_buffer.unshift(pushback_ary).flatten!
-				return true
-			end
-		end
-		return false
-	else
-		last = 0
-		targets.each_with_index { |target,idx|
-			while mana?(cost)
-				fput "prep #{spell}"
-				fput "cast at #{target}"
-				chk = ""
-				while chk !~ regex
-					chk = get
-					pushback_ary.push chk
-				end
-				unless chk =~ /spell hindrance for|The searing pain in your throat makes that impossible|don't have a spell prep/i
-					sleep(3)
-					last = idx
-					break
-				end
-			end
-		}
-		Script.self.downstream_buffer.unshift(pushback_ary).flatten!
-		if mana?(cost) and targets.length.eql?((last + 1))
-			return true
-		else
-			return false
-		end
+		echo "cast: invalid spell (#{spell})"
+		false
 	end
 end
 
@@ -5190,7 +5225,8 @@ def respond(first = "", *messages)
 		wait_while { XMLData.in_stream }
 		$_CLIENT_.puts(str)
 	rescue
-		puts $!.to_s if $LICH_DEBUG
+		puts $!
+		puts $!.backtrace.first
 	end
 end
 
@@ -6473,10 +6509,10 @@ main_thread = Thread.new {
 	LichSettings.load
 	LichSettings['lich_char'] ||= ';'
 	LichSettings['cache_serverbuffer'] = false if LichSettings['cache_serverbuffer'].nil?
-	LichSettings['serverbuffer_max_size'] ||= 500
-	LichSettings['serverbuffer_min_size'] ||= 300
-	LichSettings['clientbuffer_max_size'] ||= 200
-	LichSettings['clientbuffer_min_size'] ||= 150
+	LichSettings['serverbuffer_max_size'] ||= 300
+	LichSettings['serverbuffer_min_size'] ||= 200
+	LichSettings['clientbuffer_max_size'] ||= 100
+	LichSettings['clientbuffer_min_size'] ||= 50
 
 	$clean_lich_char = LichSettings['lich_char']
 	$lich_char = Regexp.escape("#{$clean_lich_char}")
