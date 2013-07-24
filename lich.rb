@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.3'
+$version = '4.0.4'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -269,36 +269,49 @@ begin
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
 						rescue SyntaxError
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
 						rescue SystemExit
 							nil
 						rescue SecurityError
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
 						rescue ThreadError
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
 						rescue Exception
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
 						rescue ScriptError
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
 						rescue LoadError
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
+						rescue NoMemoryError
+							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stderr.puts "error in Gtk.queue: #{$!}"
+							$stderr.puts $!.backtrace
+							$stderr.flush
 						rescue
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
+							$stderr.flush
 						end
 					end
 					GTK_PENDING_BLOCKS.clear
@@ -1762,7 +1775,7 @@ class WizardScript<Script
 				str.gsub!('%' + $1 + '%', '#{' + $1.downcase + '}')
 			end
 			str.gsub!(/%c(?:%)?/i, '#{c}')
-			str.gsub!(/%s(?:%)?/i, '#{s}')
+			str.gsub!(/%s(?:%)?/i, '#{sav}')
 			while str =~ /%([0-9])(?:%)?/
 				str.gsub!(/%#{$1}(?:%)?/, '#{script.vars[' + $1 + ']}')
 			end
@@ -1779,7 +1792,7 @@ class WizardScript<Script
 				line = "#{indent}c #{counter_action[action]}= #{fixstring.call(arg.inspect)}.to_i"
 			elsif line =~ /^([\s\t]*)save[\s\t]+"?(.*?)"?[\s\t]*$/i
 				indent, arg = $1, $2
-				line = "#{indent}s = #{fixstring.call(arg.inspect)}"
+				line = "#{indent}sav = #{fixstring.call(arg.inspect)}"
 			elsif line =~ /^([\s\t]*)echo[\s\t]+(.+)/i
 				indent, arg = $1, $2
 				line = "#{indent}echo #{fixstring.call(arg.inspect)}"
@@ -1855,7 +1868,7 @@ class WizardScript<Script
 				next if data[idx] =~ /^[\s\t]*#/
 				data.insert(idx, '')
 				data.insert(idx, 'c = 0') if has_counter
-				data.insert(idx, "Settings.load\ns = Settings['s'] || String.new\nbefore_dying { Settings['s'] = s; Settings.save }") if has_save
+				data.insert(idx, "Settings.load\nsav = Settings['sav'] || String.new\nbefore_dying { Settings['sav'] = sav; Settings.save }") if has_save
 				data.insert(idx, "def nextroom\n\troom_count = XMLData.room_count\n\twait_while { room_count == XMLData.room_count }\nend") if has_nextroom
 				data.insert(idx, '')
 				break
@@ -1879,6 +1892,12 @@ class WizardScript<Script
 		@@running.push(self)
 		return self
 	end
+end
+
+class ScriptBinder
+  def create_block
+    Proc.new { }
+  end
 end
 
 class Settings
@@ -3484,48 +3503,85 @@ def start_script(script_name,cli_vars=[],force=false)
 	new_thread = Thread.new {
 		100.times { break if Script.self == new_script; sleep 0.01 }
 		if script = Script.self
+			script_binding = ScriptBinder.new.create_block.binding
+			eval('script = Script.self', script_binding, Script.self.name)
 			Thread.current.priority = 1
 			respond("--- Lich: #{script.name} active.") unless script.quiet
 			begin
 				while Script.self.current_label
-					eval(Script.self.labels[Script.self.current_label].to_s, nil, Script.self.name)
+					eval(Script.self.labels[Script.self.current_label].to_s, script_binding, Script.self.name)
 					Script.self.get_next_label
 				end
 				Script.self.kill
 			rescue SystemExit
 				Script.self.kill
 			rescue SyntaxError
-				respond("--- SyntaxError: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				respond("--- Lich: cannot execute #{Script.self.name}, aborting.")
+				$stdout.puts "--- SyntaxError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- SyntaxError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				respond "--- Lich: cannot execute #{Script.self.name}, aborting."
 				Script.self.kill
 			rescue ScriptError
-				respond("--- ScriptError: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				Script.self.kill
-			rescue
-				respond("--- Error: #{Script.self.name}: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				$stdout.puts "--- ScriptError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- ScriptError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
 				Script.self.kill
 			rescue NoMemoryError
-				respond("--- NoMemoryError: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				$stdout.puts "--- NoMemoryError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- NoMemoryError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
 				Script.self.kill
 			rescue LoadError
-				respond("--- LoadError: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				$stdout.puts "--- LoadError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- LoadError: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue SecurityError
+				$stdout.puts "--- SecurityError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- SecurityError: #{$!}"
+				$stderr.ptus $!.backtrace
+				$stderr.flush
+				Script.self.kill
+			rescue ThreadError
+				$stdout.puts "--- ThreadError: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- ThreadError: #{$!}"
+				$stderr.ptus $!.backtrace
+				$stderr.flush
 				Script.self.kill
 			rescue Exception
 				if $! == JUMP
 					retry if Script.self.get_next_label != JUMP_ERROR
-					respond("--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!")
-					respond($!.backtrace[0..2]) if $LICH_DEBUG
+					$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+					$stderr.puts $!.backtrace
+					$stderr.flush
 					Script.self.kill
 				else
-					respond("--- Exception: #{$!}")
-					respond($!.backtrace[0..2]) if $LICH_DEBUG
+					$stdout.puts "--- Exception: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- Exception: #{$!}"
+					$stderr.puts $!.backtrace
+					$stderr.flush
 					Script.self.kill
 				end
+			rescue
+				$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
+				$stdout.puts $!.backtrace.first
+				$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
+				$stderr.puts $!.backtrace
+				$stderr.flush
+				Script.self.kill
 			end
 		else
 			respond 'start_script screwed up...'
@@ -3552,34 +3608,72 @@ def start_exec_script(cmd_data, quiet=false)
 	Thread.new {
 		new_script.thread_group.add(Thread.current)
 		script = Script.self
+		script_binding = ScriptBinder.new.create_block.binding
+		eval('script = Script.self', script_binding, Script.self.name)
 		Thread.current.priority = 1
 		respond("--- Lich: #{script.name} active.") unless script.quiet
 		begin
-			eval(cmd_data, nil, script.name.to_s)
-			Script.self.kill
-		rescue SyntaxError
-			respond("--- Lich SyntaxError: #{$!}")
+			eval(cmd_data, script_binding, script.name.to_s)
 			Script.self.kill
 		rescue SystemExit
 			Script.self.kill
-		rescue SecurityError
-			respond("--- Lich SecurityError: #{$!}")
+		rescue SyntaxError
+			$stdout.puts "--- SyntaxError: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- SyntaxError: #{$!}"
+			$stderr.puts $!.backtrace
 			Script.self.kill
-		rescue ThreadError
-			respond("--- Lich: ThreadError: #{$!}")
-			Script.self.kill
-		rescue Exception
-			respond("--- Exception: #{$!}")
-			Script.self.kill
+			$stderr.flush
 		rescue ScriptError
-			respond("--- ScriptError: #{$!}")
+			$stdout.puts "--- ScriptError: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- ScriptError: #{$!}"
+			$stderr.ptus $!.backtrace
 			Script.self.kill
+			$stderr.flush
+		rescue NoMemoryError
+			$stdout.puts "--- NoMemoryError: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- NoMemoryError: #{$!}"
+			$stderr.puts $!.backtrace
+			Script.self.kill
+			$stderr.flush
 		rescue LoadError
 			respond("--- LoadError: #{$!}")
+			$stdout.puts "--- LoadError: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- LoadError: #{$!}"
+			$stderr.ptus $!.backtrace
 			Script.self.kill
+			$stderr.flush
+		rescue SecurityError
+			$stdout.puts "--- SecurityError: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- SecurityError: #{$!}"
+			$stderr.ptus $!.backtrace
+			Script.self.kill
+			$stderr.flush
+		rescue ThreadError
+			$stdout.puts "--- ThreadError: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- ThreadError: #{$!}"
+			$stderr.ptus $!.backtrace
+			Script.self.kill
+			$stderr.flush
+		rescue Exception
+			$stdout.puts "--- Exception: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- Exception: #{$!}"
+			$stderr.ptus $!.backtrace
+			Script.self.kill
+			$stderr.flush
 		rescue
-			respond("--- Lich Error: #{$!}")
+			$stdout.puts "--- Error: #{$!}"
+			$stdout.puts $!.backtrace.first
+			$stderr.puts "--- Error: #{$!}"
+			$stderr.ptus $!.backtrace
 			Script.self.kill
+			$stderr.flush
 		end
 	}
 end
@@ -5195,34 +5289,66 @@ def fill_hands
 end
 
 def dothis (action, success_line)
-	# You don't seem to be able to move to do that.
-	# The restricting force that envelops you dissolves away.
-	begin
+	loop {
 		clear
 		put action
-		begin
+		loop {
 			line = get
-		end until (line =~ success_line) or (line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$|^Sorry, you may only type ahead 1 command\.$|^You are still stunned\.$/)
-		if line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
-			if $2.to_i > 1
-				sleep ($2.to_i - 0.5)
-			else
-				sleep "0.3".to_f
+			if line =~ success_line
+				return line
+			elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
+				if $2.to_i > 1
+					sleep ($2.to_i - 0.5)
+				else
+					sleep "0.3".to_f
+				end
+				break
+			elsif line == 'Sorry, you may only type ahead 1 command.'
+				sleep 1
+				break
+			elsif line == 'You are still stunned.'
+				wait_while { stunned? }
+				break
+			elsif line == 'That is impossible to do while unconscious!'
+				100.times {
+					unless line = get?
+						sleep 0.1
+					else
+						break if line =~ /Your thoughts slowly come back to you as you find yourself lying on the ground\.  You must have been sleeping\.$|^You wake up from your slumber\.$/
+					end
+				}
+				break
+			elsif line == "You don't seem to be able to move to do that."
+				100.times {
+					unless line = get?
+						sleep 0.1
+					else
+						break if line == 'The restricting force that envelops you dissolves away.'
+					end
+				}
+				break
+			elsif line == "You can't do that while entangled in a web."
+				wait_while { checkwebbed }
+				break
+			elsif line == 'You find that impossible under the effects of the lullabye.'
+				100.times {
+					unless line = get?
+						sleep 0.1
+					else
+						# fixme
+						break if line == 'You shake off the effects of the lullabye.'
+					end
+				}
+				break
 			end
-		elsif line == 'Sorry, you may only type ahead 1 command.'
-			sleep 1
-		elsif line == 'You are still stunned.'
-			wait_while { stunned? }
-		end
-	end until line =~ success_line
-	return line
+		}
+	}
 end
 
 def dothistimeout (action, timeout, success_line)
 	end_time = Time.now.to_i + timeout
 	line = nil
-	success = false
-	begin
+	loop {
 		clear
 		put action unless action.nil?
 		loop {
@@ -5245,16 +5371,45 @@ def dothistimeout (action, timeout, success_line)
 				wait_while { stunned? }
 				end_time = Time.now.to_i + timeout
 				break
-			elsif line =~ success_line
-				success = true
+			elsif line == 'That is impossible to do while unconscious!'
+				100.times {
+					unless line = get?
+						sleep 0.1
+					else
+						break if line =~ /Your thoughts slowly come back to you as you find yourself lying on the ground\.  You must have been sleeping\.$|^You wake up from your slumber\.$/
+					end
+				}
 				break
+			elsif line == "You don't seem to be able to move to do that."
+				100.times {
+					unless line = get?
+						sleep 0.1
+					else
+						break if line == 'The restricting force that envelops you dissolves away.'
+					end
+				}
+				break
+			elsif line == "You can't do that while entangled in a web."
+				wait_while { checkwebbed }
+				break
+			elsif line == 'You find that impossible under the effects of the lullabye.'
+				100.times {
+					unless line = get?
+						sleep 0.1
+					else
+						# fixme
+						break if line == 'You shake off the effects of the lullabye.'
+					end
+				}
+				break
+			elsif line =~ success_line
+				return line
 			end
 			if Time.now.to_i >= end_time
 				return nil
 			end
 		}
-	end until success
-	return line
+	}
 end
 
 def registry_get(key)
@@ -5599,7 +5754,9 @@ def install_to_registry(psinet_compatible = false)
 	launch_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\Directory')
 	return false unless launch_cmd or launch_dir
 	if RUBY_PLATFORM =~ /win|mingw/i
-		if ruby_dir = registry_get('HKEY_LOCAL_MACHINE\Software\RubyInstaller\DefaultPath')
+		if ruby_dir = ENV['RUBY_PATH'] and File.exists?(ruby_dir)
+			ruby_dir = "#{ruby_dir.tr('/', "\\")}\\"
+		elsif ruby_dir = registry_get('HKEY_LOCAL_MACHINE\Software\RubyInstaller\DefaultPath')
 			ruby_dir = "#{ruby_dir.tr('/', "\\")}\\bin\\"
 		else
 			ruby_dir = ''
@@ -6058,11 +6215,11 @@ get_real_launcher_cmd = proc {
 	psinet_dir = nil
 	launcher_cmd = registry_get('HKEY_LOCAL_MACHINE\Software\Classes\Simutronics.Autolaunch\Shell\Open\command\RealCommand')
 	psinet_dir = $1 if launcher_cmd =~ /^"?(.*?)PsiNet2.exe/i
-	unless (launcher_cmd =~ /launcher\.exe/i) and (launcher_cmd !~ /lich|psinet/i)
+	unless (launcher_cmd =~ /launcher\.exe(?: |")/i)
 		launcher_cmd = registry_get('HKEY_LOCAL_MACHINE\Software\Classes\Simutronics.Autolaunch\Shell\Open\command\\')
 		psinet_dir = $1 if launcher_cmd =~ /^"?(.*?)PsiNet2.exe/i
 	end
-	unless (launcher_cmd =~ /launcher\.exe/i) and (launcher_cmd !~ /lich|psinet/i)
+	unless (launcher_cmd =~ /launcher\.exe(?: |")/i)
 		if psinet_dir and File.exists?(psinet_dir)
 			Dir.entries(psinet_dir).each { |f|
 				if f =~ /^SageInstaller.*\.InstallState$/i
@@ -6073,7 +6230,7 @@ get_real_launcher_cmd = proc {
 			}
 		end
 	end
-	unless (launcher_cmd =~ /launcher\.exe/i) and (launcher_cmd !~ /lich|psinet/i)
+	unless (launcher_cmd =~ /launcher\.exe(?: |")/i)
 		launcher_cmd = false
 	end
 	launcher_cmd
@@ -7365,6 +7522,10 @@ main_thread = Thread.new {
 					$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
+					if alt_string = DownstreamHook.run($_SERVERSTRING_)
+						alt_string = sf_to_wiz(alt_string) if $fake_stormfront
+						$_CLIENT_.write(alt_string)
+					end
 					begin
 						REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
 					rescue
@@ -7372,13 +7533,6 @@ main_thread = Thread.new {
 						$stderr.puts "error: server_thread: #{$!}"
 						$stderr.puts $!.backtrace
 						XMLData.reset
-					end
-					$_SERVERSTRING_ = DownstreamHook.run($_SERVERSTRING_)
-					next unless $_SERVERSTRING_
-					if $fake_stormfront
-						$_CLIENT_.write(sf_to_wiz($_SERVERSTRING_))
-					else
-						$_CLIENT_.write($_SERVERSTRING_)
 					end
 					Script.new_downstream_xml($_SERVERSTRING_)
 					stripped_server = strip_xml($_SERVERSTRING_)
