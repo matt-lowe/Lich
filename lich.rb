@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.5'
+$version = '4.0.6'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -529,7 +529,7 @@ class String
 end
 
 class XMLParser
-	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :in_stream
 	include StreamListener
 
 	def initialize
@@ -541,6 +541,7 @@ class XMLParser
 		@stow_container_id = nil
 		@obj_exist = nil
 		@obj_noun = nil
+		@in_stream = false
 		@player_status = nil
 		@fam_mode = String.new
 		@room_window_disabled = false
@@ -614,9 +615,11 @@ class XMLParser
 			@active_tags.push(name)
 			@active_ids.push(attributes['id'].to_s)
 			if name == 'pushStream'
+				@in_stream = true
 				@current_stream = attributes['id'].to_s
 				GameObj.clear_inv if attributes['id'].to_s == 'inv'
 			elsif name == 'popStream'
+				@in_stream = false
 				if attributes['id'] == 'room'
 					@room_count += 1
 					$room_count += 1 
@@ -2411,25 +2414,25 @@ class Spells
 	end
 	def Spells.get_circle_name(num)
 		val = num.to_s
-		if val == "1" then "Minor Spirit"
-		elsif val == "2" then "Major Spirit"
-		elsif val == "3" then "Cleric"
-		elsif val == "4" then "Minor Elemental"
-		elsif val == "5" then "Major Elemental"
-		elsif val == "6" then "Ranger"
-		elsif val == "7" then "Sorcerer"
-		elsif val == "9" then "Wizard"
-		elsif val == "10" then "Bard"
-		elsif val == "11" then "Empath"
-		elsif val == "16" then "Paladin"
-		elsif val == "66" then "Death"
-		elsif val == "65" then "Imbedded Enchantment"
-		elsif val == "96" then "Combat Maneuvers"
-		elsif val == "97" then "Guardians of Sunfist"
-		elsif val == "98" then "Order of Voln"
-		elsif val == "99" then "Council of Light"
-		elsif val == "cm" then "Combat Maneuvers"
-		elsif val == "mi" then "Miscellaneous"
+		if val == '1' then 'Minor Spirit'
+		elsif val == '2' then 'Major Spirit'
+		elsif val == '3' then 'Cleric'
+		elsif val == '4' then 'Minor Elemental'
+		elsif val == '5' then 'Major Elemental'
+		elsif val == '6' then 'Ranger'
+		elsif val == '7' then 'Sorcerer'
+		elsif val == '9' then 'Wizard'
+		elsif val == '10' then 'Bard'
+		elsif val == '11' then 'Empath'
+		elsif val == '16' then 'Paladin'
+		elsif val == '17' then 'Arcane'
+		elsif val == '66' then 'Death'
+		elsif val == '65' then 'Imbedded Enchantment'
+		elsif val == '90' then 'Miscellaneous'
+		elsif val == '96' then 'Combat Maneuvers'
+		elsif val == '97' then 'Guardians of Sunfist'
+		elsif val == '98' then 'Order of Voln'
+		elsif val == '99' then 'Council of Light'
 		else 'Unknown Circle' end
 	end
 	def Spells.active
@@ -2457,7 +2460,6 @@ end
 
 class Spell
 	@@list ||= Array.new
-	@@other_list ||= Array.new
 	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type
 	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging)
 		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@stacks,@selfonly,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging = name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging
@@ -2469,11 +2471,7 @@ class Spell
 		@msgdn = msgdn
 		@circle = (num.to_s.length == 3 ? num.to_s[0..0] : num.to_s[0..1])
 		@circlename = Spells.get_circle_name(@circle)
-		if eval(@duration).to_f > 0
-			@@list.push(self) unless @@list.find { |spell| spell.num == @num }
-		else
-			@@other_list.push(self) unless @@other_list.find { |spell| spell.num == @num }
-		end
+		@@list.push(self) unless @@list.find { |spell| spell.num == @num }
 	end
 	def Spell.load(filename="#{$script_dir}spell-list.xml.txt")
 		begin
@@ -2498,14 +2496,14 @@ class Spell
 		if val.class == Spell
 			val
 		elsif (val.class == Fixnum) or (val.class == String and val.class =~ /^[0-9]+$/)
-			@@list.find { |spell| spell.num == val.to_i } || @@other_list.find { |spell| spell.num == val.to_i }
+			@@list.find { |spell| spell.num == val.to_i }
 		else
-			if (ret = @@list.find { |spell| spell.name =~ /^#{val}$/i }) || (ret = @@other_list.find { |spell| spell.name =~ /^#{val}$/i })
+			if (ret = @@list.find { |spell| spell.name =~ /^#{val}$/i })
 				ret
-			elsif (ret = @@list.find { |spell| spell.name =~ /^#{val}/i }) || (ret = @@other_list.find { |spell| spell.name =~ /^#{val}/i })
+			elsif (ret = @@list.find { |spell| spell.name =~ /^#{val}/i })
 				ret
 			else
-				(@@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i }) || (@@other_list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i })
+				(@@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i })
 			end
 		end
 	end
@@ -2522,10 +2520,6 @@ class Spell
 	def Spell.list
 		Spell.load if @@list.empty?
 		@@list
-	end
-	def Spell.other_list
-		Spell.load if @@list.empty?
-		@@other_list
 	end
 	def Spell.upmsgs
 		Spell.load if @@list.empty?
@@ -5193,6 +5187,7 @@ def respond(first = "", *messages)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"\"/>\r\n" unless $fake_stormfront
+		wait_while { XMLData.in_stream }
 		$_CLIENT_.puts(str)
 	rescue
 		puts $!.to_s if $LICH_DEBUG
@@ -5699,8 +5694,8 @@ def sf_to_wiz(line)
 		return nil if line.gsub("\r\n", '').length < 1
 		return line
 	rescue
-		$_CLIENT_.puts('Error in sf_to_wiz')
-		$_CLIENT_.puts('$_SERVERSTRING_: ' + $_SERVERSTRING_.to_s)
+		$_CLIENT_.puts "--- Error: sf_to_wiz: #{$!}"
+		$_CLIENT_.puts '$_SERVERSTRING_: ' + $_SERVERSTRING_.to_s
 	end
 end
 
@@ -7494,12 +7489,14 @@ main_thread = Thread.new {
 					end
 				rescue
 					$stdout.puts "--- error: client_thread: #{$!}"
+					$stdout.puts $!.backtrace.first
 					$stderr.puts "error: client_thread: #{$!}"
 					$stderr.puts $!.backtrace
 				end
 			end
 		rescue
 			$stdout.puts "--- error: client_thread: #{$!}"
+			$stdout.puts $!.backtrace.first
 			$stderr.puts "error: client_thread: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep "0.2".to_f
