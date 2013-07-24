@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.8'
+$version = '4.0.9'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1029,7 +1029,13 @@ class UpstreamHook
 	end
 	def UpstreamHook.run(client_string)
 		for key in @@upstream_hooks.keys
-			client_string = @@upstream_hooks[key].call(client_string)
+			begin
+				client_string = @@upstream_hooks[key].call(client_string)
+			rescue
+				@@upstream_hooks.delete(key)
+				respond "--- Lich: UpstreamHook: #{$!}"
+				respond $!.backtrace.first
+			end
 			return nil if client_string.nil?
 		end
 		return client_string
@@ -1050,7 +1056,13 @@ class DownstreamHook
 	end
 	def DownstreamHook.run(server_string)
 		for key in @@downstream_hooks.keys
-			server_string = @@downstream_hooks[key].call(server_string)
+			begin
+				server_string = @@downstream_hooks[key].call(server_string)
+			rescue
+				@@downstream_hooks.delete(key)
+				respond "--- Lich: DownstreamHook: #{$!}"
+				respond $!.backtrace.first
+			end
 			return nil if server_string.nil?
 		end
 		return server_string
@@ -2479,6 +2491,7 @@ class Spell
 		@@list.push(self) unless @@list.find { |spell| spell.num == @num }
 	end
 	def Spell.load(filename="#{$script_dir}spell-list.xml.txt")
+		# crashes Lich if no spell-list.xml.txt ?
 		begin
 			@@list.clear
 			File.open(filename) { |file|
@@ -7347,17 +7360,6 @@ main_thread = Thread.new {
 		#
 
 		$offline_mode = true
-		if ARGV.any? { |arg| (arg == '-s') or (arg == '--stormfront') }
-			$frontend = 'stormfront'
-			$fake_stormfront = false
-			frontend_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\STORM32\Directory')
-			frontend_cmd = "\"#{frontend_dir}\\StormFront.exe\" /H=127.0.0.1 /P=#{localport} /K=bf653b6a343ea3904ba8e1b75b88fa50"
-		else
-			$frontend = 'wizard'
-			$fake_stormfront = true
-			frontend_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\WIZ32\Directory')
-			frontend_cmd = "\"#{frontend_dir}\\wizard.exe\" /GGS /H127.0.0.1 /P#{localport}"
-		end
 		begin
 			listener = TCPServer.new("localhost", nil)
 		rescue
@@ -7371,6 +7373,18 @@ main_thread = Thread.new {
 			$stderr.puts "Cannot set SO_REUSEADDR sockopt"
 		end
 		localport = listener.addr[1]
+		if ARGV.any? { |arg| (arg == '-s') or (arg == '--stormfront') }
+			$frontend = 'stormfront'
+			$fake_stormfront = false
+			frontend_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\STORM32\Directory')
+			frontend_cmd = "\"#{frontend_dir}\\StormFront.exe\""
+		else
+			$frontend = 'wizard'
+			$fake_stormfront = true
+			frontend_dir = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\WIZ32\Directory')
+			frontend_cmd = "\"#{frontend_dir}\\wizard.exe\""
+		end
+		frontend_cmd += " /GGS /H127.0.0.1 /P#{localport} /Kfake_login_key"
 		frontend_cmd = "#{wine_bin} #{frontend_cmd}" if wine_bin
 		Thread.new {
 			Dir.chdir(frontend_dir)
@@ -7391,7 +7405,9 @@ main_thread = Thread.new {
 			$stderr.puts $!
 		end
 		$_SERVER_ = $stdin
-		$_CLIENT_.puts "\034GSB0000000000Lich\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
+		if $fake_stormfront
+			$_CLIENT_.puts "\034GSB0000000000Lich\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
+		end
 	end
 	
 	listener = timeout_thr = nil
