@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.83
+ version 3.85
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -256,7 +256,7 @@ if HAVE_GTK
 			DRb.start_service
 			300.times {
 				break if $gtk_drb_uri
-				sleep 0.1
+				sleep "0.1".to_f
 			}
 			$gtk = DRbObject.new(nil, $gtk_drb_uri)
 		end
@@ -328,7 +328,7 @@ if HAVE_GTK
 		DRb.start_service
 		30.times {
 			break if $gtk_drb_uri
-			sleep 0.1
+			sleep "0.1".to_f
 		}
 		$gtk = DRbObject.new(nil, $gtk_drb_uri)
 	end
@@ -472,6 +472,8 @@ end # class pqueue
 
 at_exit { $gtk.do "Gtk.main_quit" rescue(); Process.waitall }
 
+# note: "0.1".to_f appears superfluous, but avoids errors in Vista
+
 # fixme: warlock
 # fixme: terminal mode
 # fixme: $_TA_BUFFER_
@@ -482,9 +484,12 @@ $injuries = Hash.new
 $injury_mode = 0
 
 $prepared_spell = 'None'
-$roundtime_end = Time.now.to_i-1
-$cast_roundtime_end = Time.now.to_i-1
+
+$roundtime_end = Time.now.to_i
+$cast_roundtime_end = Time.now.to_i
 $last_pulse = Time.now.to_i
+$server_time = Time.now.to_i
+$server_time_offset = 0
 
 # $poisons = Array.new
 # $diseases = Array.new
@@ -746,7 +751,7 @@ class SF_XML
 						$_CLIENT_.puts "\034GSP#{sprintf('%-30s', gsl_prompt)}\r\n"
 					end
 				end
-			elsif name == 'image'
+			elsif (name == 'image') and @@active_ids.include?('injuries')
 				if $injuries.keys.include?(attributes['id'])
 					if attributes['name'] =~ /Injury/i
 						$injuries[attributes['id']]['wound'] = attributes['name'].slice(/\d/).to_i
@@ -876,7 +881,7 @@ class SF_XML
 		rescue
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
-			sleep 0.1
+			sleep "0.1".to_f
 			@@active_tags = Array.new
 			@@active_ids = Array.new
 		end
@@ -1001,7 +1006,7 @@ class SF_XML
 		rescue
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
-			sleep 0.1
+			sleep "0.1".to_f
 			@@active_tags = Array.new
 			@@active_ids = Array.new
 		end
@@ -1027,7 +1032,7 @@ class SF_XML
 		rescue
 			respond "--- Lich: error in parser_thread (#{$!})"
 			$stderr.puts $!.backtrace.join("\r\n")
-			sleep 0.1
+			sleep "0.1".to_f
 			@@active_tags = Array.new
 			@@active_ids = Array.new
 		end
@@ -1278,7 +1283,7 @@ class Script
 	def Script.self
 		script = @@running.find { |scr| scr.thread_group == Thread.current.group }
 		return nil unless script
-		while script.paused; sleep 0.2; end
+		while script.paused; sleep "0.2".to_f; end
 		script
 	end
 	def Script.running
@@ -1318,7 +1323,7 @@ class Script
 	end
 	def gets
 		if @want_downstream or @want_downstream_xml
-			sleep 0.05 while @downstream_buffer.length < 1
+			sleep "0.05".to_f while @downstream_buffer.length < 1
 			@downstream_buffer.shift
 		else
 			echo 'this script is set as unique but is waiting for game data...'
@@ -1327,11 +1332,11 @@ class Script
 		end
 	end
 	def upstream_gets
-		sleep 0.05 while @upstream_buffer.length < 1
+		sleep "0.05".to_f while @upstream_buffer.length < 1
 		@upstream_buffer.shift
 	end
 	def unique_gets
-		sleep 0.05 while @unique_buffer.length < 1
+		sleep "0.05".to_f while @unique_buffer.length < 1
 		@unique_buffer.shift
 	end
 	def safe?
@@ -1699,7 +1704,7 @@ class Spellsong
 		Thread.new {
 			n = 0
 			while Stats.level == 0
-				sleep 0.25
+				sleep "0.25".to_f
 				n += 1
 				break if n >= 4
 			end
@@ -3066,7 +3071,7 @@ end
 def start_scripts(*script_names)
 	script_names.flatten.each { |script_name|
 		start_script(script_name)
-		sleep 0.02
+		sleep "0.02".to_f
 	}
 end
 
@@ -3132,7 +3137,7 @@ end
 def fix_injury_mode
 	unless $injury_mode == 2
 		$_SERVER.puts '_injury 2'
-		30.times { sleep 0.1; break if $injury_mode == 2 }
+		30.times { sleep "0.1".to_f; break if $injury_mode == 2 }
 	end
 end
 
@@ -3151,7 +3156,7 @@ end
 
 def waitrt
 	until $roundtime_end > $server_time
-		sleep 0.1
+		sleep "0.1".to_f
 	end
 	if $server_time >= $roundtime_end then return end
 	sleep(($roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f + 0.6).abs)
@@ -3163,7 +3168,7 @@ end
 
 def waitcastrt
 	until $cast_roundtime_end > $server_time
-		sleep 0.1
+		sleep "0.1".to_f
 	end
 	if $server_time >= $cast_roundtime_end then return end
 	sleep(($cast_roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f + 0.6).abs)
@@ -3323,7 +3328,7 @@ def selectput(string, success, failure, timeout = nil)
 	thr = Thread.current
 
 	timethr = Thread.new {
-		timeout -= sleep(0.1) until timeout <= 0
+		timeout -= sleep("0.1".to_f) until timeout <= 0
 		thr.raise(StandardError)
 	} if timeout
 
@@ -3554,7 +3559,7 @@ def move(dir='none')
 				waitrt?
 				put(dir)
 				next
-			elsif feed =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)/
+			elsif feed =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground/
 				#
 				# Climbing well, you adeptly move along the landslide.  As your confidence rises, your concentration lapses and then you miss a foothold.  Screaming, you plunge towards the ground below.
 				# You smack the ground with a sickening thud.
@@ -3567,6 +3572,8 @@ def move(dir='none')
 				# 
 				# Tentatively, you attempt to climb the landslide.  After only a few feet, you slip!  You catch yourself just barely, scrambling back to where you started.
 				#
+				# You start to climb down the oak, but quickly realize that you're taking a poor approach.  You quickly retreat back upwards to the ground to reassess the situation.
+				# You leap up and grab a handhold at the top of the rock, strain mightily to pull yourself up, but failing, drop back to the ground panting.
 				sleep(1)
 				waitrt?
 				fput 'stand' unless standing?
@@ -3738,7 +3745,7 @@ def wait_until(announce=nil)
 		respond(announce)
 	end
 	until yield
-		sleep 0.25
+		sleep "0.25".to_f
 	end
 	Thread.current.priority = priosave
 end
@@ -3750,7 +3757,7 @@ def wait_while(announce=nil)
 		respond(announce)
 	end
 	while yield
-		sleep 0.25
+		sleep "0.25".to_f
 	end
 	Thread.current.priority = priosave
 end
@@ -4263,7 +4270,7 @@ def matchtimeout(secs, *strings)
 		if match_string or (Time.now.to_f > end_time)
 			break
 		else
-			sleep 0.1
+			sleep "0.1".to_f
 		end
 	}
 
@@ -4688,7 +4695,7 @@ def dothis (action, success_line)
 			if $2.to_i > 1
 				sleep ($2.to_i - 0.5)
 			else
-				sleep 0.3
+				sleep "0.3".to_f
 			end
 		elsif line == 'Sorry, you may only type ahead 1 command.'
 			sleep 1
@@ -4707,13 +4714,13 @@ def dothistimeout (action, timeout, success_line)
 		put action unless action == nil
 		begin
 			break_loop = false
-			sleep 0.01
+			sleep "0.01".to_f
 			for line in clear
 				if line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
 					if $2.to_i > 1
 						sleep ($2.to_i - 0.5)
 					else
-						sleep 0.3
+						sleep "0.3".to_f
 					end
 					end_time = Time.now.to_i + timeout
 					break_loop = true
@@ -4910,7 +4917,7 @@ def registry_put(key, value)
 				regedit_data = "REGEDIT4\n\n[#{hkey}\\#{subkey}]\n#{thingie}=\"#{value}\"\n\n"
 				File.open('wine.reg', 'w') { |f| f.write(regedit_data) }
 				system('wine regedit wine.reg')
-				sleep 0.2
+				sleep "0.2".to_f
 				File.delete('wine.reg')
 			rescue
 				return false
@@ -5033,6 +5040,7 @@ $link_highlight_start = "\207"
 $link_highlight_end = "\240"
 
 def sf_to_wiz(line)
+	# fixme: voln thoughts
 	begin
 		return line if line == "\r\n"
 	
@@ -5415,7 +5423,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.83'
+$version = '3.85'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5977,7 +5985,7 @@ rescue
 	$stderr.puts "error closing listener socket: #{$!}"
 	errtimeout += 1
 	$stderr.puts('error appears unrecoverable, aborting') if errtimeout > 20
-	sleep 0.05
+	sleep "0.05".to_f
 	retry unless errtimeout > 20
 end
 errtimeout = nil
@@ -6016,11 +6024,11 @@ client_thread = Thread.new {
 		#
 		# tell the server we're ready
 		#
-		sleep 0.3
+		sleep "0.3".to_f
 		client_string = "<c>\r\n"
 		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
-		sleep 0.3
+		sleep "0.3".to_f
 		client_string = "<c>\r\n"
 		$_CLIENTBUFFER_.push(client_string)
 		$_SERVER_.write(client_string)
@@ -6097,14 +6105,14 @@ client_thread = Thread.new {
 	rescue
 		$stderr.puts "error in client thread: #{$!}"
 		$stderr.puts $!.backtrace.join("\r\n")
-		sleep 0.5
+		sleep "0.5".to_f
 		retry if not $_CLIENT_.closed? and not $_SERVER_.closed?
 	end
 	Script.running.each { |script| script.kill }
 	Script.hidden.each { |script| script.kill }
 	$gtk.do "Gtk.main_quit" rescue()
 	timeout = 0
-	sleep 0.1 while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
+	sleep "0.1".to_f while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
 	$_SERVER_.puts('quit') unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
 	$_CLIENT_.close unless $_CLIENT_.closed?
@@ -6148,13 +6156,13 @@ server_thread = Thread.new {
 		else
 			$stderr.puts "error in server thread: #{$!}"
 			$stderr.puts $!.backtrace.join("\r\n")
-			sleep 0.5
+			sleep "0.5".to_f
 			retry if not $_CLIENT_.closed? and not $_SERVER_.closed?
 		end
 	rescue
 		$stderr.puts "error in server thread: #{$!}"
 		$stderr.puts $!.backtrace.join("\r\n")
-		sleep 0.5
+		sleep "0.5".to_f
 		retry if not $_CLIENT_.closed? and not $_SERVER_.closed?
 	end
 	respond("--- Lich's connection to the game has been closed.\r\n\r\n") if $LICH_DEBUG and !$_CLIENT_.closed?
@@ -6162,7 +6170,7 @@ server_thread = Thread.new {
 	Script.hidden.each { |script| script.kill }
 	$gtk.do "Gtk.main_quit" rescue()
 	timeout = 0
-	sleep 0.1 while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
+	sleep "0.1".to_f while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
 	$_CLIENT_.close unless $_CLIENT_.closed?
 	$_SERVER_.puts("<c>quit") unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
@@ -6237,5 +6245,5 @@ Script.running.each { |script| script.kill }
 Script.hidden.each { |script| script.kill }
 $gtk.do "Gtk.main_quit" rescue()
 timeout = 0
-sleep 0.1 while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
+sleep "0.1".to_f while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
 exit
