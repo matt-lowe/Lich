@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.71
+ version 3.72
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -57,6 +57,147 @@ rescue LoadError
 rescue
 	HAVE_REGISTRY = false
 end
+begin
+	require 'gtk2/base.rb'
+	require 'monitor'
+	#require 'pango'
+	HAVE_GTK = true
+rescue LoadError
+	HAVE_GTK = false
+rescue
+	HAVE_GTK = false
+end
+
+Dir.chdir(File.dirname($PROGRAM_NAME))
+
+if HAVE_GTK
+	if RUBY_PLATFORM =~ /win/
+		if ARGV.find { |arg| arg == '--gtk-fork' }
+			$stderr = File.open('gtk-error.log','a')
+			unless File.exists?('drb.txt')
+				$stderr.puts 'file does not exist: drb.txt'
+				exit
+			end
+			file = File.open('drb.txt')
+			$lich_drb_uri = file.read.strip
+			file.close
+			File.delete('drb.txt')
+			Gtk.init
+			Gtk.init_add {
+				DRb.start_service
+				$lich = DRbObject.new(nil, $lich_drb_uri)
+				DRb.start_service(nil, GtkDRb.new)
+				$lich.do("$gtk_drb_uri = #{DRb.uri.inspect}")
+			}
+			GTK_PENDING_BLOCKS = Array.new
+			GTK_PENDING_BLOCKS_LOCK = Monitor.new
+			class GtkDRb
+				def do(code_string)
+					GTK_PENDING_BLOCKS_LOCK.synchronize do
+						GTK_PENDING_BLOCKS.push(code_string)
+					end
+				end
+			end
+			module Gtk
+				def Gtk.main_with_queue timeout
+					Gtk.timeout_add timeout do
+						GTK_PENDING_BLOCKS_LOCK.synchronize do
+							for block in GTK_PENDING_BLOCKS
+								begin
+									eval(block)
+								rescue
+									$stderr.puts "gtk error: #{$!}"
+									$stderr.puts $!.backtrace
+								end
+							end
+							GTK_PENDING_BLOCKS.clear
+						end
+						true
+					end
+					Gtk.main
+				end
+			end
+			Gtk.main_with_queue(50)
+			exit
+		else
+			class LichDRb
+				def do(code_string)
+					eval(code_string)
+				end
+			end
+			DRb.start_service(nil, LichDRb.new)
+			$lich_drb_uri = DRb.uri
+			File.open('drb.txt', 'w') { |f| f.write($lich_drb_uri) }
+			Thread.new { system("rubyw.exe \"#{Dir.pwd}/lich.rb\" --gtk-fork") }
+			DRb.start_service
+			300.times {
+				break if $gtk_drb_uri
+				sleep 0.1
+			}
+			$gtk = DRbObject.new(nil, $gtk_drb_uri)
+		end
+	else
+		class LichDRb
+			def do(code_string)
+				eval(code_string)
+			end
+		end
+		DRb.start_service(nil, LichDRb.new)
+		$lich_drb_uri = DRb.uri
+	
+		$gtk_pid = Process.fork {
+			Gtk.init
+			Gtk.init_add {
+				DRb.start_service
+				$lich = DRbObject.new(nil, $lich_drb_uri)
+				DRb.start_service(nil, GtkDRb.new)
+				$lich.do("$gtk_drb_uri = #{DRb.uri.inspect}")
+			}
+			
+			GTK_PENDING_BLOCKS = Array.new
+			GTK_PENDING_BLOCKS_LOCK = Monitor.new
+		
+			class GtkDRb
+				def do(code_string)
+					GTK_PENDING_BLOCKS_LOCK.synchronize do
+						GTK_PENDING_BLOCKS.push(code_string)
+					end
+				end
+			end
+	
+			module Gtk
+				def Gtk.main_with_queue timeout
+					Gtk.timeout_add timeout do
+						GTK_PENDING_BLOCKS_LOCK.synchronize do
+							for block in GTK_PENDING_BLOCKS
+								begin
+									eval(block)
+								rescue
+									$stderr.puts "gtk error: #{$!}"
+									$stderr.puts $!.backtrace
+								end
+							end
+							GTK_PENDING_BLOCKS.clear
+						end
+						true
+					end
+					Gtk.main
+				end
+			end
+	
+			Gtk.main_with_queue(50)
+		}
+		Thread.new { Process.waitpid($gtk_pid) rescue(); $gtk = nil }
+	
+		DRb.start_service
+		30.times {
+			break if $gtk_drb_uri
+			sleep 0.1
+		}
+		$gtk = DRbObject.new(nil, $gtk_drb_uri)
+	end
+end
+
 
 #
 # start pqueue.rb
@@ -193,12 +334,12 @@ end # class pqueue
 # end pqueue.rb
 #
 
-at_exit { Script.running.each { |script| script.kill }; Script.hidden.each { |script| script.kill }; sleep 0.5; Process.waitall }
+at_exit { Script.running.each { |script| script.kill }; Script.hidden.each { |script| script.kill }; sleep 0.5; $gtk.do "Gtk.main_quit" rescue(); Process.waitall }
 
 # fixme: warlock
 # fixme: terminal mode
 # fixme: $_TA_BUFFER_
-
+# fixme: signs3 uses Script.self.io
 
 $injuries = Hash.new; ['nsys','leftArm','rightArm','rightLeg','leftLeg','head','rightFoot','leftFoot','rightHand','leftHand','rightEye','leftEye','back','neck','chest','abdomen'].each { |area| $injuries[area] = { 'wound' => 0, 'scar' => 0 } }
 $injury_mode = 0
@@ -319,35 +460,44 @@ class NilClass
 end
 
 class Array
-	attr_accessor :max_shove_size
-	def shove(line)
-		@max_shove_size ||= 200
-		self.push(line)
-		self.delete_at(0) if self.length > @max_shove_size
-	end
 	def method_missing(*usersave)
 		self
 	end
 end
-      
+
+class LimitedArray < Array
+	attr_accessor :max_size
+	def initialize(size=0, obj=nil)
+		@max_size = 200
+		super
+	end
+	def push(line)
+		self.shift while self.length >= @max_size
+		super
+	end
+	def shove(line)
+		push(line)
+	end
+end
+
 class CachedArray < Array
 	attr_accessor :min_size, :max_size
 	def initialize(size=0, obj=nil)
-		super
 		@min_size = 200
 		@max_size = 250
 		num = Time.now.to_i-1
 		@filename = "cache-#{num}.txt"
 		@filename = "cache-#{num+=1}.txt" while File.exists?(@filename)
 		File.open(@filename, 'w') { |f| f.write '' }
+		super
 	end
 	def push(line)
-		super
-		if self.length > @max_size
+		if self.length >= @max_size
 			file = File.open(@filename, 'a')
-			file.puts(self.shift) while (self.length > @min_size)
+			file.puts(self.shift) while (self.length >= @min_size)
 			file.close
 		end
+		super
 	end
 	def history
 		file = File.open(@filename)
@@ -898,12 +1048,12 @@ class Script
 		else 
 			@quiet = false
 		end
-		@downstream_buffer = Array.new
+		@downstream_buffer = LimitedArray.new
 		@want_downstream = true
 		@want_downstream_xml = false
-		@upstream_buffer = Array.new
+		@upstream_buffer = LimitedArray.new
 		@want_upstream = false
-		@unique_buffer = Array.new
+		@unique_buffer = LimitedArray.new
 		@dying_procs = Array.new
 		@die_with = Array.new
 		@paused = false
@@ -1061,17 +1211,17 @@ class Script
 	end	
 	def Script.new_downstream(line)
 		for script in @@running
-			script.downstream_buffer.shove(line.chomp) if script.want_downstream
+			script.downstream_buffer.push(line.chomp) if script.want_downstream
 		end
 	end
 	def Script.new_downstream_xml(line)
 		for script in @@running
-			script.downstream_buffer.shove(line.chomp) if script.want_downstream_xml
+			script.downstream_buffer.push(line.chomp) if script.want_downstream_xml
 		end
 	end
 	def Script.new_upstream(line)
 		for script in @@running
-			script.upstream_buffer.shove(line.chomp) if script.want_upstream
+			script.upstream_buffer.push(line.chomp) if script.want_upstream
 		end
 	end
 	def gets
@@ -1122,10 +1272,10 @@ class ExecScript<Script
 		@name = "exec#{num}"
 		@cmd_data = cmd_data
 		@vars = Array.new
-		@downstream_buffer = Array.new
+		@downstream_buffer = LimitedArray.new
 		@want_downstream = true
 		@want_downstream_xml = false
-		@upstream_buffer = Array.new
+		@upstream_buffer = LimitedArray.new
 		@want_upstream = false
 		@dying_procs = Array.new
 		@hidden = false
@@ -1135,7 +1285,7 @@ class ExecScript<Script
 		@safe = false
 		@no_echo = false
 		@thread_group = ThreadGroup.new
-		@unique_buffer = Array.new
+		@unique_buffer = LimitedArray.new
 		@die_with = Array.new
 		@no_pause_all = false
 		@no_kill_all = false
@@ -2995,12 +3145,7 @@ def checkname(*strings)
 end
 
 def checkloot
-	loot = GameObj.loot.collect { |item| item.noun }
-	if loot.empty?
-		return nil
-	else
-		loot
-	end
+	GameObj.loot.collect { |item| item.noun }
 end
 
 def i_stand_alone
@@ -3159,7 +3304,7 @@ end
 def send_to_script(*values)
 	values.flatten!
 	if script = (Script.running + Script.hidden).find { |val| val.name =~ /^#{values.first}/i }
-		values[1..-1].each { |val| script.downstream_buffer.shove(val) }
+		values[1..-1].each { |val| script.downstream_buffer.push(val) }
 		echo("Sent to #{script.name} -- '#{values[1..-1].join(' ; ')}'")
 		return true
 	else
@@ -3171,7 +3316,7 @@ end
 def unique_send_to_script(*values)
 	values.flatten!
 	if script = (Script.running + Script.hidden).find { |val| val.name =~ /^#{values.first}/i }
-		values[1..-1].each { |val| script.unique_buffer.shove(val) }
+		values[1..-1].each { |val| script.unique_buffer.push(val) }
 		echo("sent to #{script}: #{values[1..-1].join(' ; ')}")
 		return true
 	else
@@ -3199,7 +3344,7 @@ end
 
 def send_lichnet_string(string)
 	if lichnet = (Script.running + Script.hidden).find { |script| script.name =~ /lichnet/i }
-		lichnet.unique_buffer.shove(string)
+		lichnet.unique_buffer.push(string)
 	else
 		respond("You aren't running the `LichNet' client script! Type `#{$clean_lich_char}lichnet' to start it.")
 	end
@@ -4280,6 +4425,10 @@ def respond(first = "", *messages)
 			str += sprintf("%s\r\n", first.to_s.chomp)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
+		if $stormfront and not $fake_stormfront
+			str.gsub!('<', '&lt;')
+			str.gsub!('>', '&gt;')
+		end
 		$_CLIENT_.puts(str)
 	rescue
 		puts $!.to_s if $LICH_DEBUG
@@ -4461,6 +4610,7 @@ def registry_put(key, value)
 			# respond "--- error: (#{$!})"
 			# $stderr.puts $!.backtrace.join("\r\n")
 		end
+		return true
 	else
 		if ENV['WINEPREFIX']
 			wine_dir = ENV['WINEPREFIX']
@@ -4695,8 +4845,8 @@ def install_to_registry
 	end
 	if RUBY_PLATFORM =~ /win/i
 		if ruby_dir = registry_get('HKEY_LOCAL_MACHINE\Software\RubyInstaller\DefaultPath')
-			lich_launch_cmd = "#{ruby_dir.tr('/', "\\")}\\bin\\rubyw.exe \"#{Dir.pwd.tr('/', "\\")}\\lich.rb\" %1"
-			lich_launch_dir = "#{ruby_dir.tr('/', "\\")}\\bin\\rubyw.exe \"#{Dir.pwd.tr('/', "\\")}\\lich.rb\" "
+			lich_launch_cmd = "\"#{ruby_dir.tr('/', "\\")}\\bin\\rubyw.exe\" \"#{Dir.pwd.tr('/', "\\")}\\lich.rb\" %1"
+			lich_launch_dir = "\"#{ruby_dir.tr('/', "\\")}\\bin\\rubyw.exe\" \"#{Dir.pwd.tr('/', "\\")}\\lich.rb\" "
 		else
 			$stderr.puts 'Failed to find Ruby directory.'
 			return false
@@ -4747,7 +4897,7 @@ def uninstall_from_registry
 	end
 	if real_launch_dir and not real_launch_dir.empty?
 		registry_put('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\Directory', real_launch_dir) || result = false
-		registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\RealDirectory', '') || result = false
+		registry_put('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\RealDirectory', '') || result = false
 	end
 	return result
 end
@@ -4856,9 +5006,9 @@ def do_client(client_string)
 				if script
 					msg = cmd.split[3..-1].join(' ').chomp
 					if script.want_downstream
-						script.downstream_buffer.shove(msg)
+						script.downstream_buffer.push(msg)
 					else
-						script.unique_buffer.shove(msg)
+						script.unique_buffer.push(msg)
 					end
 					respond("--- sent to '#{script.name}': #{msg}")
 				else
@@ -4958,7 +5108,7 @@ sock_keepalive_proc = proc { |sock|
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
 
-$version = '3.71'
+$version = '3.72'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5237,7 +5387,7 @@ end
 #
 # delete cache files that are more than 24 hours old
 #
-Dir.entries($script_dir)[2..-1].each { |filename|
+Dir.entries($lich_dir)[2..-1].each { |filename|
 	if filename =~ /^cache-([0-9]+).txt$/
 		if $1.to_i < Time.now.to_i + 86400
 			File.delete(filename)
