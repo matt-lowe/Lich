@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.81
+ version 3.82
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -3128,7 +3128,7 @@ end
 
 def fix_injury_mode
 	unless $injury_mode == 2
-		put '_injury 2'
+		$_SERVER.puts '_injury 2'
 		30.times { sleep 0.1; break if $injury_mode == 2 }
 	end
 end
@@ -3522,6 +3522,8 @@ def out
 end
 
 def move(dir='none')
+	# You'll need to swim that.
+	# You really can't swim holding a buckler.
 	# How do you intend to get the doorman's attention?  After all, no one can see you right now.
 	tried_open = false
 	attempts = 0
@@ -4616,12 +4618,12 @@ def unnoded_pulse
 end
 
 def empty_hands
-	# /^You put|^You can't .+ It's closed!$/
-	if $rh_thingie = checkright
+	$rh_thingie, $lh_thingie = checkright, checkleft
+	if $rh_thingie
 		if Lich.lootsack.nil?
 			fput "stow #{$rh_thingie}"
 		else
-			result = dothistimeout 4, "put my #{$rh_thingie} in my #{Lich.lootsack}", /^You put|^You can't .+ It's closed!$/
+			result = dothistimeout "put my #{$rh_thingie} in my #{Lich.lootsack}", 4, /^You put|^You can't .+ It's closed!$/
 			if result =~ /^You can't .+ It's closed!$/
 				fput "open my #{Lich.lootsack}"
 				fput "put my #{$rh_thingie} in my #{Lich.lootsack}"
@@ -4630,14 +4632,14 @@ def empty_hands
 		end
 		
 	end
-	if $lh_thingie = checkleft
+	if $lh_thingie
 		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|bow|arbalest/
 			fput "wear my #{$lh_thingie}"
 		else
 			if Lich.lootsack.nil?
 				fput "stow #{$lh_thingie}"
 			else
-				result = dothistimeout 4, "put my #{$lh_thingie} in my #{Lich.lootsack}", /^You put|^You can't .+ It's closed!$/
+				result = dothistimeout "put my #{$lh_thingie} in my #{Lich.lootsack}", 4, /^You put|^You can't .+ It's closed!$/
 				if result =~ /^You can't .+ It's closed!$/
 					fput "open my #{Lich.lootsack}"
 					fput "put my #{$lh_thingie} in my #{Lich.lootsack}"
@@ -5410,7 +5412,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.81'
+$version = '3.82'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
