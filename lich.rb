@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.91
+ version 3.92
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -1179,7 +1179,7 @@ class Script
 				@quiet = true
 			end
 			file.rewind
-			data = file.read.split(/\r?\n/)
+			data = file.readlines.collect { |line| line.chomp }
 		ensure	
 			file.close
 			file = nil
@@ -1399,7 +1399,197 @@ class ExecScript<Script
 	end
 end
 
-# fixme: class WizardScript<Script
+class WizardScript<Script
+	def initialize(file_name, cli_vars=[])
+		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
+		@file_name = file_name
+		@vars = Array.new
+		unless cli_vars.empty?
+			cli_vars.each_index { |idx| @vars[idx+1] = cli_vars[idx] }
+			@vars[0] = @vars[1..-1].join(' ')
+			cli_vars = nil
+		end
+		if @vars.first =~ /^quiet$/i
+			@quiet = true
+			@vars.shift
+		else 
+			@quiet = false
+		end
+		@downstream_buffer = LimitedArray.new
+		@want_downstream = true
+		@want_downstream_xml = false
+		@upstream_buffer = LimitedArray.new
+		@want_upstream = false
+		@unique_buffer = LimitedArray.new
+		@dying_procs = Array.new
+		@die_with = Array.new
+		@paused = false
+		@hidden = false
+		@no_pause_all = false
+		@no_kill_all = false
+		@silent = false
+		@safe = false
+		@no_echo = false
+		@match_stack_labels = Array.new
+		@match_stack_strings = Array.new
+		@@running.push(self)
+		@label_order = Array.new
+		@labels = Hash.new
+		begin
+			crit = Thread.critical
+			Thread.critical = true
+			begin
+				file = nil
+				file = Zlib::GzipReader.open(file_name)
+			rescue
+				file.close rescue()
+				file = File.open(file_name)
+			end
+			if file.gets =~ /^[\t\s]*#?[\t\s]*(?:quiet|hush)\r?$/i
+				@quiet = true
+			end
+			file.rewind
+			data = file.readlines.collect { |line| line.chomp }
+		ensure	
+			file.close
+			file = nil
+			Thread.critical = crit
+		end
+
+		counter_action = {
+			'add'      => '+',
+			'sub'      => '-',
+			'subtract' => '-',
+			'multiply' => '*',
+			'divide'   => '/',
+			'set'      => ''
+		}
+		
+		setvars = Array.new
+		data.each { |line| setvars.push($1) if line =~ /[\s\t]*setvariable\s+([^\s\t]+)[\s\t]/i and not setvars.include?($1) }
+		has_counter = data.find { |line| line =~ /%c/i }
+		has_save = data.find { |line| line =~ /%s/i }
+		has_nextroom = data.find { |line| line =~ /nextroom/i }
+		
+		fixstring = proc { |str|
+			while not setvars.empty? and str =~ /%(#{setvars.join('|')})%/io
+				str.gsub!('%' + $1 + '%', '#{' + $1.downcase + '}')
+			end
+			str.gsub!(/%c(?:%)?/i, '#{c}')
+			str.gsub!(/%s(?:%)?/i, '#{s}')
+			while str =~ /%([0-9])(?:%)?/
+				str.gsub!(/%#{$1}(?:%)?/, '#{script.vars[' + $1 + ']}')
+			end
+			str
+		}
+		
+		fixline = proc { |line|
+			if line =~ /^[A-Za-z0-9_\-']+:/i
+				line = line.downcase
+			elsif line =~ /^([\s\t]*)counter\s+(add|sub|subtract|divide|multiply|set)\s+([0-9]+)/i
+				line = "#{$1}c #{counter_action[$2]}= #{$3}"
+			elsif line =~ /^([\s\t]*)save[\s\t]+"?(.*?)"?[\s\t]*$/i
+				indent, arg = $1, $2
+				line = "#{indent}s = #{fixstring.call(arg.inspect)}"
+			elsif line =~ /^([\s\t]*)echo[\s\t]+(.+)/i
+				indent, arg = $1, $2
+				line = "#{indent}echo #{fixstring.call(arg.inspect)}"
+			elsif line =~ /^([\s\t]*)waitfor[\s\t]+(.+)/i
+				indent, arg = $1, $2
+				line = "#{indent}waitfor #{fixstring.call(Regexp.escape(arg).inspect.gsub("\\\\ ", ' '))}"
+			elsif line =~ /^([\s\t]*)(put|move)[\s\t]+(.+)/i
+				indent, cmd, arg = $1, $2, $3
+				line = "#{indent}waitrt?\n#{indent}clear\n#{indent}#{cmd.downcase} #{fixstring.call(arg.inspect)}"
+			elsif line =~ /^([\s\t]*)goto[\s\t]+(.+)/i
+				indent, arg = $1, $2
+				line = "#{indent}goto #{fixstring.call(arg.inspect).downcase}"
+			elsif line =~ /^([\s\t]*)waitforre[\s\t]+(.+)/i
+				indent, arg = $1, $2
+				line = "#{indent}waitforre #{arg}"
+			elsif line =~ /^([\s\t]*)pause[\s\t]*(.*)/i
+				indent, arg = $1, $2
+				arg = '1' if arg.empty?
+				arg = '0'+arg.strip if arg.strip =~ /^\.[0-9]+$/
+				line = "#{indent}pause #{arg}"
+			elsif line =~ /^([\s\t]*)match[\s\t]+([^\s\t]+)[\s\t]+(.+)/i
+				indent, label, arg = $1, $2, $3
+				line = "#{indent}match #{fixstring.call(label.inspect).downcase}, #{fixstring.call(Regexp.escape(arg).inspect.gsub("\\\\ ", ' '))}"
+			elsif line =~ /^([\s\t]*)matchre[\s\t]+([^\s\t]+)[\s\t]+(.+)/i
+				indent, label, regex = $1, $2, $3
+				line = "#{indent}matchre #{fixstring.call(label.inspect).downcase}, #{regex}"
+			elsif line =~ /^([\s\t]*)setvariable[\s\t]+([^\s\t]+)[\s\t]+(.+)/i
+				indent, var, arg = $1, $2, $3
+				line = "#{indent}#{var.downcase} = #{fixstring.call(arg.inspect)}"
+			elsif line =~ /^([\s\t]*)deletevariable[\s\t]+(.+)/i
+				line = "#{$1}#{$2.downcase} = nil"
+			elsif line =~ /^([\s\t]*)(wait|nextroom|exit|echo)\b/i
+				line = "#{$1}#{$2.downcase}"
+			elsif line =~ /^([\s\t]*)matchwait\b/i
+				line = "#{$1}matchwait"
+			elsif line =~ /^([\s\t]*)if_([0-9])[\s\t]+(.*)/i
+				indent, num, stuff = $1, $2, $3
+				line = "#{indent}if script.vars[#{num}]\n#{indent}\t#{fixline.call($3)}\n#{indent}end"
+			elsif line =~ /^([\s\t]*)shift\b/i
+				line = "#{$1}script.vars.shift"
+			else
+				respond "--- Lich: unknown line: #{line}"
+				line = '#' + line
+			end
+		}
+		
+		lich_block = false
+		
+		data.each_index { |idx|
+			if lich_block
+				if data[idx] =~ /\}[\s\t]*LICH[\s\t]*$/
+					data[idx] = data[idx].sub(/\}[\s\t]*LICH[\s\t]*$/, '')
+					lich_block = false
+				else
+					next
+				end		
+			elsif data[idx] =~ /^[\s\t]*#|^[\s\t]*$/
+				next
+			elsif data[idx] =~ /^[\s\t]*LICH[\s\t]*\{/
+				data[idx] = data[idx].sub(/LICH[\s\t]*\{/, '')
+				if data[idx] =~ /\}[\s\t]*LICH[\s\t]*$/
+					data[idx] = data[idx].sub(/\}[\s\t]*LICH[\s\t]*$/, '')
+				else
+					lich_block = true
+				end
+			else
+				data[idx] = fixline.call(data[idx])
+			end
+		}
+		
+		if has_counter or has_save or has_nextroom
+			data.each_index { |idx|
+				next if data[idx] =~ /^[\s\t]*#/
+				data.insert(idx, '')
+				data.insert(idx, 'c = 0') if has_counter
+				data.insert(idx, "Settings.load\ns = Settings['s'] || String.new\nbefore_dying { Settings['s'] = s; Settings.save }") if has_save
+				data.insert(idx, "def nextroom\n\troom_count = $room_count\n\twait_while { room_count == $room_count }\nend") if has_nextroom
+				data.insert(idx, '')
+				break
+			}
+		end
+		
+		@current_label = '~start'
+		@label_order.push(@current_label)
+		for line in data
+			if line =~ /^([\d_\w]+):$/
+				@current_label = $1
+				@label_order.push(@current_label)
+				@labels[@current_label] = String.new
+			else
+				@labels[@current_label] += "#{line}\n"
+			end
+		end
+		data = nil
+		@current_label = @label_order[0]
+		@thread_group = ThreadGroup.new
+		return self
+	end
+end
 
 class Settings
 	@@hash ||= {}
@@ -3001,11 +3191,15 @@ def start_script(script_name,cli_vars=[],force=false)
 	file_name = nil
 	if File.exists?($script_dir + script_name + '.lic')
 		file_name = $script_dir + script_name + '.lic'
+	elsif File.exists?($script_dir + script_name + '.cmd')
+		file_name = $script_dir + script_name + '.cmd'
+	elsif File.exists?($script_dir + script_name + '.wiz')
+		file_name = $script_dir + script_name + '.wiz'
 	else
 		file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }
-		unless file_name = file_list.find { |val| val =~ /^#{script_name}\.(?:lic|rbw?)(?:\.gz|\.Z)?$/i } or 
-		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?i:lic|rbw?)(?:\.gz|\.Z)?$/ } or 
-		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?:lic|rbw?)(?:\.gz|\.Z)?$/i } or 
+		unless file_name = file_list.find { |val| val =~ /^#{script_name}\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } or 
+		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?i:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/ } or 
+		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } or 
 		       file_name = file_list.find { |val| val =~ /^#{script_name}$/i }
 			respond("--- Lich: could not find script `#{script_name}' in directory #{$script_dir}!")
 			file_list = nil
@@ -3019,7 +3213,11 @@ def start_script(script_name,cli_vars=[],force=false)
 		return false
 	end
 	begin
-		new_script = Script.new(file_name, cli_vars)
+		if file_name =~ /cmd$|wiz$/i
+			new_script = WizardScript.new(file_name, cli_vars)
+		else
+			new_script = Script.new(file_name, cli_vars)
+		end
 	rescue
 		respond("--- Lich: error reading script file: #{$!}")
 	end
@@ -5405,7 +5603,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.91'
+$version = '3.92'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
