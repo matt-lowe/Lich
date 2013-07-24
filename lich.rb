@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.77
+ version 3.78
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -215,6 +215,12 @@ if HAVE_GTK
 								rescue
 									$stderr.puts "gtk error: #{$!}"
 									$stderr.puts $!.backtrace
+								rescue SyntaxError
+									$stderr.puts "gtk error: #{$!}"
+									$stderr.puts $!.backtrace
+								rescue NoMemoryError
+									$stderr.puts "gtk error: #{$!}"
+									$stderr.puts $!.backtrace
 								end
 							end
 							GTK_PENDING_BLOCKS.clear
@@ -232,7 +238,13 @@ if HAVE_GTK
 					begin
 						eval(code_string)
 					rescue
-						$stderr.puts $!
+						$stderr.puts "gtk error: #{$!}"
+						$stderr.puts $!.backtrace
+					rescue SyntaxError
+						$stderr.puts "gtk error: #{$!}"
+						$stderr.puts $!.backtrace
+					rescue NoMemoryError
+						$stderr.puts "gtk error: #{$!}"
 						$stderr.puts $!.backtrace
 					end
 				end
@@ -291,6 +303,12 @@ if HAVE_GTK
 								begin
 									eval(block)
 								rescue
+									$stderr.puts "gtk error: #{$!}"
+									$stderr.puts $!.backtrace
+								rescue SyntaxError
+									$stderr.puts "gtk error: #{$!}"
+									$stderr.puts $!.backtrace
+								rescue NoMemoryError
 									$stderr.puts "gtk error: #{$!}"
 									$stderr.puts $!.backtrace
 								end
@@ -452,7 +470,7 @@ end # class pqueue
 # end pqueue.rb
 #
 
-at_exit { Script.running.each { |script| script.kill }; Script.hidden.each { |script| script.kill }; sleep 0.5; $gtk.do "Gtk.main_quit" rescue(); Process.waitall }
+at_exit { $gtk.do "Gtk.main_quit" rescue(); Process.waitall }
 
 # fixme: warlock
 # fixme: terminal mode
@@ -622,6 +640,8 @@ class SF_XML
 				else
 					GameObj.clear_container(attributes['id'])
 				end
+			elsif name == 'deleteContainer'
+				GameObj.delete_container(attributes['id'])
 			elsif name == 'progressBar'
 				if attributes['id'] == 'pbarStance'
 					$stance_text = attributes['text'].split.first
@@ -1923,6 +1943,7 @@ end
 
 class Spell
 	@@list ||= Array.new
+	@@other_list ||= Array.new
 	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type
 	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging)
 		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@stacks,@selfonly,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging = name,type,duration,manaCost,spiritCost,staminaCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging
@@ -1934,7 +1955,11 @@ class Spell
 		@msgdn = msgdn
 		@circle = (num.to_s.length == 3 ? num.to_s[0..0] : num.to_s[0..1])
 		@circlename = Spells.get_circle_name(@circle)
-		@@list.push(self) unless @@list.find { |spell| spell.name == @name }
+		if eval(@duration).to_f > 0
+			@@list.push(self) unless @@list.find { |spell| spell.num == @num }
+		else
+			@@other_list.push(self) unless @@other_list.find { |spell| spell.num == @num }
+		end
 	end
 	def Spell.load(filename="#{$script_dir}spell-list.xml.txt")
 		begin
@@ -1959,14 +1984,14 @@ class Spell
 		if val.class == Spell
 			val
 		elsif (val.class == Fixnum) or (val.class == String and val.class =~ /^[0-9]+$/)
-			@@list.find { |spell| spell.num == val.to_i }
+			@@list.find { |spell| spell.num == val.to_i } || @@other_list.find { |spell| spell.num == val.to_i }
 		else
-			if ret = @@list.find { |spell| spell.name =~ /^#{val}$/i }
+			if (ret = @@list.find { |spell| spell.name =~ /^#{val}$/i }) || (ret = @@other_list.find { |spell| spell.name =~ /^#{val}$/i })
 				ret
-			elsif ret = @@list.find { |spell| spell.name =~ /^#{val}/i }
+			elsif (ret = @@list.find { |spell| spell.name =~ /^#{val}/i }) || (ret = @@other_list.find { |spell| spell.name =~ /^#{val}/i })
 				ret
 			else
-				@@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i }
+				(@@list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i }) || (@@other_list.find { |spell| spell.msgup =~ /#{val}/i or spell.msgdn =~ /#{val}/i })
 			end
 		end
 	end
@@ -1983,6 +2008,10 @@ class Spell
 	def Spell.list
 		Spell.load if @@list.empty?
 		@@list
+	end
+	def Spell.other_list
+		Spell.load if @@list.empty?
+		@@other_list
 	end
 	def Spell.upmsgs
 		Spell.load if @@list.empty?
@@ -2413,6 +2442,9 @@ class GameObj
 	end
 	def GameObj.clear_container(container_id)
 		@@contents[container_id] = Array.new
+	end
+	def GameObj.delete_container(container_id)
+		@@contents[container_id] = nil
 	end
 	def GameObj.dead
 		dead_list = Array.new
@@ -2976,9 +3008,11 @@ def start_script(script_name,cli_vars=[],force=false)
 	rescue
 		respond("--- Lich: error reading script file: #{$!}")
 	end
-	Thread.new {
+	script_thread = Thread.new {
 		new_script.add_thread(Thread.current)
-		script = Script.self
+		unless script = Script.self
+			respond 'start_script screwed up...'
+		end
 		Thread.current.priority = 1
 		respond("--- Lich: #{script.name} active.") unless script.quiet
 		begin
@@ -3190,7 +3224,14 @@ def checkreallybleeding
 end
 
 def muckled?
-	checkwebbed or checkdead or checkstunned
+	muckled = checkwebbed or checkdead or checkstunned
+	if defined?(checksleeping)
+		muckled = muckled or checksleeping
+	end
+	if defined?(checkbound)
+		muckled = muckled or checkbound
+	end
+	return muckled
 end
 
 def checkhidden
@@ -3500,6 +3541,25 @@ def move(dir='none')
 				next
 			elsif feed =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$/
 				sleep(1)
+				waitrt?
+				put(dir)
+				next
+			elsif feed =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)/
+				#
+				# Climbing well, you adeptly move along the landslide.  As your confidence rises, your concentration lapses and then you miss a foothold.  Screaming, you plunge towards the ground below.
+				# You smack the ground with a sickening thud.
+				# 
+				# It quickly becomes apparent that you will not finish the climb.  Aching, your legs give way, slipping on a rock.  You see the world spin around you as you fall...
+				# You smack the ground with a sickening thud.
+				# 
+				# Tentatively, you attempt to climb the cleft.  After only a few feet, you lose your grip and fall...
+				# You smack the ground with a sickening thud.
+				# 
+				# Tentatively, you attempt to climb the landslide.  After only a few feet, you slip!  You catch yourself just barely, scrambling back to where you started.
+				#
+				sleep(1)
+				waitrt?
+				fput 'stand' unless staining?
 				waitrt?
 				put(dir)
 				next
@@ -4550,6 +4610,129 @@ def unnoded_pulse
 	return (maxmana * 15 / 100) + (stats.max/10) + (stats.min/20)
 end
 
+def empty_hands
+	# /^You put|^You can't .+ It's closed!$/
+	if $rh_thingie = checkright
+		if Lich.lootsack.nil?
+			fput "stow #{$rh_thingie}"
+		else
+			result = dothistimeout 4, "put my #{$rh_thingie} in my #{Lich.lootsack}", /^You put|^You can't .+ It's closed!$/
+			if result =~ /^You can't .+ It's closed!$/
+				fput "open my #{Lich.lootsack}"
+				fput "put my #{$rh_thingie} in my #{Lich.lootsack}"
+				$close_lootsack = true
+			end
+		end
+		
+	end
+	if $lh_thingie = checkleft
+		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|bow|arbalest/
+			fput "wear my #{$lh_thingie}"
+		else
+			if Lich.lootsack.nil?
+				fput "stow #{$lh_thingie}"
+			else
+				result = dothistimeout 4, "put my #{$lh_thingie} in my #{Lich.lootsack}", /^You put|^You can't .+ It's closed!$/
+				if result =~ /^You can't .+ It's closed!$/
+					fput "open my #{Lich.lootsack}"
+					fput "put my #{$lh_thingie} in my #{Lich.lootsack}"
+					$close_lootsack = true
+				end
+			end
+		end
+	end
+end
+
+def fill_hands
+	$rh_thingie ||= nil
+	$lh_thingie ||= nil
+	$close_lootsack ||= nil
+	if $rh_thingie
+		if Lich.lootsack.nil?
+			fput "get my #{$rh_thingie}"
+		else
+			fput "get my #{$rh_thingie} from my #{Lich.lootsack}"
+		end
+	end
+	if $lh_thingie
+		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|bow/
+			fput "remove my #{$lh_thingie}"
+		elsif Lich.lootsack.nil?
+			fput "get my #{$lh_thingie}"
+		else
+			fput "get my #{$lh_thingie} from my #{Lich.lootsack}"
+		end
+	end
+	fput "close my #{Lich.lootsack}" if $close_lootsack
+	$rh_thingie, $lh_thingie, $close_lootsack = nil, nil, nil
+end
+
+def dothis (action, success_line)
+	begin
+		clear
+		put action
+		begin
+			line = get
+		end until (line =~ success_line) or (line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$|^Sorry, you may only type ahead 1 command\.$|^You are still stunned\.$/)
+		if line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
+			if $2.to_i > 1
+				sleep ($2.to_i - 0.5)
+			else
+				sleep 0.3
+			end
+		elsif line == 'Sorry, you may only type ahead 1 command.'
+			sleep 1
+		elsif line == 'You are still stunned.'
+			wait_while { stunned? }
+		end
+	end until line =~ success_line
+	return line
+end
+
+def dothistimeout (action, timeout, success_line)
+	end_time = Time.now.to_i + timeout
+	success = false
+	begin
+		clear
+		put action unless action == nil
+		begin
+			break_loop = false
+			sleep 0.01
+			for line in clear
+				if line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
+					if $2.to_i > 1
+						sleep ($2.to_i - 0.5)
+					else
+						sleep 0.3
+					end
+					end_time = Time.now.to_i + timeout
+					break_loop = true
+					break
+				elsif line == 'Sorry, you may only type ahead 1 command.'
+					sleep 1
+					end_time = Time.now.to_i + timeout
+					break_loop = true
+					break
+				elsif line == 'You are still stunned.'
+					wait_while { stunned? }
+					end_time = Time.now.to_i + timeout
+					break_loop = true
+					break
+				elsif line =~ success_line
+					success = true
+					break_loop = true
+					break
+				end
+			end
+			if Time.now.to_i >= end_time
+				return nil
+			end
+		end until break_loop
+	end until success
+	return line
+end
+
+
 begin
 	undef :abort
 	alias :mana :checkmana
@@ -5222,14 +5405,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-
-
-
-
-
-Dir.chdir(File.dirname($PROGRAM_NAME))
-
-$version = '3.77'
+$version = '3.78'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5852,11 +6028,43 @@ client_thread = Thread.new {
 		#
 		$_CLIENT_.gets
 	else
+=begin
+		sf_inv_off_proc = proc { |server_string|
+			if server_string =~ /^<(?:deleteC|clearC|c)ontainer id=["'][0-9]+["'].*?>/
+				server_string = server_string.gsub(/^<(?:deleteContainer|clearContainer|inv).*?>/, '')
+				if server_string.empty?
+					nil
+				else
+					server_string
+				end
+			else
+				server_string
+			end
+		}
+		DownstreamHook.add('sf_inv_off', sf_inv_off_proc)
+		sf_inv_toggle_proc = proc { |client_string|
+			if client_string =~ /^(?:<c>)?_flag Display Inventory Boxes ([01])/
+				if $1 == '0'
+					DownstreamHook.add('sf_inv_off', sf_inv_off_proc)
+				else
+					DownstreamHook.remove('sf_inv_off')
+				end
+				nil
+			else
+				client_string
+			end
+		}
+=end
 		client_string = $_CLIENT_.gets
 		$_SERVER_.write(client_string)
 		client_string = $_CLIENT_.gets
 		$_CLIENTBUFFER_.push(client_string.dup)
 		$_SERVER_.write(client_string)
+=begin
+		client_string = "<c>_flag Display Inventory Boxes 1\r\n"
+		$_CLIENTBUFFER_.push(client_string)
+		$_SERVER_.write(client_string)
+=end
 	end
 
 	begin	
@@ -5884,7 +6092,9 @@ client_thread = Thread.new {
 	end
 	Script.running.each { |script| script.kill }
 	Script.hidden.each { |script| script.kill }
-	sleep 0.5
+	$gtk.do "Gtk.main_quit" rescue()
+	timeout = 0
+	sleep 0.1 while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
 	$_SERVER_.puts('quit') unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
 	$_CLIENT_.close unless $_CLIENT_.closed?
@@ -5897,7 +6107,10 @@ server_thread = Thread.new {
 	begin
 		while $_SERVERSTRING_ = $_SERVER_.gets
 			begin
+				# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
+				$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
 				$_SERVERBUFFER_.push($_SERVERSTRING_)
+				REXML::Document.parse_stream($_SERVERSTRING_, SF_Listener)
 				$_SERVERSTRING_ = DownstreamHook.run($_SERVERSTRING_)
 				next unless $_SERVERSTRING_
 				if $fake_stormfront
@@ -5905,7 +6118,6 @@ server_thread = Thread.new {
 				else
 					$_CLIENT_.write($_SERVERSTRING_)
 				end
-				REXML::Document.parse_stream($_SERVERSTRING_, SF_Listener)
 				Script.new_downstream_xml($_SERVERSTRING_)
 				stripped_server = strip_xml($_SERVERSTRING_)
 				stripped_server.split("\r\n").each { |line|
@@ -5938,7 +6150,9 @@ server_thread = Thread.new {
 	respond("--- Lich's connection to the game has been closed.\r\n\r\n") if $LICH_DEBUG and !$_CLIENT_.closed?
 	Script.running.each { |script| script.kill }
 	Script.hidden.each { |script| script.kill }
-	sleep 0.5
+	$gtk.do "Gtk.main_quit" rescue()
+	timeout = 0
+	sleep 0.1 while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
 	$_CLIENT_.close unless $_CLIENT_.closed?
 	$_SERVER_.puts("<c>quit") unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
@@ -6011,5 +6225,7 @@ end
 
 Script.running.each { |script| script.kill }
 Script.hidden.each { |script| script.kill }
-sleep 0.5
+$gtk.do "Gtk.main_quit" rescue()
+timeout = 0
+sleep 0.1 while ( (Script.running.length > 0) or (Script.hidden.length > 0) ) and ((timeout+=1) < 100)
 exit
