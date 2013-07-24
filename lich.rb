@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.64
+ version 3.66
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -988,6 +988,11 @@ class Script
 			@jump_label = nil
 			@current_label
 		end
+	end
+	def clear
+		to_return = @downstream_buffer.dup
+		@downstream_buffer.clear
+		to_return
 	end
 	def Script.self
 		script = @@running.find { |scr| scr.thread_group == Thread.current.group }
@@ -4822,7 +4827,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.64'
+$version = '3.66'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
