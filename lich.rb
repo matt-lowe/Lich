@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.3'
+$version = '4.1.4'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1148,16 +1148,18 @@ class LichSettings
 		@@settings = Hash.new
 	end
 	def LichSettings.[](setting_name)
-		if (setting_name == 'quick_game_entry') and caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/ }
+		if (setting_name == 'quick_game_entry') and (($SAFE != 0) or caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/})
 			nil
-		elsif (setting_name == 'trusted_scripts' or setting_name == 'untrusted_scripts') and caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/ }
+		elsif (setting_name == 'trusted_scripts' or setting_name == 'untrusted_scripts') and (($SAFE != 0) or (caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/} and Script.self.name !~ /^updater$|^repository$/))
 			@@settings[setting_name].dup
 		else
 			@@settings[setting_name]
 		end
 	end
 	def LichSettings.[]=(setting_name, setting_value)
-		if (setting_name == 'quick_game_entry' or setting_name == 'trusted_scripts' or setting_name == 'untrusted_scripts') and caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/ }
+		if (setting_name == 'quick_game_entry') and (($SAFE != 0) or caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/})
+			nil
+		elsif (setting_name == 'trusted_scripts' or setting_name == 'untrusted_scripts') and (($SAFE != 0) or (caller.any? { |line| line =~ /start_script|start_exec_script|main_with_queue/} and Script.self.name !~ /^updater$|^repository$/))
 			nil
 		else
 			@@settings[setting_name] = setting_value
@@ -6493,26 +6495,6 @@ def do_client(client_string)
 				respond "       #{$clean_lich_char}settings list"
 				respond
 			end
-=begin
-		elsif cmd =~ /^trust\s+(.*)/i
-			script_name = $1
-			if LichSettings['untrusted_scripts'].delete(script_name)
-				LichSettings.save
-				respond "--- Lich: '#{script_name}' is now a trusted script."
-			else
-				respond "--- Lich: '#{script_name}' was not found in the untrusted script list."
-			end
-		elsif cmd =~ /^distrust\s+(.*)/i
-			script_name = $1
-			if File.exists?("#{$script_dir}#{script_name}.lic")
-				LichSettings['untrusted_scripts'] ||= Array.new
-				LichSettings['untrusted_scripts'].push(script_name) unless LichSettings['untrusted_scripts'].include?(script_name)
-				LichSettings.save
-				respond "--- Lich: '#{script_name}' is no longer a trusted script."
-			else
-				respond "--- Lich: could not find script: #{script_name}"
-			end
-=end
 		elsif cmd =~ /^trust\s+(.*)/i
 			script_name = $1
 			if File.exists?("#{$script_dir}#{script_name}.lic")
