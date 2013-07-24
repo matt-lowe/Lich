@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.2'
+$version = '4.1.3'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6928,7 +6928,7 @@ main_thread = Thread.new {
 	LichSettings['serverbuffer_min_size'] ||= 200
 	LichSettings['clientbuffer_max_size'] ||= 100
 	LichSettings['clientbuffer_min_size'] ||= 50
-	LichSettings['trusted_scripts'] ||= [ 'updater', 'infomon', 'lnet', 'narost' ]
+	LichSettings['trusted_scripts'] ||= [ 'updater', 'infomon', 'lnet', 'narost', 'repository' ]
 	LichSettings['quick_game_entry'].delete_if { |key,val| val.length != 5 }
 
 	$clean_lich_char = LichSettings['lich_char']
@@ -6940,11 +6940,14 @@ main_thread = Thread.new {
 		$stderr.puts "info: using quick game entry settings for #{char_name}"
 		msgbox = proc { |msg|
 			if HAVE_GTK
-				window = Gtk::Window.new
-				dialog = Gtk::MessageDialog.new(window, Gtk::Dialog::DESTROY_WITH_PARENT, Gtk::MessageDialog::QUESTION, Gtk::MessageDialog::BUTTONS_CLOSE, msg)
-				dialog.run
-				dialog.destroy
-				window.destroy
+				done = false
+				Gtk.queue {
+					dialog = Gtk::MessageDialog.new(nil, Gtk::Dialog::DESTROY_WITH_PARENT, Gtk::MessageDialog::QUESTION, Gtk::MessageDialog::BUTTONS_CLOSE, msg)
+					dialog.run
+					dialog.destroy
+					done = true
+				}
+				sleep 0.1 until done
 			else
 				$stdout.puts(msg) rescue()
 				$stderr.puts(msg)
