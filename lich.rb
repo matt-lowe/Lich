@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-# version 3.59
+# version 3.60
 #####
 # Copyright (C) 2005-2006 Murray Miron
 # All rights reserved.
@@ -980,8 +980,17 @@ class Script
 		end
 	end
 	def gets
-		sleep 0.05 while @downstream_buffer.length < 1
-		@downstream_buffer.shift
+		if @want_downstream
+			sleep 0.05 while @downstream_buffer.length < 1
+			@downstream_buffer.shift
+		elsif @want_downstream_xml
+			sleep 0.05 while @downstream_xml_buffer.length < 1
+			@downstream_xml_buffer.shift
+		else
+			echo 'this script is set as unique but is waiting for game data...'
+			sleep 2
+			false
+		end
 	end
 	def upstream_gets
 		sleep 0.05 while @upstream_buffer.length < 1
@@ -3874,7 +3883,6 @@ def match(label, string)
 	unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
 	if strings.empty? then echo("Error! 'match' was given no strings to look for!") ; sleep 1 ; return false end
 	unless strings.length == 2
-		if not script.want_downstream then echo("this script is set as unique -- a 'match' will cause it to hang permanently! Aborting") ; sleep 1 ; return false end
 		while line_in = script.gets
 			strings.each { |string|
 				if line_in =~ /#{string}/ then return $~.to_s end
@@ -3893,7 +3901,6 @@ end
 def matchtimeout(secs, *strings)
 	unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
 	unless (secs.class == Float || secs.class == Fixnum) then echo('matchtimeout error! You appear to have given it a string, not a #! Syntax:  matchtimeout(30, "You stand up")') ; return false end
-	unless script.want_downstream then echo("this script is set as unique -- a 'match' will cause it to hang permanently! Aborting") ; sleep 1 ; return false end
 	match_string = false
 	strings.flatten!
 	if strings.empty? then echo("matchtimeout without any strings to wait for!") ; sleep 1 ; return false end
@@ -3921,7 +3928,6 @@ def matchbefore(*strings)
   strings.flatten!
   unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
   if strings.empty? then echo("matchbefore without any strings to wait for!") ; return false end
-  unless script.want_downstream then echo("this script is set as unique -- a 'match' will cause it to hang permanently! Aborting") ; sleep 1 ; return false end
   regexpstr = strings.join('|')
   loop { if (line_in = script.gets) =~ /#{regexpstr}/ then return $`.to_s end }
 end
@@ -3930,7 +3936,6 @@ def matchafter(*strings)
   strings.flatten!
   unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
   if strings.empty? then echo("matchafter without any strings to wait for!") ; return end
-  unless script.want_downstream then echo("this script is set as unique -- a 'match' will cause it to hang permanently! Aborting") ; sleep 1 ; return false end
   regexpstr = strings.join('|')
   loop { if (line_in = script.gets) =~ /#{regexpstr}/ then return $'.to_s end }
 end
@@ -3938,8 +3943,7 @@ end
 def matchboth(*strings)
   strings.flatten!
   unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
-  if strings.empty? then echo("matchafter without any strings to wait for!") ; return end
-  unless script.want_downstream then echo("this script is set as unique -- a 'match' will cause it to hang permanently! Aborting") ; sleep 1 ; return false end
+  if strings.empty? then echo("matchboth without any strings to wait for!") ; return end
   regexpstr = strings.join('|')
   loop { if (line_in = script.gets) =~ /#{regexpstr}/ then break end }
   return [ $`.to_s, $'.to_s ]
@@ -3971,11 +3975,6 @@ end
 def waitforre(regexp)
 	unless script = Script.self then respond('--- waitforre: Unable to identify calling script.'); return false; end
 	unless regexp.class == Regexp then echo("Script error! You have given 'waitforre' something to wait for, but it isn't a Regular Expression! Use 'waitfor' if you want to wait for a string."); sleep 1; return nil end
-	unless script.want_downstream
-		echo 'waitfor: this script is not receiving game data (toggle_unique)... aborting.'
-		sleep 1
-		return false
-	end
 	regobj = regexp.match(script.gets) until regobj
 end
 
@@ -3990,11 +3989,6 @@ def waitfor(*strings)
 		echo 'waitfor: no string to wait for'
 		return false
 	end
-	unless script.want_downstream
-		echo 'waitfor: this script is not receiving game data (toggle_unique)... aborting.'
-		sleep 1
-		return false
-	end
 	regexpstr = strings.join('|')
 	while true
 		line_in = script.gets
@@ -4004,11 +3998,6 @@ end
 
 def wait
 	unless script = Script.self then respond('--- wait: unable to identify calling script.'); return false; end
-	unless script.want_downstream
-		echo 'wait: this script is not receiving game data (toggle_unique)... aborting.'
-		sleep 1
-		return false
-	end
 	script.clear
 	return script.gets
 end
@@ -4062,12 +4051,6 @@ def fput(message, *waitingfor)
 	waitingfor.flatten!
 	clear
 	put(message)
-
-	unless script.want_downstream
-		echo 'fput: this script is not receiving game data (toggle_unique)... aborting.'
-		sleep 1
-		return false
-	end
 
 	while string = get
 		if string =~ /(?:\.\.\.wait |Wait )[0-9]+/
@@ -4142,11 +4125,6 @@ def matchfindexact(*strings)
 	looking = Array.new
 	strings.each { |str| looking.push(str.gsub('?', '(\b.+\b)')) }
 	if looking.empty? then echo("matchfind without any strings to wait for!") ; return false end
-	unless script.want_downstream
-		echo 'waitfor: this script is not receiving game data (toggle_unique)... aborting.'
-		sleep 1
-		return false
-	end
 	regexpstr = looking.join('|')
 	while line_in = script.gets
 		if gotit = line_in.slice(/#{regexpstr}/)
@@ -4783,7 +4761,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.59'
+$version = '3.60'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
