@@ -2938,70 +2938,76 @@ class Map
 		return path
 	end
 	def Map.dijkstra(source, destination=nil)
-		Map.load if @@list.empty?
-		source = source.to_i
-		visited = Array.new
-		shortest_distances = Array.new
-		previous = Array.new
-		pq = [ source ]
-		pq_push = proc { |val|
-			for i in 0...pq.size
-				if shortest_distances[val] <= shortest_distances[pq[i]]
-					pq.insert(i, val)
-					break
+		begin
+			Map.load if @@list.empty?
+			source = source.to_i
+			visited = Array.new
+			shortest_distances = Array.new
+			previous = Array.new
+			pq = [ source ]
+			pq_push = proc { |val|
+				for i in 0...pq.size
+					if shortest_distances[val] <= shortest_distances[pq[i]]
+						pq.insert(i, val)
+						break
+					end
+				end
+				pq.push(val) if i.nil? or (i == pq.size-1)
+			}
+			visited[source] = true
+			shortest_distances[source] = 0
+			if destination.nil?
+				until pq.size == 0
+					v = pq.shift
+					visited[v] = true
+					@@list[v].wayto.keys.each { |adj_room|
+						adj_room_i = adj_room.to_i
+						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
+							shortest_distances[adj_room_i] = nd
+							previous[adj_room_i] = v
+							pq_push.call(adj_room_i)
+						end
+					}
+				end
+			elsif destination.class == Fixnum
+				until pq.size == 0
+					v = pq.shift
+					break if v == destination
+					visited[v] = true
+					@@list[v].wayto.keys.each { |adj_room|
+						adj_room_i = adj_room.to_i
+						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
+							shortest_distances[adj_room_i] = nd
+							previous[adj_room_i] = v
+							pq_push.call(adj_room_i)
+						end
+					}
+				end
+			elsif destination.class == Array
+				dest_list = destination.collect { |dest| dest.to_i }
+				until pq.size == 0
+					v = pq.shift
+					break if dest_list.include?(v) and (shortest_distances[v] < 20)
+					visited[v] = true
+					@@list[v].wayto.keys.each { |adj_room|
+						adj_room_i = adj_room.to_i
+						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
+							shortest_distances[adj_room_i] = nd
+							previous[adj_room_i] = v
+							pq_push.call(adj_room_i)
+						end
+					}
 				end
 			end
-			pq.push(val) if i.nil? or (i == pq.size-1)
-		}
-		visited[source] = true
-		shortest_distances[source] = 0
-		if destination.nil?
-			until pq.size == 0
-				v = pq.shift
-				visited[v] = true
-				@@list[v].wayto.keys.each { |adj_room|
-					adj_room_i = adj_room.to_i
-					nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
-					if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-						shortest_distances[adj_room_i] = nd
-						previous[adj_room_i] = v
-						pq_push.call(adj_room_i)
-					end
-				}
-			end
-		elsif destination.class == Fixnum
-			until pq.size == 0
-				v = pq.shift
-				break if v == destination
-				visited[v] = true
-				@@list[v].wayto.keys.each { |adj_room|
-					adj_room_i = adj_room.to_i
-					nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
-					if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-						shortest_distances[adj_room_i] = nd
-						previous[adj_room_i] = v
-						pq_push.call(adj_room_i)
-					end
-				}
-			end
-		elsif destination.class == Array
-			dest_list = destination.collect { |dest| dest.to_i }
-			until pq.size == 0
-				v = pq.shift
-				break if dest_list.include?(v) and (shortest_distances[v] < 20)
-				visited[v] = true
-				@@list[v].wayto.keys.each { |adj_room|
-					adj_room_i = adj_room.to_i
-					nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
-					if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-						shortest_distances[adj_room_i] = nd
-						previous[adj_room_i] = v
-						pq_push.call(adj_room_i)
-					end
-				}
-			end
+			return previous, shortest_distances
+		rescue
+			echo "Map.dijkstra: error: #{$!}"
+			respond $!.backtrace
+			nil
 		end
-		return previous, shortest_distances
 	end
 	def outside?
 		@paths =~ /Obvious paths:/
@@ -5844,7 +5850,7 @@ end
 
 
 
-$version = '4.0.0'
+$version = '4.0.1'
 	
 if RUBY_PLATFORM =~ /win|mingw/i
 	wine_dir = wine_bin = nil
@@ -6714,9 +6720,6 @@ main_thread = Thread.new {
 			serverbuffer_frame = Gtk::Frame.new('Server Buffer')
 			serverbuffer_frame.add(serverbuffer_box)
 
-
-
-
 			cache_clientbuffer_button = Gtk::CheckButton.new('Cache to disk')
 			cache_clientbuffer_button.active = LichSettings['cache_clientbuffer']
 
@@ -6958,7 +6961,8 @@ main_thread = Thread.new {
 			end
 		end
 		File.open("#{$temp_dir}lich.sal", "w") { |f| f.puts mod_data }
-		launcher_cmd = launcher_cmd.sub('%1', "\"#{$lich_dir}lich.sal\"")
+		launcher_cmd = launcher_cmd.sub('%1', "#{$temp_dir}lich.sal")
+		launcher_cmd = launcher_cmd.tr('/', "\\") if RUBY_PLATFORM =~ /win|mingw/i
 		launcher_cmd = wine_bin + ' ' + launcher_cmd if wine_bin
 		$stderr.puts 'launcher_cmd: ' + launcher_cmd
 		Thread.new { system(launcher_cmd) }
@@ -7192,15 +7196,10 @@ main_thread = Thread.new {
 			#
 			# ask the server for both wound and scar information
 			#
-			client_string = "<c>_injury 2\r\n"
-			$_CLIENTBUFFER_.push(client_string)
-			$_SERVER_.write(client_string)
-			client_string = "<c>_flag Display Inventory Boxes 1\r\n"
-			$_CLIENTBUFFER_.push(client_string)
-			$_SERVER_.write(client_string)
-			client_string = "<c>_flag Display Dialog Boxes 0\r\n"
-			$_CLIENTBUFFER_.push(client_string)
-			$_SERVER_.write(client_string)
+			for client_string in [ "<c>_injury 2\r\n", "<c>_flag Display Inventory Boxes 1\r\n", "<c>_flag Display Dialog Boxes 0\r\n" ]
+				$_CLIENTBUFFER_.push(client_string)
+				$_SERVER_.write(client_string)
+			end
 			#
 			# client wants to send "GOOD", xml server won't recognize it
 			#
