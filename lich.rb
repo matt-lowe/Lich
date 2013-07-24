@@ -4023,6 +4023,14 @@ def checkmind(string=nil)
 	end
 end
 
+def percentmind(num=nil)
+	if num.nil?
+		XMLData.mind_value
+	else 
+		XMLData.mind_value >= num.to_i
+	end
+end
+
 def checkfried
 	if XMLData.mind_text =~ /fried|saturated/
 		true
@@ -5655,7 +5663,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.98'
+$version = '3.99'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
