@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.14'
+$version = '4.0.15'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2222,7 +2222,7 @@ class Spellsong
 		if Time.now - @@renewed > Spellsong.duration
 			@@renewed = Time.now
 		end
-		(Spellsong.duration - (Time.now - @@renewed)) / 60.00
+		(Spellsong.duration - (Time.now - @@renewed)) / "60.0".to_f
 	end
 	def Spellsong.serialize
 		Spellsong.timeleft
@@ -2236,7 +2236,7 @@ class Spellsong
 				break if n >= 4
 			end
 			unless n >= 4
-				@@renewed = Time.at(Time.now.to_f - (Spellsong.duration - old * 60.00))
+				@@renewed = Time.at(Time.now.to_f - (Spellsong.duration - old * "60.00".to_f))
 			else
 				@@renewed = Time.now
 			end
@@ -2507,10 +2507,10 @@ end
 class Spell
 	@@list ||= Array.new
 	@@cast_lock = false
-	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :renewCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type
+	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :renewCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type, :command
 	attr_accessor :stance, :channel
-	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
-		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@renewCost,@stacks,@selfonly,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
+	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
+		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@renewCost,@stacks,@selfonly,@command,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
 		if num.to_i.nonzero? then @num = num.to_i else @num = num end
 		@timestamp = Time.now
 		@active = false
@@ -2527,8 +2527,8 @@ class Spell
 			File.open(filename) { |file|
 				file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
 					spell = Hash.new
-					spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-					Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
+					spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+					Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
 				}
 			}
 			return true
@@ -2582,7 +2582,7 @@ class Spell
 		if @duration.to_s == "Spellsong.timeleft"
 			@timeleft = Spellsong.timeleft
 		else
-			@timeleft = @timeleft - ((Time.now - @timestamp) / 60.00)
+			@timeleft = @timeleft - ((Time.now - @timestamp) / "60.00".to_f)
 			if @timeleft.to_f <= 0
 				self.putdown
 				return 0.0
@@ -2652,7 +2652,7 @@ class Spell
 		if @duration.to_s == "Spellsong.timeleft"
 			@timeleft = Spellsong.timeleft
 		else
-			@timeleft = @timeleft - ((Time.now - @timestamp) / 60.00)
+			@timeleft = @timeleft - ((Time.now - @timestamp) / "60.00".to_f)
 			if @timeleft.to_f <= 0
 				self.putdown
 				return 0.0
@@ -2692,7 +2692,8 @@ class Spell
 		@manaCost
 	end
 	def affordable?
-		 mana(eval(@manaCost).to_i) and checkspirit(eval(@spiritCost).to_i + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(eval(@staminaCost).to_i)
+		return false if Spell[9699].active? and (eval(@staminaCost).to_i > 0)
+		mana(eval(@manaCost).to_i) and checkspirit(eval(@spiritCost).to_i + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(eval(@staminaCost).to_i)
 	end
 	def cast(target=nil)
 		if @type.nil?
@@ -2713,10 +2714,11 @@ class Spell
 		end
 		wait_while { @@cast_lock and (locking_script = (Script.hidden + Script.running).find { |s| s.name == @@cast_lock }) and not locking_script.paused and (locking_script.name != Script.self.name) }
 		@@cast_lock = Script.self.name
-		if @name =~ /^Sign of |^Sigil of |^Symbol of/
+		# fixme: check mana/stamina/spirit again
+		if @command
 			waitrt?
 			waitcastrt?
-			fput @name.downcase
+			fput @command
 			@@cast_lock = false
 		else
 			if @channel
@@ -6915,7 +6917,7 @@ main_thread = Thread.new {
 					if login_server and not login_server.closed?
 						login_server.puts "F\t#{selected_game_code.upcase}\n"
 						response = login_server.gets
-						if response =~ /NORMAL|PREMIUM/
+						if response =~ /NORMAL|PREMIUM|TRIAL/
 							login_server.puts "G\t#{selected_game_code.upcase}\n"
 							login_server.gets
 							login_server.puts "P\t#{selected_game_code.upcase}\n"
@@ -7669,7 +7671,7 @@ main_thread = Thread.new {
 			while $_SERVERSTRING_ = $_SERVER_.gets
 				begin
 					# The Rift, Scatter is broken...
-					# $_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
+					$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
