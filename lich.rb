@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.20'
+$version = '4.0.21'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -5349,12 +5349,12 @@ def reget(*lines)
 		history.gsub!('&lt;', '<')
 		history = history.split("\n").delete_if { |line| line.nil? or line.empty? or line =~ /^[\r\n\s\t]*$/ }
 	end
-	if lines.first.kind_of? Numeric or lines.first.to_i.nonzero?
+	if lines.first.kind_of?(Numeric) or lines.first.to_i.nonzero?
 		history = history[-([lines.shift.to_i,history.length].min)..-1]
 	end
 	unless lines.empty? or lines.nil?
 		regex = /#{lines.join('|')}/i
-		history = history[-num..-1].find_all { |line| line =~ regex }
+		history = history.find_all { |line| line =~ regex }
 	end
 	if history.empty?
 		nil
@@ -8123,7 +8123,6 @@ main_thread = Thread.new {
 }
 
 if HAVE_GTK
-	$SAFE = 3
 	Gtk.main_with_queue(100)
 else
 	main_thread.join
