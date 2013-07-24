@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.72
+ version 3.73
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -59,6 +59,7 @@ rescue
 end
 begin
 	require 'gtk2/base.rb'
+#	include Gtk
 	require 'monitor'
 	#require 'pango'
 	HAVE_GTK = true
@@ -69,6 +70,112 @@ rescue
 end
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
+
+class NilClass
+	def dup
+		nil
+	end
+	def method_missing(*args)
+		nil
+	end
+	def split(*val)
+		Array.new
+	end
+	def to_s
+		""
+	end
+	def strip
+		""
+	end
+	def +(val)
+		val
+	end
+	def closed?
+		true
+	end
+end
+
+class Array
+	def method_missing(*usersave)
+		self
+	end
+end
+
+class LimitedArray < Array
+	attr_accessor :max_size
+	def initialize(size=0, obj=nil)
+		@max_size = 200
+		super
+	end
+	def push(line)
+		self.shift while self.length >= @max_size
+		super
+	end
+	def shove(line)
+		push(line)
+	end
+end
+
+class CachedArray < Array
+	attr_accessor :min_size, :max_size
+	def initialize(size=0, obj=nil)
+		@min_size = 200
+		@max_size = 250
+		num = Time.now.to_i-1
+		@filename = "cache-#{num}.txt"
+		@filename = "cache-#{num+=1}.txt" while File.exists?(@filename)
+		File.open(@filename, 'w') { |f| f.write '' }
+		super
+	end
+	def push(line)
+		if self.length >= @max_size
+			file = File.open(@filename, 'a')
+			file.puts(self.shift) while (self.length >= @min_size)
+			file.close
+		end
+		super
+	end
+	def history
+		file = File.open(@filename)
+		h = file.readlines
+		file.close
+		return h
+	end
+end
+
+module StringFormatting
+	def as_time
+		sprintf("%d:%02d:%02d", (self / 60).truncate, self.truncate % 60, ((self % 1) * 60).truncate)
+	end
+end
+
+class Numeric
+	include StringFormatting
+end
+
+class TrueClass
+	def method_missing(*usersave)
+		true
+	end
+end
+
+class FalseClass
+	def method_missing(*usersave)
+		nil
+	end
+end
+
+class String
+	def method_missing(*usersave)
+		""
+	end
+	def silent
+		false
+	end
+	def to_s
+		self.dup
+	end
+end
 
 if HAVE_GTK
 	if RUBY_PLATFORM =~ /win/
@@ -122,7 +229,12 @@ if HAVE_GTK
 		else
 			class LichDRb
 				def do(code_string)
-					eval(code_string)
+					begin
+						eval(code_string)
+					rescue
+						$stderr.puts $!
+						$stderr.puts $!.backtrace
+					end
 				end
 			end
 			DRb.start_service(nil, LichDRb.new)
@@ -139,13 +251,19 @@ if HAVE_GTK
 	else
 		class LichDRb
 			def do(code_string)
-				eval(code_string)
+				begin
+					eval(code_string)
+				rescue
+					$stderr.puts $!
+					$stderr.puts $!.backtrace
+				end
 			end
 		end
 		DRb.start_service(nil, LichDRb.new)
 		$lich_drb_uri = DRb.uri
-	
+
 		$gtk_pid = Process.fork {
+			$stderr = File.open('gtk-error.log','a')
 			Gtk.init
 			Gtk.init_add {
 				DRb.start_service
@@ -434,112 +552,6 @@ ICONMAP = {
 	'IconJOINED' => 'P',
 	'IconBLEEDING' => 'O',
 }
-
-class NilClass
-	def dup
-		nil
-	end
-	def method_missing(*args)
-		nil
-	end
-	def split(*val)
-		Array.new
-	end
-	def to_s
-		""
-	end
-	def strip
-		""
-	end
-	def +(val)
-		val
-	end
-	def closed?
-		true
-	end
-end
-
-class Array
-	def method_missing(*usersave)
-		self
-	end
-end
-
-class LimitedArray < Array
-	attr_accessor :max_size
-	def initialize(size=0, obj=nil)
-		@max_size = 200
-		super
-	end
-	def push(line)
-		self.shift while self.length >= @max_size
-		super
-	end
-	def shove(line)
-		push(line)
-	end
-end
-
-class CachedArray < Array
-	attr_accessor :min_size, :max_size
-	def initialize(size=0, obj=nil)
-		@min_size = 200
-		@max_size = 250
-		num = Time.now.to_i-1
-		@filename = "cache-#{num}.txt"
-		@filename = "cache-#{num+=1}.txt" while File.exists?(@filename)
-		File.open(@filename, 'w') { |f| f.write '' }
-		super
-	end
-	def push(line)
-		if self.length >= @max_size
-			file = File.open(@filename, 'a')
-			file.puts(self.shift) while (self.length >= @min_size)
-			file.close
-		end
-		super
-	end
-	def history
-		file = File.open(@filename)
-		h = file.readlines
-		file.close
-		return h
-	end
-end
-
-module StringFormatting
-	def as_time
-		sprintf("%d:%02d:%02d", (self / 60).truncate, self.truncate % 60, ((self % 1) * 60).truncate)
-	end
-end
-
-class Numeric
-	include StringFormatting
-end
-
-class TrueClass
-	def method_missing(*usersave)
-		true
-	end
-end
-
-class FalseClass
-	def method_missing(*usersave)
-		nil
-	end
-end
-
-class String
-	def method_missing(*usersave)
-		""
-	end
-	def silent
-		false
-	end
-	def to_s
-		self.dup
-	end
-end
 
 def make_wound_gsl
 	$wound_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",$injuries['nsys']['wound'],$injuries['leftEye']['wound'],$injuries['rightEye']['wound'],$injuries['back']['wound'],$injuries['abdomen']['wound'],$injuries['chest']['wound'],$injuries['leftHand']['wound'],$injuries['rightHand']['wound'],$injuries['leftLeg']['wound'],$injuries['rightLeg']['wound'],$injuries['leftArm']['wound'],$injuries['rightArm']['wound'],$injuries['neck']['wound'],$injuries['head']['wound'])
@@ -2416,7 +2428,7 @@ class Map
 		room = @@list.find { |room| room.title.include?($room_title) and room.desc.include?($room_description.strip) and room.paths.include?($room_exits_string.strip) }
 		unless room
 			desc_regex = /#{Regexp.escape($room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-			@@list.find { |room| room.title.include?($room_title) and room.paths.include?($room_exits_string.strip) and room.desc.find { |desc| desc =~ desc_regex } }
+			room = @@list.find { |room| room.title.include?($room_title) and room.paths.include?($room_exits_string.strip) and room.desc.find { |desc| desc =~ desc_regex } }
 		end
 		return room
 	end
@@ -3042,7 +3054,7 @@ def waitrt
 		sleep 0.1
 	end
 	if $server_time >= $roundtime_end then return end
-	sleep(($roundtime_end.to_f - (Time.now.to_f - $server_time_offset.to_f) + 0.6).abs)
+	sleep(($roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f + 0.6).abs)
 end
 
 def waitrt?
@@ -3054,11 +3066,19 @@ def waitcastrt
 		sleep 0.1
 	end
 	if $server_time >= $cast_roundtime_end then return end
-	sleep(($cast_roundtime_end.to_f - (Time.now.to_f - $server_time_offset.to_f) + 0.6).abs)
+	sleep(($cast_roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f + 0.6).abs)
 end
 
 def waitcastrt?
 	if $cast_roundtime_end > $server_time then waitcastrt end
+end
+
+def checkrt
+	[$roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f, 0].max
+end
+
+def checkcastrt
+	[$cast_roundtime_end.to_f - Time.now.to_f + $server_time_offset.to_f, 0].max
 end
 
 def maxhealth
@@ -5108,7 +5128,7 @@ sock_keepalive_proc = proc { |sock|
 
 Dir.chdir(File.dirname($PROGRAM_NAME))
 
-$version = '3.72'
+$version = '3.73'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5389,7 +5409,7 @@ end
 #
 Dir.entries($lich_dir)[2..-1].each { |filename|
 	if filename =~ /^cache-([0-9]+).txt$/
-		if $1.to_i < Time.now.to_i + 86400
+		if $1.to_i + 86400 < Time.now.to_i
 			File.delete(filename)
 		end
 	end
@@ -5737,6 +5757,7 @@ client_thread = Thread.new {
 
 	begin	
 		while client_string = $_CLIENT_.gets
+			client_string = '<c>' + client_string if $fake_stormfront
 			begin
 				$_IDLETIMESTAMP_ = Time.now
 				client_string = UpstreamHook.run(client_string)
