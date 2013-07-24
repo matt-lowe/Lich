@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.86
+ version 3.87
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -1517,7 +1517,7 @@ class Char
 	private_class_method :new
 	def Char.init(name)
 		@@name = name.strip if @@name == nil or @@name.strip.empty?
-		start_script('favs.lic', [ 'load' ]) if File.exists?($script_dir + 'favs.lic')
+		start_script('favs', [ 'load' ]) if File.exists?($script_dir + 'favs.lic')
 	end
 	def Char.name
 		if (!@@name or @@name.strip.empty?)
@@ -3000,7 +3000,7 @@ def start_script(script_name,cli_vars=[],force=false)
 	if File.exists?($script_dir + script_name + '.lic')
 		file_name = $script_dir + script_name + '.lic'
 	else
-		file_list = Dir.entries($script_dir)[2..-1]
+		file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }
 		unless file_name = file_list.find { |val| val =~ /^#{script_name}\.(?:lic|rbw?)(?:\.gz|\.Z)?$/i } or 
 		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?i:lic|rbw?)(?:\.gz|\.Z)?$/ } or 
 		       file_name = file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?:lic|rbw?)(?:\.gz|\.Z)?$/i } or 
@@ -5423,7 +5423,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.86'
+$version = '3.87'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5702,7 +5702,7 @@ end
 #
 # delete cache files that are more than 24 hours old
 #
-Dir.entries($lich_dir)[2..-1].each { |filename|
+Dir.entries($lich_dir).delete_if { |fn| (fn == '.') or (fn == '..') }.each { |filename|
 	if filename =~ /^cache-([0-9]+).txt$/
 		if $1.to_i + 86400 < Time.now.to_i
 			File.delete(filename)
@@ -5917,7 +5917,7 @@ else
 	unless File.exists?("#{$lich_dir}nosge.txt") or (launch_dir.to_s =~ /lich/i) or not sge_dir
 		sge_file = File.join(sge_dir, 'SGE.exe')
 		sge_file = wine_dir + '/drive_c/' + sge_file[3..-1].split('\\').join('/') if wine_dir
-		if File.exists(sge_file)
+		if File.exists?(sge_file)
 			sge_file = wine_bin + ' ' + sge_file if wine_bin
 			system(sge_file)
 		end
