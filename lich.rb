@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.61
+ version 3.62
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -34,6 +34,11 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
+if $version
+	# This file is in the repository as lich-update.lic.  Someone will probably try to run it from within Lich.
+	echo "Don't do that."
+	exit
+end
 
 require 'time'
 require 'socket'
@@ -245,6 +250,19 @@ SHORTDIR = {
 	'south' => 's',
 	'west' => 'w',
 }
+LONGDIR = {
+	'out' => 'out',
+	'ne' => 'northeast',
+	'se' => 'southeast',
+	'sw' => 'southwest',
+	'nw' => 'northwest',
+	'up' => 'up',
+	'down' => 'down',
+	'n' => 'north',
+	'e' => 'east',
+	's' => 'south',
+	'w' => 'west',
+}
 MINDMAP = {
 	'clear as a bell' => 'A',
 	'fresh and clear' => 'B',
@@ -361,6 +379,7 @@ class SF_XML
 	@@player_dead ||= nil
 	@@player_stunned ||= nil
 	@@fam_mode ||= String.new
+	@@room_window_disabled ||= false
 
 	def tag_start(name, attributes)
 		begin
@@ -458,36 +477,33 @@ class SF_XML
 =begin
 				# fixme: This seems to work, but sends health too often, not just on the initial poison or disease
 				if (attributes['id'] == 'IconPOISONED' or attributes['id'] == 'IconDISEASED') and (attributes['visible'] == 'y')
-					Thread.new {
-						action = proc { |server_string|
-							if $poison_tracker_active
-								if server_string =~ /<output class=['"]['"]\/>/
-									$poison_tracker_active = false
-									DownstreamHook.remove('poison')
-									return server_string
-								elsif server_string =~ /^Poisoned!  Taking ([0-9]+) damage per round.  Dissipating ([0-9]+) per round\./
-									$poisons.push([$1,$2,Time.now.to_i])
-									return nil
-								elsif server_string =~ /^Diseased!  Taking ([0-9]+) damage per round.  Dissipating ([0-9]+) per round\./
-									$diseases.push([$1,$2,Time.now.to_i])
-									return nil
-								else
-									return nil
-								end
-							else
-								if server_string =~ /<output class=['"]mono['"]\/>/
-									$poison_tracker_active = true
-									$poisons = Array.new
-									$diseases = Array.new
-								end
+					action = proc { |server_string|
+						if $poison_tracker_active
+							if server_string =~ /<output class=['"]['"]\/>/
+								$poison_tracker_active = false
+								DownstreamHook.remove('poison')
 								return server_string
+							elsif server_string =~ /^Poisoned!  Taking ([0-9]+) damage per round.  Dissipating ([0-9]+) per round\./
+								$poisons.push([$1,$2,Time.now.to_i])
+								return nil
+							elsif server_string =~ /^Diseased!  Taking ([0-9]+) damage per round.  Dissipating ([0-9]+) per round\./
+								$diseases.push([$1,$2,Time.now.to_i])
+								return nil
+							else
+								return nil
 							end
-						}
-						$poison_tracker_active = false
-						DownstreamHook.add('poison', action)
-						$_SERVER_.puts "<c>health\n"
-						wait_until { $poison_tracker == 'done' }
+						else
+							if server_string =~ /<output class=['"]mono['"]\/>/
+								$poison_tracker_active = true
+								$poisons = Array.new
+								$diseases = Array.new
+							end
+							return server_string
+						end
 					}
+					$poison_tracker_active = false
+					DownstreamHook.add('poison', action)
+					$_SERVER_.puts "<c>health\n"
 				end
 =end
 				if $send_fake_tags
@@ -538,8 +554,16 @@ class SF_XML
 				$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', $max_health, $health, $max_spirit, $spirit, $max_mana, $mana, make_wound_gsl, make_scar_gsl)}\r\n" if $send_fake_tags
 			elsif (name == 'streamWindow') and (attributes['id'] == 'main') and attributes['subtitle']
 				$room_title = '[' + attributes['subtitle'][3..-1] + ']'
-			elsif (name == 'compass') and (@@current_stream == 'familiar')
-				@@fam_mode = String.new
+			elsif name == 'compass'
+				if @@current_stream == 'familiar'
+					@@fam_mode = String.new
+				elsif @@room_window_disabled
+					$room_exits = Array.new
+					#$room_exits_string = String.new
+				end
+			elsif @@room_window_disabled and (name == 'dir') and @@active_tags.include?('compass')
+				$room_exits.push(LONGDIR[attributes['value']])
+				#$room_exits_string.concat(LONGDIR[attributes['value']] + ', ')
 			elsif name == 'radio'
 				if attributes['id'] == 'injrRad'
 					$injury_mode = 0 if attributes['value'] == '1'
@@ -631,9 +655,15 @@ class SF_XML
 						end
 					end
 				elsif @@active_ids.include?('room desc')
-					$room_description.concat(text)
-					if @@active_tags.include?('a')
-						GameObj.new_room_desc(@@obj_exist, @@obj_noun, text)
+					if text == '[Room window disabled at this location.]'
+						#respond '[Room window disabled at this location.]'
+						@@room_window_disabled = true
+					else
+						@@room_window_disabled = false
+						$room_description.concat(text)
+						if @@active_tags.include?('a')
+							GameObj.new_room_desc(@@obj_exist, @@obj_noun, text)
+						end
 					end
 				elsif @@active_ids.include?('room exits')
 					$room_exits_string.concat(text)
@@ -650,7 +680,7 @@ class SF_XML
 			elsif (@@current_stream == 'inv') and @@active_tags.include?('a')
 				GameObj.new_inv(@@obj_exist, @@obj_noun, text, nil)
 			elsif @@current_stream == 'familiar'
-				# fixme: familiar room tracking does not (can not?) auto update, status of pcs and npcs isn't tracked at all, titles or pcs aren't tracked
+				# fixme: familiar room tracking does not (can not?) auto update, status of pcs and npcs isn't tracked at all, titles of pcs aren't tracked
 				if @@current_style == 'roomName'
 					$familiar_room_title = text
 					$familiar_room_description = String.new
@@ -686,6 +716,15 @@ class SF_XML
 				elsif (@@fam_mode == 'paths') and @@active_tags.include?('a')
 					$familiar_room_exits.push(text)
 				end
+			elsif @@room_window_disabled
+				if @@current_style == 'roomDesc'
+					$room_description.concat(text)
+					if @@active_tags.include?('a')
+						GameObj.new_room_desc(@@obj_exist, @@obj_noun, text)
+					end
+				elsif text =~ /^Obvious (?:paths|exits): $/
+					$room_exits_string = text.strip
+				end
 			end
 		rescue
 			respond "--- Lich: error in parser_thread (#{$!})"
@@ -695,7 +734,15 @@ class SF_XML
 	end
 	def tag_end(name)
 		begin
-			if $send_fake_tags and @@active_ids.last == 'room exits'
+			if $send_fake_tags and (@@active_ids.last == 'room exits')
+				gsl_exits = String.new
+				$room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
+				$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
+				gsl_exits = nil
+			elsif @@room_window_disabled and (name == 'compass')
+				@@room_window_disabled = false
+				$room_description = $room_description.strip
+				$room_exits_string = $room_exits_string + ' ' + $room_exits.join(', ')
 				gsl_exits = String.new
 				$room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
 				$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
@@ -2249,6 +2296,9 @@ class Map
 		cdescre = /#{Regexp.escape(checkroomdescrip.strip.chop).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
 		@@list.find { |room| room.desc =~ cdescre and room.title == ctitle and $room_exits_string.chomp == room.paths }
 	end
+	def Map.current_or_new
+		Map.current || Map.new(Map.get_free_id, $room_title, $room_description, $room_exits_string)
+	end
 	def Map.reload
 		@@list.clear
 		Map.load
@@ -2436,6 +2486,7 @@ class Map
 		inspect
 	end
 	def Map.findpath(source, destination)
+		Map.load if @@list.empty?
 		previous, shortest_distances = Map.dijkstra_quick(source, destination)
 		return nil unless previous[destination]
 		path = [ destination ]
@@ -2445,6 +2496,7 @@ class Map
 		return path
 	end
 	def Map.dijkstra(source)
+		Map.load if @@list.empty?
 		n = @@list.length
 		source = source.to_i
 
@@ -2475,6 +2527,7 @@ class Map
 		return previous, shortest_distances
 	end
 	def Map.dijkstra_quick(source, destination)
+		Map.load if @@list.empty?
 		n = @@list.length
 		source = source.to_i
 		destination = destination.to_i
@@ -2699,58 +2752,52 @@ def start_script(script_name,cli_vars=[],force=false)
 	end
 	begin
 		new_script = Script.new(file_name, cli_vars)
-		script_thread = Thread.new {
-			Thread.stop
-			script = Script.self
-			begin
-				while Script.self.current_label
-					eval(script.labels[script.current_label].to_s)
-					Script.self.get_next_label
-				end
-				
-				Script.self.kill
-			rescue SystemExit
-				Script.self.kill
-			rescue SyntaxError
-				respond("--- SyntaxError: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				respond("--- Lich: cannot execute #{Script.self.name}, aborting.")
-				Script.self.kill
-			rescue ScriptError
-				respond("--- ScriptError: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				Script.self.kill
-			rescue
-				respond("--- Error: #{Script.self.name}: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				Script.self.kill
-			rescue NoMemoryError
-				respond("--- NoMemoryError: #{$!}")
-				respond($!.backtrace[0..2]) if $LICH_DEBUG
-				Script.self.kill
-			rescue Exception
-				if $! == JUMP
-					retry if Script.self.get_next_label != JUMP_ERROR
-					respond("--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!")
-					respond($!.backtrace[0..2]) if $LICH_DEBUG
-					Script.self.kill
-				else
-					respond("--- Exception: #{$!}")
-					respond($!.backtrace[0..2]) if $LICH_DEBUG
-					Script.self.kill
-				end
-			end
-			script = nil
-		}
-		new_script.add_thread(script_thread)
-		script_thread.priority = 1
-		respond("--- Lich: #{new_script.name} active.") unless new_script.quiet_exit
-		unless script_thread.wakeup
-			respond 'Oh fuck!'
-		end
 	rescue
 		respond("--- Lich: error reading script file: #{$!}")
 	end
+	Thread.new {
+		new_script.add_thread(Thread.current)
+		script = Script.self
+		Thread.current.priority = 1
+		respond("--- Lich: #{script.name} active.") unless script.quiet_exit
+		begin
+			while Script.self.current_label
+				eval(Script.self.labels[Script.self.current_label].to_s)
+				Script.self.get_next_label
+			end
+			Script.self.kill
+		rescue SystemExit
+			Script.self.kill
+		rescue SyntaxError
+			respond("--- SyntaxError: #{$!}")
+			respond($!.backtrace[0..2]) if $LICH_DEBUG
+			respond("--- Lich: cannot execute #{Script.self.name}, aborting.")
+			Script.self.kill
+		rescue ScriptError
+			respond("--- ScriptError: #{$!}")
+			respond($!.backtrace[0..2]) if $LICH_DEBUG
+			Script.self.kill
+		rescue
+			respond("--- Error: #{Script.self.name}: #{$!}")
+			respond($!.backtrace[0..2]) if $LICH_DEBUG
+			Script.self.kill
+		rescue NoMemoryError
+			respond("--- NoMemoryError: #{$!}")
+			respond($!.backtrace[0..2]) if $LICH_DEBUG
+			Script.self.kill
+		rescue Exception
+			if $! == JUMP
+				retry if Script.self.get_next_label != JUMP_ERROR
+				respond("--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!")
+				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				Script.self.kill
+			else
+				respond("--- Exception: #{$!}")
+				respond($!.backtrace[0..2]) if $LICH_DEBUG
+				Script.self.kill
+			end
+		end
+	}
 end
 
 def start_scripts(*script_names)
@@ -2766,9 +2813,11 @@ end
 
 def start_exec_script(cmd_data, quiet=false)
 	new_script = ExecScript.new(cmd_data, quiet)
-	script_thread = Thread.new {
-		Thread.stop
+	Thread.new {
+		new_script.add_thread(Thread.current)
 		script = Script.self
+		Thread.current.priority = 1
+		respond("--- Lich: #{script.name} active.") unless script.quiet_exit
 		begin
 			eval(cmd_data, nil, script.name.to_s, -1)
 			Script.self.kill
@@ -2794,10 +2843,6 @@ def start_exec_script(cmd_data, quiet=false)
 			Script.self.kill
 		end
 	}
-	new_script.add_thread(script_thread)
-	script_thread.priority = 1
-	respond("--- Lich: #{new_script.name} active.") unless new_script.quiet_exit
-	script_thread.wakeup
 end
 
 def pause_script(*names)
@@ -3413,10 +3458,10 @@ def checkpaths(dir="none")
 		if $room_exits.empty?
 			return false
 		else
-			return $room_exits.to_a
+			return $room_exits.collect { |dir| dir = SHORTDIR[dir] }
 		end
 	else
-		$room_exits.include?(dir)
+		$room_exits.include?(dir) || $room_exits.include?(SHORTDIR[dir])
 	end
 end
 
@@ -4269,26 +4314,30 @@ end
 
 def noded_pulse
 	if Stats.prof =~ /warrior|rogue|sorcerer/i
-		stats = [ Skills.smc, Skills.emc ]
+		stats = [ Skills.smc.to_i, Skills.emc.to_i ]
 	elsif Stats.prof =~ /empath|bard/i
-		stats = [ Skills.smc, Skills.mmc ]
+		stats = [ Skills.smc.to_i, Skills.mmc.to_i ]
 	elsif Stats.prof =~ /wizard/i
-		stats = [ Skills.emc, 0 ]
+		stats = [ Skills.emc.to_i, 0 ]
 	elsif Stats.prof =~ /paladin|cleric|ranger/i
-		stats = [ Skills.smc, 0 ]
+		stats = [ Skills.smc.to_i, 0 ]
+	else
+		stats = [ 0, 0 ]
 	end
 	return (maxmana * 25 / 100) + (stats.max/10) + (stats.min/20)
 end
 
 def unnoded_pulse
 	if Stats.prof =~ /warrior|rogue|sorcerer/i
-		stats = [ Skills.smc, Skills.emc ]
+		stats = [ Skills.smc.to_i, Skills.emc.to_i ]
 	elsif Stats.prof =~ /empath|bard/i
-		stats = [ Skills.smc, Skills.mmc ]
+		stats = [ Skills.smc.to_i, Skills.mmc.to_i ]
 	elsif Stats.prof =~ /wizard/i
-		stats = [ Skills.emc, 0 ]
+		stats = [ Skills.emc.to_i, 0 ]
 	elsif Stats.prof =~ /paladin|cleric|ranger/i
-		stats = [ Skills.smc, 0 ]
+		stats = [ Skills.smc.to_i, 0 ]
+	else
+		stats = [ 0, 0 ]
 	end
 	return (maxmana * 15 / 100) + (stats.max/10) + (stats.min/20)
 end
@@ -4763,7 +4812,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.61'
+$version = '3.62'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5327,7 +5376,6 @@ end
 
 $lich_char = Regexp.escape("#{$clean_lich_char}")
 
-# fixme: huh?
 undef :exit!
 
 client_thread = Thread.new {
