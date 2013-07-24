@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.6'
+$version = '4.1.7'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3488,7 +3488,6 @@ class Map
 				if (Map.list[0].desc.class == String) or (Map.list[0].title.class == String) or (Map.list[0].paths.class == String)
 					Map.list.each { |room| room.desc = [ room.desc ] if room.desc.class == String; room.title = [ room.title ] if room.title.class == String; room.paths = [ room.paths ] if room.paths.class == String }
 				end
-				Map.list.each { |room| room.wayto.values.each { |way| way._dump.untaint if way.class == Proc } }
 				true
 			else
 				respond "--- error: File does not exist: #{filename}"
@@ -3781,8 +3780,10 @@ class StringProc
 	end
 	def call(*args)
 		if $SAFE < 3
+			@string.untaint
 			proc { $SAFE = 3; eval(@string) }.call
 		else
+			@string.untaint
 			eval(@string)
 		end
 	end
