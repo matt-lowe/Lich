@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.69
+ version 3.70
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -3535,7 +3535,7 @@ def run
 end
 
 def checkfried
-	checkmind(8) or checkmind(9)
+	checkmind(7) or checkmind(8)
 end
 
 def checkencumbrance(string=nil)
@@ -3576,7 +3576,7 @@ def checkmind(string=nil)
 		else
 			return false
 		end
-	elsif string.to_i.between?(1,9)
+	elsif string.to_i.between?(1,8)
 		mind_state = ['clear as a bell','fresh and clear','clear','muddled','becoming numbed','numbed','must rest','saturated']
 		if mind_state.index($mind_text)
 			mind = mind_state.index($mind_text) + 1
@@ -3586,7 +3586,7 @@ def checkmind(string=nil)
 			nil
 		end
 	else
-		echo("Checkmind error! You must provide an integer ranging from 1-9 (7 is fried, 8 is 100% fried, 9 is extremely rare and is impossible through normal means to reach but does exist), the common abbreviation of how full your head is, or provide no input to have checkmind return an abbreviation of how filled your head is.") ; sleep 1
+		echo("Checkmind error! You must provide an integer ranging from 1-8 (7 is fried, 8 is 100% fried), the common abbreviation of how full your head is, or provide no input to have checkmind return an abbreviation of how filled your head is.") ; sleep 1
 		return false
 	end
 end
@@ -4827,7 +4827,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.69'
+$version = '3.70'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5770,6 +5770,7 @@ rescue
 	respond "Fatal (non-recoverable) error during execution: #{$!}" if $LICH_DEBUG
 	respond $!.backtrace.join("\r\n") if $LICH_DEBUG
 end
+
 [Script.running + Script.hidden].each { |script| script.kill }
 sleep 0.1
 exit
