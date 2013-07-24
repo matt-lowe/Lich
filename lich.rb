@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 =begin
- version 3.66
+ version 3.67
 =end
 #####
 # Copyright (C) 2005-2006 Murray Miron
@@ -192,7 +192,7 @@ end # class pqueue
 # end pqueue.rb
 #
 
-at_exit { Script.running.each { |script| script.kill }; Process.waitall }
+at_exit { [Script.running + Script.hidden].each { |script| script.kill }; Process.waitall }
 
 # fixme: warlock
 # fixme: terminal mode
@@ -1095,8 +1095,14 @@ class ExecScript<Script
 		@quiet_exit = quiet
 		@safe = false
 		@no_echo = false
-		@@running.push(self)
 		@thread_group = ThreadGroup.new
+		@unique_buffer = Array.new
+		@die_with = Array.new
+		@no_pause_all = false
+		@no_kill_all = false
+		@match_stack_labels = Array.new
+		@match_stack_strings = Array.new
+		@@running.push(self)
 		self
 	end
 	def get_next_label
@@ -4827,7 +4833,7 @@ sock_keepalive_proc = proc { |sock|
 
 
 
-$version = '3.66'
+$version = '3.67'
 
 cmd_line_help = <<_HELP_
 Usage:  lich [OPTION]
@@ -5499,7 +5505,11 @@ client_thread = Thread.new {
 					script = (Script.running + Script.hidden).find { |scr| scr.name == cmd.split[2].chomp.strip } || script = (Script.running + Script.hidden).find { |scr| scr.name =~ /^#{cmd.split[2].chomp.strip}/i }
 					if script
 						msg = cmd.split[3..-1].join(' ').chomp
-						script.downstream_buffer.shove(msg)
+						if script.want_downstream
+							script.downstream_buffer.shove(msg)
+						else
+							script.unique_buffer.shove(msg)
+						end
 						respond("--- sent to '#{script.name}': #{msg}")
 					else
 						respond("--- Lich: '#{cmd.split[2].chomp.strip}' does not match any active script!")
@@ -5600,7 +5610,7 @@ client_thread = Thread.new {
 		sleep 0.5
 		retry if not $_CLIENT_.closed? and not $_SERVER_.closed?
 	end
-	Script.running.each { |script| script.kill }
+	[Script.running + Script.hidden].each { |script| script.kill }
 	$_SERVER_.puts('quit') unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
 	$_CLIENT_.close unless $_CLIENT_.closed?
@@ -5660,7 +5670,7 @@ server_thread = Thread.new {
 		retry if not $_CLIENT_.closed? and not $_SERVER_.closed?
 	end
 	respond("--- Lich's connection to the game has been closed.\r\n\r\n") if $LICH_DEBUG and !$_CLIENT_.closed?
-	Script.running.each { |script| script.kill }
+	[Script.running + Script.hidden].each { |script| script.kill }
 	$_CLIENT_.close unless $_CLIENT_.closed?
 	$_SERVER_.puts("<c>quit") unless $_SERVER_.closed?
 	$_SERVER_.close unless $_SERVER_.closed?
@@ -5767,6 +5777,7 @@ rescue
 	respond $!.backtrace.join("\r\n") if $LICH_DEBUG
 end
 
-Script.running.each { |script| script.kill }
+
+[Script.running + Script.hidden].each { |script| script.kill }
 sleep 0.1
 exit
