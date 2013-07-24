@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.21'
+$version = '4.0.22'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -354,6 +354,17 @@ end
 # at_exit { Process.waitall }
 
 $room_count = 0
+
+#
+# Allow scripts running as safe access to certain files
+#
+UNTRUSTED_SETTINGS_LOAD = proc { |var| Settings.load }
+UNTRUSTED_SETTINGS_SAVE = proc { |var| Settings.save }
+UNTRUSTED_MAP_LOAD = proc { |var| Map.load }
+UNTRUSTED_MAP_SAVE = proc { |var| Map.save }
+UNTRUSTED_SPELL_LOAD = proc { |var| Spell.load }
+UNTRUSTED_START_SCRIPT = proc { |script_name,cli_vars,force| start_script(script_name,cli_vars,force) }
+
 
 JUMP = Exception.exception('JUMP')
 JUMP_ERROR = Exception.exception('JUMP_ERROR')
@@ -1174,9 +1185,7 @@ class Settings
 					f.write(Marshal.dump(@@hash[who.name]))
 				}
 			else
-				action = { 'type' => :save_settings, 'script' => Script.self }
-				$untrusted_pending_actions.push(action)
-				wait_until { $untrusted_pending_actions.empty? }
+				UNTRUSTED_SETTINGS_SAVE.call(who)
 			end
 		else
 			respond '--- Lich: Settings.save: unable to identify calling script.'
@@ -1208,9 +1217,7 @@ class Settings
 					nil
 				end
 			else
-				action = { 'type' => :load_settings, 'script' => Script.self }
-				$untrusted_pending_actions.push(action)
-				wait_until { $untrusted_pending_actions.empty? }
+				UNTRUSTED_SETTINGS_LOAD.call(who)
 			end
 		else
 			respond '--- Lich: Settings.load: unable to identify calling script.'
@@ -2726,9 +2733,7 @@ class Spell
 				return false
 			end
 		else
-			action = { 'type' => :load_spells, 'file' => filename }
-			$untrusted_pending_actions.push(action)
-			wait_until { $untrusted_pending_actions.empty? }
+			UNTRUSTED_SPELL_LOAD.call(filename)
 		end
 	end
 	def Spell.[](val)
@@ -3462,9 +3467,7 @@ class Map
 				false
 			end
 		else
-			action = { 'type' => :load_map, 'file' => filename }
-			$untrusted_pending_actions.push(action)
-			wait_until { $untrusted_pending_actions.empty? }
+			UNTRUSTED_MAP_LOAD.call(filename)
 		end
 	end
 	def Map.load_xml(filename="#{$script_dir}map.xml")
@@ -3534,9 +3537,7 @@ class Map
 			end
 			GC.start
 		else
-			action = { 'type' => :save_map, 'file' => filename }
-			$untrusted_pending_actions.push(action)
-			wait_until { $untrusted_pending_actions.empty? }
+			UNTRUSTED_MAP_SAVE.call(filename)
 		end
 	end
 	def Map.save_xml(filename="#{$script_dir}map.xml")
@@ -4004,9 +4005,7 @@ def start_script(script_name,cli_vars=[],force=false)
 		new_script.thread_group.add(new_thread)
 		true
 	else
-		action = { 'type' => :start_script, 'script_name' => script_name, 'cli_vars' => cli_vars, 'force' => force }
-		$untrusted_pending_actions.push(action)
-		wait_until { $untrusted_pending_actions.empty? }
+		UNTRUSTED_START_SCRIPT.call(script_name, cli_vars, force)
 	end
 end
 
@@ -4436,48 +4435,20 @@ def multimove(*dirs)
 	dirs.flatten.each { |dir| move(dir) }
 end
 
-def n
-	'north'
-end
-def ne
-	'northeast'
-end
-def e
-	'east'
-end
-def se
-	'southeast'
-end
-def s
-	'south'
-end
-def sw
-	'southwest'
-end
-def w
-	'west'
-end
-def nw
-	'northwest'
-end
-def u
-	'up'
-end
-def up
-	'up'
-end
-def down
-	'down'
-end
-def d
-	'down'
-end
-def o
-	'out'
-end
-def out
-	'out'
-end
+def n;    'north';     end
+def ne;   'northeast'; end
+def e;    'east';      end
+def se;   'southeast'; end
+def s;    'south';     end
+def sw;   'southwest'; end
+def w;    'west';      end
+def nw;   'northwest'; end
+def u;    'up';        end
+def up;   'up';	       end
+def down; 'down';      end
+def d;    'down';      end
+def o;    'out';       end
+def out;  'out';       end
 
 def move(dir='none', giveup_seconds=30, giveup_lines=30)
 	# Guardsman Vontrilaias stops you and says, "Stop.  You need to make sure you check in at Wyveryn Keep and get proper identification papers.  We don't let just anyone wander around here.  Now go on through the gate and get over there."
@@ -5248,28 +5219,28 @@ def matchtimeout(secs, *strings)
 end
 
 def matchbefore(*strings)
-  strings.flatten!
-  unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
-  if strings.empty? then echo("matchbefore without any strings to wait for!") ; return false end
-  regexpstr = strings.join('|')
-  loop { if (line_in = script.gets) =~ /#{regexpstr}/ then return $`.to_s end }
+	strings.flatten!
+	unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
+	if strings.empty? then echo("matchbefore without any strings to wait for!") ; return false end
+	regexpstr = strings.join('|')
+	loop { if (line_in = script.gets) =~ /#{regexpstr}/ then return $`.to_s end }
 end
 
 def matchafter(*strings)
-  strings.flatten!
-  unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
-  if strings.empty? then echo("matchafter without any strings to wait for!") ; return end
-  regexpstr = strings.join('|')
-  loop { if (line_in = script.gets) =~ /#{regexpstr}/ then return $'.to_s end }
+	strings.flatten!
+	unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
+	if strings.empty? then echo("matchafter without any strings to wait for!") ; return end
+	regexpstr = strings.join('|')
+	loop { if (line_in = script.gets) =~ /#{regexpstr}/ then return $'.to_s end }
 end
 
 def matchboth(*strings)
-  strings.flatten!
-  unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
-  if strings.empty? then echo("matchboth without any strings to wait for!") ; return end
-  regexpstr = strings.join('|')
-  loop { if (line_in = script.gets) =~ /#{regexpstr}/ then break end }
-  return [ $`.to_s, $'.to_s ]
+	strings.flatten!
+	unless script = Script.self then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
+	if strings.empty? then echo("matchboth without any strings to wait for!") ; return end
+	regexpstr = strings.join('|')
+	loop { if (line_in = script.gets) =~ /#{regexpstr}/ then break end }
+	return [ $`.to_s, $'.to_s ]
 end
 
 def matchwait(*strings)
@@ -7883,47 +7854,6 @@ main_thread = Thread.new {
 	
 	$_CLIENT_.sync = true
 	$_SERVER_.sync = true
-
-	$untrusted_pending_actions = Array.new
-	untrusted_handler_thread = Thread.new {
-		loop {
-			begin
-				wait_while { $untrusted_pending_actions.empty? }
-				action = $untrusted_pending_actions.first
-				if action['type'] == :load_settings
-					Settings.load(action['script'])
-				elsif action['type'] == :save_settings
-					Settings.save(action['script'])
-				elsif action['type'] == :load_map
-					if action['file'] == "#{$script_dir}map.dat"
-						Map.load(action['file'])
-					else
-						respond '--- SecurityError: untrusted script tried to call Map.load on a non-default file.'
-					end
-				elsif action['type'] == :save_map
-					if action['file'] == "#{$script_dir}map.dat"
-						Map.save(action['file'])
-					else
-						respond '--- SecurityError: untrusted script tried to call Map.save on a non-default file.'
-					end
-				elsif action['type'] == :load_spells
-					if action['file'] == "#{$script_dir}spell-list.xml.txt"
-						Spell.load(action['file'])
-					else
-						respond '--- SecurityError: untrusted script tried to call Spell.load on a non-default file.'
-					end
-				elsif action['type'] == :start_script
-					start_script(action['script_name'], action['cli_vars'], action['force'])
-				end
-				$untrusted_pending_actions.shift
-			rescue
-				$stdout.puts("--- Lich: untrusted_handler_thread: #{$!}") rescue()
-				$stderr.puts($!)
-				$stderr.puts($!.backtrace)
-				sleep 0.3
-			end
-		}
-	}
 
 	client_thread = Thread.new {
 		$login_time = Time.now
