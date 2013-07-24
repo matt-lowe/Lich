@@ -31,7 +31,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #####
 
-$version = '4.0.12'
+$version = '4.0.13'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6183,7 +6183,7 @@ def do_client(client_string)
 				UserVars.change(var_name, value, :global)
 				respond "--- Lich: global setting changed (#{var_name}: #{value})"
 			elsif (args[0].downcase == 'change') and (var_name = args[1]) and (value = args[2..-1].join(' '))
-				UserVars.change(var_name, value, :global)
+				UserVars.change(var_name, value, :char)
 				respond "--- Lich: #{Char.name}'s setting changed (#{var_name}: #{value})"
 			elsif (args[0].downcase == 'add') and (args[1] =~ /^all$|^global$/i) and (var_name = args[2]) and (value = args[3..-1].join(' '))
 				UserVars.add(var_name, value, :global)
