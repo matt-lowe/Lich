@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.9'
+$version = '4.1.10'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -203,6 +203,7 @@ $stderr = File.open(debug_filename, 'w')
 $stderr.sync
 
 $stderr.puts "info: #{Time.now}"
+$stderr.puts "info: #{$version}"
 $stderr.puts "info: $lich_dir: #{$lich_dir}"
 $stderr.puts "info: $script_dir: #{$script_dir}"
 $stderr.puts "info: $data_dir: #{$data_dir}"
@@ -6827,8 +6828,17 @@ else
 	else
 		wine_dir = nil
 	end
-	wine_bin = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\Wine')
-	wine_bin = nil unless wine_bin and File.exists?(wine_bin)
+	begin
+		wine_bin = `which wine`.strip
+	rescue
+		wine_bin = nil
+	end
+	if wine_bin.nil? or wine_bin.empty?
+		wine_bin = registry_get('HKEY_LOCAL_MACHINE\Software\Simutronics\Launcher\Wine')
+	end
+	unless wine_bin and not wine_bin.empty? and File.exists?(wine_bin)
+		wine_bin = nil
+	end
 end
 
 if ARGV.include?('--install')
