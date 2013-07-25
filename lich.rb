@@ -38,13 +38,17 @@
 =end
 
 # I hate Windows...
-require 'stringio'
-$stderr.write(' ') rescue($stderr = StringIO.new(''))
-$stdout.write(' ') rescue($stdout = StringIO.new(''))
-STDERR = $stderr rescue()
-STDOUT = $stderr rescue()
+begin
+	$stderr.write(' ')
+rescue
+	require 'stringio'
+	$stderr = StringIO.new('')
+	$stdout = StringIO.new('')
+	STDERR = $stderr rescue()
+	STDOUT = $stderr rescue()
+end
 
-$version = '4.1.28'
+$version = '4.1.30'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -847,9 +851,9 @@ class XMLParser
 			elsif (name == 'app') and (@name = attributes['char'])
 				if $frontend == 'wizard'
 					$_SERVER_.puts "<c>_flag Display Dialog Boxes 0"
-					sleep 0.05
+					sleep "0.05".to_f
 					$_SERVER_.puts "<c>_injury 2"
-					sleep 0.05
+					sleep "0.05".to_f
 					# fixme: game name hardcoded as Gemstone IV; maybe doesn't make any difference to the client
 					$_CLIENT_.puts "\034GSB0000000000#{attributes['char']}\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
 					# Sending fake GSL tags to the Wizard FE is disabled until now, because it doesn't accept the tags and just gives errors until initialized with the above line
@@ -886,7 +890,7 @@ class XMLParser
 			$stdout.puts "--- error: XMLParser.tag_start: #{$!}"
 			$stderr.puts "error: XMLParser.tag_start: #{$!}"
 			$stderr.puts $!.backtrace
-			sleep 0.1
+			sleep "0.1".to_f
 			reset
 		end
 	end
@@ -1024,7 +1028,7 @@ class XMLParser
 			$stdout.puts "--- error: XMLParser.text: #{$!}"
 			$stderr.puts "error: XMLParser.text: #{$!}"
 			$stderr.puts $!.backtrace
-			sleep 0.1
+			sleep "0.1".to_f
 			reset
 		end
 	end
@@ -1050,7 +1054,7 @@ class XMLParser
 			$stdout.puts "--- error: XMLParser.tag_end: #{$!}"
 			$stderr.puts "error: XMLParser.tag_end: #{$!}"
 			$stderr.puts $!.backtrace
-			sleep 0.1
+			sleep "0.1".to_f
 			reset
 		end
 	end
@@ -1625,7 +1629,7 @@ class Script
 	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings, :watchfor
 	def Script.self
 		if script = @@running.find { |scr| scr.thread_group == Thread.current.group }
-			sleep 0.2 while script.paused
+			sleep "0.2".to_f while script.paused
 			script
 		else
 			nil
@@ -1677,7 +1681,7 @@ class Script
 				script.watchfor.each_pair { |trigger,action|
 					if line =~ trigger
 						new_thread = Thread.new {
-							sleep 0.011 until Script.self
+							sleep "0.011".to_f until Script.self
 							begin
 								action.call
 							rescue
@@ -1827,7 +1831,7 @@ class Script
 	end	
 	def gets
 		if @want_downstream or @want_downstream_xml
-			sleep 0.05 while @downstream_buffer.empty?
+			sleep "0.05".to_f while @downstream_buffer.empty?
 			@downstream_buffer.shift
 		else
 			echo 'this script is set as unique but is waiting for game data...'
@@ -1849,7 +1853,7 @@ class Script
 		end
 	end
 	def upstream_gets
-		sleep 0.05 while @upstream_buffer.empty?
+		sleep "0.05".to_f while @upstream_buffer.empty?
 		@upstream_buffer.shift
 	end
 	def upstream_gets?
@@ -1860,7 +1864,7 @@ class Script
 		end
 	end
 	def unique_gets
-		sleep 0.05 while @unique_buffer.empty?
+		sleep "0.05".to_f while @unique_buffer.empty?
 		@unique_buffer.shift
 	end
 	def unique_gets?
@@ -2312,7 +2316,7 @@ class Spellsong
 	end
 	def Spellsong.timeleft
 		@@renewed = Time.now if (Time.now - @@renewed) > Spellsong.duration
-		(Spellsong.duration - (Time.now - @@renewed)) / 60.0
+		(Spellsong.duration - (Time.now - @@renewed)) / 60.to_f
 	end
 	def Spellsong.serialize
 		Spellsong.timeleft
@@ -2321,12 +2325,12 @@ class Spellsong
 		Thread.new {
 			n = 0
 			while Stats.level == 0
-				sleep 0.25
+				sleep "0.25".to_f
 				n += 1
 				break if n >= 4
 			end
 			unless n >= 4
-				@@renewed = Time.at(Time.now.to_f - (Spellsong.duration - old * 60.00))
+				@@renewed = Time.at(Time.now.to_f - (Spellsong.duration - old * 60.to_f))
 			else
 				@@renewed = Time.now
 			end
@@ -2789,7 +2793,7 @@ class Spell
 			begin
 				@@load_lock.push(script)
 				unless @@load_lock.first == script
-					sleep 0.1 until @loaded or (@@load_lock.first == script) or @@load_lock.empty?
+					sleep "0.1".to_f until @loaded or (@@load_lock.first == script) or @@load_lock.empty?
 					return true if @loaded
 				end
 				@@loaded = false
@@ -3127,7 +3131,7 @@ class Spell
 		begin
 			@@cast_lock.push(script)
 			until (@@cast_lock.first == script) or @@cast_lock.empty?
-				sleep 0.1
+				sleep "0.1".to_f
 				Script.self # allows this loop to be paused
 				@@cast_lock.delete_if { |s| s.paused }
 			end
@@ -3155,7 +3159,7 @@ class Spell
 				waitrt?
 				waitcastrt?
 				fput cmd
-				sleep 0.1
+				sleep "0.1".to_f
 				true
 			else
 				if @channel
@@ -3846,13 +3850,13 @@ class Map
 		unless array.class == Array
 			raise Exception.exception("MapError"), "Map.estimate_time was given something not an array!"
 		end
-		time = 0.00
+		time = 0.to_f
 		until array.length < 2
 			room = array.shift
 			if t = Map[room].timeto[array.first.to_s]
 				time += t.to_f
 			else
-				time += 0.2
+				time += "0.2".to_f
 			end
 		end
 		time
@@ -3892,7 +3896,7 @@ class Map
 					visited[v] = true
 					@@list[v].wayto.keys.each { |adj_room|
 						adj_room_i = adj_room.to_i
-						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || "0.2".to_f)
 						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
 							shortest_distances[adj_room_i] = nd
 							previous[adj_room_i] = v
@@ -3907,7 +3911,7 @@ class Map
 					visited[v] = true
 					@@list[v].wayto.keys.each { |adj_room|
 						adj_room_i = adj_room.to_i
-						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || "0.2".to_f)
 						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
 							shortest_distances[adj_room_i] = nd
 							previous[adj_room_i] = v
@@ -3923,7 +3927,7 @@ class Map
 					visited[v] = true
 					@@list[v].wayto.keys.each { |adj_room|
 						adj_room_i = adj_room.to_i
-						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || 0.2)
+						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || "0.2".to_f)
 						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
 							shortest_distances[adj_room_i] = nd
 							previous[adj_room_i] = v
@@ -4082,7 +4086,7 @@ def upstream_get
 	unless script = Script.self then echo 'upstream_get: cannot identify calling script.'; return nil; end
 	unless script.want_upstream
 		echo("This script wants to listen to the upstream, but it isn't set as receiving the upstream! This will cause a permanent hang, aborting (ask for the upstream with 'toggle_upstream' in the script)")
-		sleep 0.3
+		sleep "0.3".to_f
 		return false
 	end
 	script.upstream_gets
@@ -4165,7 +4169,7 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 		end
 		new_script.quiet = true if flags[:quiet]
 		new_thread = Thread.new {
-			100.times { break if Script.self == new_script; sleep 0.01 }
+			100.times { break if Script.self == new_script; sleep "0.01".to_f }
 			if script = Script.self
 				eval('script = Script.self', script_binding, script.name) if script_binding
 				Thread.current.priority = 1
@@ -4335,7 +4339,7 @@ end
 def start_scripts(*script_names)
 	script_names.flatten.each { |script_name|
 		start_script(script_name)
-		sleep 0.02
+		sleep "0.02".to_f
 	}
 end
 
@@ -4352,7 +4356,7 @@ def start_exec_script(cmd_data, flags=Hash.new)
 			return false
 		end
 		new_thread = Thread.new {
-			100.times { break if Script.self == new_script; sleep 0.01 }
+			100.times { break if Script.self == new_script; sleep "0.01".to_f }
 			if script = Script.self
 				Thread.current.priority = 1
 				respond("--- Lich: #{script.name} active.") unless script.quiet
@@ -4456,7 +4460,7 @@ end
 def fix_injury_mode
 	unless XMLData.injury_mode == 2
 		$_SERVER_.puts '_injury 2'
-		150.times { sleep 0.05; break if XMLData.injury_mode == 2 }
+		150.times { sleep "0.05".to_f; break if XMLData.injury_mode == 2 }
 	end
 end
 
@@ -4475,23 +4479,23 @@ end
 
 def waitrt
 	wait_until { (XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0 }
-	sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
+	sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f).abs)
 end
 
 def waitrt?
 	if (XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0
-		sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
+		sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f).abs)
 	end
 end
 
 def waitcastrt
 	wait_until { (XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0 }
-	sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
+	sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f).abs)
 end
 
 def waitcastrt?
 	if (XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0
-		sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
+		sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f).abs)
 	end
 end
 
@@ -4636,7 +4640,7 @@ def selectput(string, success, failure, timeout = nil)
 	thr = Thread.current
 
 	timethr = Thread.new {
-		timeout -= sleep(0.1) until timeout <= 0
+		timeout -= sleep("0.1".to_f) until timeout <= 0
 		thr.raise(StandardError)
 	} if timeout
 
@@ -4819,7 +4823,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			line_count += 1
 		end
 		if line.nil?
-			sleep 0.1
+			sleep "0.1".to_f
 		elsif line =~ /^You can't enter .+ and remain hidden or invisible\.|if he can't see you!$|^You can't enter .+ when you can't be seen\.$|^You can't do that without being seen\.$/
 			fput 'unhide'
 			put_dir.call
@@ -4869,9 +4873,9 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			end
 		elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
 			if $2.to_i > 1
-				sleep ($2.to_i - 0.2)
+				sleep ($2.to_i - "0.2".to_f)
 			else
-				sleep 0.3
+				sleep "0.3".to_f
 			end
 			put_dir.call
 		elsif line =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!|Shouldn't you be standing first|Try standing up\.|Perhaps you should stand up/
@@ -4978,7 +4982,7 @@ def wait_until(announce=nil)
 		respond(announce)
 	end
 	until yield
-		sleep 0.25
+		sleep "0.25".to_f
 	end
 	Thread.current.priority = priosave
 end
@@ -4990,7 +4994,7 @@ def wait_while(announce=nil)
 		respond(announce)
 	end
 	while yield
-		sleep 0.25
+		sleep "0.25".to_f
 	end
 	Thread.current.priority = priosave
 end
@@ -5546,7 +5550,7 @@ def matchtimeout(secs, *strings)
 	loop {
 		line = get?
 		if line.nil?
-			sleep 0.1
+			sleep "0.1".to_f
 		elsif line =~ /#{regexpstr}/i
 			return line
 		end
@@ -5705,11 +5709,11 @@ def fput(message, *waitingfor)
 				return false
 			elsif checkstunned
 				while checkstunned
-					sleep(0.25)
+					sleep("0.25".to_f)
 				end
 			elsif checkwebbed
 				while checkwebbed
-					sleep(0.25)
+					sleep("0.25".to_f)
 				end
 			else
 				sleep(1)
@@ -6004,9 +6008,9 @@ def dothis (action, success_line)
 				return line
 			elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
 				if $2.to_i > 1
-					sleep ($2.to_i - 0.5)
+					sleep ($2.to_i - "0.5".to_f)
 				else
-					sleep 0.3
+					sleep "0.3".to_f
 				end
 				break
 			elsif line == 'Sorry, you may only type ahead 1 command.'
@@ -6018,7 +6022,7 @@ def dothis (action, success_line)
 			elsif line == 'That is impossible to do while unconscious!'
 				100.times {
 					unless line = get?
-						sleep 0.1
+						sleep "0.1".to_f
 					else
 						break if line =~ /Your thoughts slowly come back to you as you find yourself lying on the ground\.  You must have been sleeping\.$|^You wake up from your slumber\.$/
 					end
@@ -6027,7 +6031,7 @@ def dothis (action, success_line)
 			elsif line == "You don't seem to be able to move to do that."
 				100.times {
 					unless line = get?
-						sleep 0.1
+						sleep "0.1".to_f
 					else
 						break if line == 'The restricting force that envelops you dissolves away.'
 					end
@@ -6039,7 +6043,7 @@ def dothis (action, success_line)
 			elsif line == 'You find that impossible under the effects of the lullabye.'
 				100.times {
 					unless line = get?
-						sleep 0.1
+						sleep "0.1".to_f
 					else
 						# fixme
 						break if line == 'You shake off the effects of the lullabye.'
@@ -6060,12 +6064,12 @@ def dothistimeout (action, timeout, success_line)
 		loop {
 			line = get?
 			if line.nil?
-				sleep 0.1
+				sleep "0.1".to_f
 			elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
 				if $2.to_i > 1
-					sleep ($2.to_i - 0.5)
+					sleep ($2.to_i - "0.5".to_f)
 				else
-					sleep 0.3
+					sleep "0.3".to_f
 				end
 				end_time = Time.now.to_i + timeout
 				break
@@ -6080,7 +6084,7 @@ def dothistimeout (action, timeout, success_line)
 			elsif line == 'That is impossible to do while unconscious!'
 				100.times {
 					unless line = get?
-						sleep 0.1
+						sleep "0.1".to_f
 					else
 						break if line =~ /Your thoughts slowly come back to you as you find yourself lying on the ground\.  You must have been sleeping\.$|^You wake up from your slumber\.$/
 					end
@@ -6089,7 +6093,7 @@ def dothistimeout (action, timeout, success_line)
 			elsif line == "You don't seem to be able to move to do that."
 				100.times {
 					unless line = get?
-						sleep 0.1
+						sleep "0.1".to_f
 					else
 						break if line == 'The restricting force that envelops you dissolves away.'
 					end
@@ -6101,7 +6105,7 @@ def dothistimeout (action, timeout, success_line)
 			elsif line == 'You find that impossible under the effects of the lullabye.'
 				100.times {
 					unless line = get?
-						sleep 0.1
+						sleep "0.1".to_f
 					else
 						# fixme
 						break if line == 'You shake off the effects of the lullabye.'
@@ -6281,7 +6285,7 @@ def registry_put(key, value)
 					regedit_data = "REGEDIT4\n\n[#{hkey}\\#{subkey}]\n#{thingie}=\"#{value}\"\n\n"
 					File.open('wine.reg', 'w') { |f| f.write(regedit_data) }
 					system('wine regedit wine.reg')
-					sleep 0.2
+					sleep "0.2".to_f
 					File.delete('wine.reg')
 				rescue
 					return false
@@ -7310,7 +7314,7 @@ main_thread = Thread.new {
 					dialog.destroy
 					done = true
 				}
-				sleep 0.1 until done
+				sleep "0.1".to_f until done
 			else
 				$stdout.puts(msg)
 				$stderr.puts(msg)
@@ -8456,7 +8460,7 @@ main_thread = Thread.new {
 				end
 				if scroll
 					mark = game_textview.buffer.create_mark('end', game_textview.buffer.end_iter, false)
-					game_textview.scroll_to_mark(mark, 0.0, false, 0, 0)
+					game_textview.scroll_to_mark(mark, 0.to_f, false, 0, 0)
 				end
 				game_textview.buffer.move_mark('insert_position', game_textview.buffer.end_iter)
 			}
@@ -8471,7 +8475,7 @@ main_thread = Thread.new {
 			game_textview.cursor_visible = false
 			game_textview.buffer.text = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
 			mark = game_textview.buffer.create_mark('end', game_textview.buffer.end_iter, false)
-			game_textview.scroll_to_mark(mark, 0.0, false, 0, 0)
+			game_textview.scroll_to_mark(mark, 0.to_f, false, 0, 0)
 			game_textview.buffer.create_tag('monsterbold', { 'foreground' => 'yellow' })
 			game_textview.buffer.create_tag('test_tag', { 'foreground' => 'white' })
 			game_textview.modify_font(Pango::FontDescription.new('Courier New 12'))
@@ -8561,7 +8565,7 @@ main_thread = Thread.new {
 					if client_string = $_CLIENT_READER_.gets
 						game_textview_add_line.call("\n#{client_string.chomp}")
 					else
-						sleep 0.011
+						sleep "0.011".to_f
 					end
 				}
 			rescue
@@ -8586,7 +8590,7 @@ main_thread = Thread.new {
 			# tell the server we're ready
 			#
 			2.times {
-				sleep 0.3
+				sleep "0.3".to_f
 				$_CLIENTBUFFER_.push("<c>\r\n")
 				$_SERVER_.write("<c>\r\n")
 			}
@@ -8605,7 +8609,7 @@ main_thread = Thread.new {
 			if (error_count += 1) > 20
 				$stderr.puts 'warning: giving up...'
 			else
-				sleep 0.05
+				sleep "0.05".to_f
 				retry
 			end
 		end
@@ -8635,7 +8639,7 @@ main_thread = Thread.new {
 				# tell the server we're ready
 				#
 				2.times {
-					sleep 0.3
+					sleep "0.3".to_f
 					$_CLIENTBUFFER_.push("<c>\r\n")
 					$_SERVER_.write("<c>\r\n")
 				}
@@ -8731,7 +8735,7 @@ main_thread = Thread.new {
 				respond $!.backtrace.first
 				$stderr.puts "error: client_thread: #{$!}"
 				$stderr.puts $!.backtrace
-				sleep 0.2
+				sleep "0.2".to_f
 				retry unless $_CLIENT_.closed? or $_SERVER_.closed? or !server_thread.alive?
 			end
 			server_thread.kill rescue()
@@ -8784,13 +8788,13 @@ main_thread = Thread.new {
 			$stdout.puts "--- error: server_thread: #{$!}"
 			$stderr.puts "error: server_thread: #{$!}"
 			$stderr.puts $!.backtrace
-			sleep 0.2
+			sleep "0.2".to_f
 			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or ($!.to_s =~ /invalid argument/i)
 		rescue
 			$stdout.puts "--- error: server_thread: #{$!}"
 			$stderr.puts "error: server_thread: #{$!}"
 			$stderr.puts $!.backtrace
-			sleep 0.2
+			sleep "0.2".to_f
 			retry unless $_CLIENT_.closed? or $_SERVER_.closed?
 		end
 	}
@@ -8819,7 +8823,7 @@ main_thread = Thread.new {
 
 	Script.running.each { |script| script.kill }
 	Script.hidden.each { |script| script.kill }
-	100.times { sleep 0.1; break if Script.running.empty? and Script.hidden.empty? }
+	100.times { sleep "0.1".to_f; break if Script.running.empty? and Script.hidden.empty? }
 	# sending quit seems to cause Lich to hang.  $_SERVER_.closed? is false even though it appears to be closed.
 	# $_SERVER_.puts('quit') unless $_SERVER_.closed?
 	$_SERVER_.close rescue()
