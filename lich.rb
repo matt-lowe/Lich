@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.37'
+$version = '4.1.38'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1835,11 +1835,48 @@ end
 
 class UserVariables
 	@@settings ||= Hash.new
+	@@settings_mtime = nil
+	@@char_settings ||= Hash.new
+
 	def UserVariables.init
-		if File.exists?("#{$data_dir}lich.sav")
+		if File.exists?("#{$data_dir}uservars.dat")
+			begin
+				File.open("#{$data_dir}uservars.dat", 'rb') { |f|
+					@@settings = Marshal.load(f.read)
+				}
+				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+			rescue
+				respond "--- error: UserVariables.init: #{$!}"
+				$stderr.puts "error: UserVariables.init: #{$!}"
+				$stderr.puts $!.backtrace
+			end
+		elsif File.exists?("#{$data_dir}lich.sav")
 			begin
 				File.open("#{$data_dir}lich.sav", 'rb') { |f|
-					@@settings = Marshal.load(f.read)['uservariables']
+					@@settings = Marshal.load(f.read)['uservariables']['global'] || Hash.new
+				}
+				File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+			rescue
+				respond "--- error: UserVariables.init: #{$!}"
+				$stderr.puts "error: UserVariables.init: #{$!}"
+				$stderr.puts $!.backtrace
+			end
+		end
+		if File.exists?("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat")
+			begin
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'rb') { |f|
+					@@char_settings = Marshal.load(f.read)
+				}
+			rescue
+				respond "--- error: UserVariables.init: #{$!}"
+				$stderr.puts "error: UserVariables.init: #{$!}"
+				$stderr.puts $!.backtrace
+			end
+		elsif File.exists?("#{$data_dir}lich.sav")
+			begin
+				File.open("#{$data_dir}lich.sav", 'rb') { |f|
+					@@char_settings = Marshal.load(f.read)['uservariables'][XMLData.name] || Hash.new
 				}
 			rescue
 				respond "--- error: UserVariables.init: #{$!}"
@@ -1847,33 +1884,24 @@ class UserVariables
 				$stderr.puts $!.backtrace
 			end
 		end
-		if File.exists?("#{$data_dir}setting.sav")
-			File.open("#{$data_dir}setting.sav", 'rb') { |f|
-				@@settings = Marshal.load(f.read)
-			}
-			File.rename("#{$data_dir}setting.sav", "#{$temp_dir}setting.sav")
-			UserVariables.save
-		end
-		@@settings ||= Hash.new
-		@@settings['global'] ||= Hash.new
-		@@settings[XMLData.name] ||= Hash.new
 	end
 	def UserVariables.save
-		all_settings = Hash.new
-		if File.exists?("#{$data_dir}lich.sav")
-			File.open("#{$data_dir}lich.sav", 'rb') { |f| all_settings = Marshal.load(f.read) }
-		end
-		all_settings['uservariables'] = @@settings
-		File.open("#{$data_dir}lich.sav", 'wb') { |f| f.write(Marshal.dump(all_settings)) }
+		File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+		@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+		File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
 	end
 	def UserVariables.change(var_name, value, type = :char)
 		if type == :char
-			@@settings[XMLData.name][var_name] = value
-			UserVariables.save
+			@@char_settings[var_name] = value
+			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
 			true
-		elsif type == :global
-			@@settings['global'][var_name] = value
-			UserVariables.save
+			elsif type == :global
+			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+			end
+			@@settings[var_name] = value
+			File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+			@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 			true
 		else
 			echo 'UserVariables.change: invalid type given, use :char or :global.'
@@ -1882,12 +1910,16 @@ class UserVariables
 	end
 	def UserVariables.add(var_name, value, type = :char)
 		if type == :char
-			@@settings[XMLData.name][var_name] = @@settings[XMLData.name][var_name].split(', ').push(value.strip).join(', ')
-			UserVariables.save
+			@@char_settings[var_name] = @@char_settings[var_name].split(', ').push(value.strip).join(', ')
+			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
 			true
 		elsif type == :global
-			@@settings['global'][var_name] = @@settings['global'][var_name].split(', ').push(value.strip).join(', ')
-			UserVariables.save
+			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+			end
+			@@settings[var_name] = @@settings[var_name].split(', ').push(value.strip).join(', ')
+			File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+			@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 			true
 		else
 			echo 'UserVariables.add: invalid type given, use :char or :global.'
@@ -1896,15 +1928,20 @@ class UserVariables
 	end
 	def UserVariables.delete(var_name, type = :char)
 		if type == :char
-			if @@settings[XMLData.name].delete(var_name)
-				UserVariables.save
+			if @@char_settings.delete(var_name)
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
 				true
 			else
 				false
 			end
 		elsif type == :global
-			if @@settings['global'].delete(var_name)
-				UserVariables.save
+			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+			end
+			if @@settings.delete(var_name)
+				File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 				true
 			else
 				false
@@ -1913,17 +1950,24 @@ class UserVariables
 			false
 		end
 	end
-	def UserVariables.list
+	def UserVariables.list_global
 		@@settings.dup
+	end
+	def UserVariables.list_char
+		@@char_settings.dup
 	end
 	def UserVariables.method_missing(arg1, arg2='')
 		if arg1.to_s.split('')[-1] == '='
-			@@settings[XMLData.name][arg1.to_s.chop] = arg2
-			UserVariables.save
-		elsif @@settings[XMLData.name][arg1.to_s]
-			@@settings[XMLData.name][arg1.to_s]
+			@@char_settings[arg1.to_s.chop] = arg2
+			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
+		elsif @@char_settings[arg1.to_s]
+			@@char_settings[arg1.to_s]
 		else
-			@@settings['global'][arg1.to_s]
+			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+			end
+			@@settings[arg1.to_s]
 		end
 	end
 end
@@ -4488,7 +4532,7 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 		elsif File.exists?("#{$script_dir}#{script_name}.wiz")
 			file_name = "#{script_name}.wiz"
 		else
-			file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }
+			file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }.sort
 			file_name = (file_list.find { |val| val =~ /^#{script_name}\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?i:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{script_name}[^.]+\.(?:lic|rbw?|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{script_name}$/i })
 			file_list = nil
 		end
@@ -5202,7 +5246,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			Script.self.downstream_buffer.flatten!
 			# return nil instead of false to show the direction shouldn't be removed from the map database
 			return nil
-		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he is too heavy\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "Stop\.  You need to make sure you check in at Wyveryn Keep and get proper identification papers\.  We don't let just anyone wander around here\.  Now go on through the gate and get over there\."$/
+		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he (?:is too heavy|doesn't budge)\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "Stop\.  You need to make sure you check in at Wyveryn Keep and get proper identification papers\.  We don't let just anyone wander around here\.  Now go on through the gate and get over there\."$/
 			sleep 1
 			waitrt?
 			put_dir.call
@@ -6755,8 +6799,13 @@ def heal_hosts(hosts_dir)
 	end
 end
 
-$link_highlight_start = "\207"
-$link_highlight_end = "\240"
+if $frontend == 'avalon'
+	$link_highlight_start = ''
+	$link_highlight_end = ''
+else
+	$link_highlight_start = "\207"
+	$link_highlight_end = "\240"
+end
 
 def sf_to_wiz(line)
 	# fixme: voln thoughts
@@ -7176,7 +7225,7 @@ def do_client(client_string)
 			elsif (args[0] =~ /^rem(?:ove)$|^del(?:ete)?$/i) and (args[1] =~ /^all$|^global$/i) and (var_name = args[2]) and args[3]
 				rem_value = args[3..-1].join(' ')
 				echo rem_value.inspect
-				value = UserVars.list['global'][var_name].to_s.split(', ')
+				value = UserVars.list_global[var_name].to_s.split(', ')
 				if value.delete(rem_value)
 					UserVars.change(var_name, value.join(', '), :global)
 					respond "--- Lich: removed '#{rem_value}' from global setting '#{var_name}'"
@@ -7192,7 +7241,7 @@ def do_client(client_string)
 			elsif (args[0] =~ /^rem(?:ove)$|^del(?:ete)?$/i) and (var_name = args[1]) and args[2]
 				rem_value = args[2..-1].join(' ')
 				respond rem_value.inspect
-				value = UserVars.list[XMLData.name][var_name].to_s.split(', ')
+				value = UserVars.list_char[var_name].to_s.split(', ')
 				if value.delete(rem_value)
 					UserVars.change(var_name, value.join(', '), :char)
 					respond "--- Lich: removed '#{rem_value}' from #{XMLData.name}'s setting '#{var_name}'"
@@ -7206,17 +7255,18 @@ def do_client(client_string)
 					respond "--- Lich: could not find #{XMLData.name}'s setting '#{var_name}'"
 				end
 			elsif args[0].downcase == 'list'
-				user_vars = UserVars.list
-				if user_vars['global'].empty? and user_vars[XMLData.name].empty?
+				global_vars = UserVars.list_global
+				char_vars = UserVars.list_char
+				if global_vars.empty? and char_vars.empty?
 					respond "\n--- You currently have no Lich settings.\n"
 				end
-				unless user_vars['global'].empty?
+				unless global_vars.empty?
 					respond '--- Global settings'
-					user_vars['global'].each_pair { |name,value| respond "   #{name}: #{value}" }
+					global_vars.each_pair { |name,value| respond "   #{name}: #{value}" }
 				end
-				unless user_vars[XMLData.name].empty?
+				unless char_vars.empty?
 					respond "--- #{XMLData.name}'s settings"
-					user_vars[XMLData.name].each_pair { |name,value| respond "   #{name}: #{value}" }
+					char_vars.each_pair { |name,value| respond "   #{name}: #{value}" }
 				end
 			else
 				respond
@@ -9118,7 +9168,7 @@ main_thread = Thread.new {
 						alt_string = sf_to_wiz(alt_string) if $frontend =~ /^(?:wizard|avalon)$/
 						$_CLIENT_.write(alt_string) unless $frontend == 'suks'
 					end
-					unless $_SERVERSTRING_ =~ /^<settings /
+					unless $_SERVERSTRING_ =~ /^<settings/
 						begin
 							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
 						rescue
