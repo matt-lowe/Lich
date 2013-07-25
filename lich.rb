@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.4'
+$version = '4.2.5'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -312,6 +312,35 @@ begin
 			end
 		end
 	end
+	# fixme: $gtk and $lich are depreciated in version 4.0.0, remove sooner or later
+	$warned_depreciated_gtk_do = false
+	class BeBackwardCompatible1
+		def do(what)
+			unless $warned_depreciated_gtk_do
+				unless script_name = Script.self.name
+					script_name = 'unknown script'
+				end
+				respond "--- warning: #{script_name} is using depreciated method $gtk.do"
+				$warned_depreciated_gtk_do = true
+			end
+			Gtk.queue { eval(what) }
+		end
+	end
+	$gtk = BeBackwardCompatible1.new
+	$warned_depreciated_lich_do = false
+	class BeBackwardCompatible2
+		def do(what)
+			unless $warned_depreciated_lich_do
+				unless script_name = Script.self.name
+					script_name = 'unknown script'
+				end
+				respond "--- warning: #{script_name} is using depreciated method $lich.do"
+				$warned_depreciated_lich_do = true
+			end
+			eval(what)
+		end
+	end
+	$lich = BeBackwardCompatible2.new
 	HAVE_GTK = true
 	$stderr.puts "info: HAVE_GTK: true"
 rescue LoadError
@@ -323,19 +352,7 @@ rescue
 	$stdout.puts "warning: failed to load GTK bindings: #{$!}"
 	$stderr.puts "warning: failed to load GTK bindings: #{$!}"
 end
-begin
-	require 'libxml'
-	include LibXML
-	HAVE_LIBXML = true
-rescue LoadError
-	$stderr.puts "warning: failed to load libxml: #{$!}"
-	$stderr.puts "info: rexml (slower) will be used instead of libxml"
-	HAVE_LIBXML = false
-rescue
-	$stderr.puts "warning: failed to load libxml: #{$!}"
-	$stderr.puts "info: rexml (slower) will be used instead of libxml"
-	HAVE_LIBXML = false
-end
+
 # fixme: warlock
 # fixme: terminal mode
 # fixme: maybe add script dir to load path
@@ -1148,26 +1165,9 @@ class XMLParser
 			reset
 		end
 	end
-	if HAVE_LIBXML
-		include XML::SaxParser::Callbacks
-		def on_start_element_ns(name, attributes, prefix, uri, namespace)
-			tag_start(name, attributes)
-		end
-		def on_characters(text_string)
-			text(text_string)
-		end
-		def on_end_element_ns(name, prefix, uri)
-			tag_end(name)
-		end
-	end
 end
 
 XMLData = XMLParser.new
-
-#if HAVE_LIBXML
-#	XMLData_parser = XML::SaxParser.new
-#	XMLData_parser.callbacks = XMLData
-#end
 
 class UpstreamHook
 	@@upstream_hooks ||= Hash.new
@@ -10007,14 +10007,8 @@ main_thread = Thread.new {
 					end
 					unless $_SERVERSTRING_ =~ /^<setting/
 						begin
-							if HAVE_LIBXML
-								parser = XML::SaxParser.string("<xml>#{$_SERVERSTRING_}</xml>")
-								parser.callbacks = XMLData
-								parser.parse
-							else
-								REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
-								#XMLData.parse($_SERVERSTRING_)
-							end
+							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+							# XMLData.parse($_SERVERSTRING_)
 						rescue
 							if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
 								# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
