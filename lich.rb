@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.2'
+$version = '4.2.3'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4783,7 +4783,7 @@ class Map
 	end
 	def Map.dijkstra(source, destination=nil)
 		if source.class == Map
-			soruce.dijkstra(destination)
+			source.dijkstra(destination)
 		elsif room = Map[source]
 			room.dijkstra(destination)
 		else
