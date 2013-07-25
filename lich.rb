@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.49'
+$version = '4.1.50'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3185,7 +3185,7 @@ class SpellRanks
 	end
 	def SpellRanks.[](name)
 		SpellRanks.load unless @@loaded
-		@@list.find { |n| n == name }
+		@@list.find { |n| n.name == name }
 	end
 	def SpellRanks.list
 		SpellRanks.load unless @@loaded
