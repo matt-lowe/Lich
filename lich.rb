@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.14'
+$version = '4.1.15'
 
 # rubyw.exe doesn't have $stdout or $stderr, warnings caused by stupid Windows bugs crash Lich
 begin
@@ -7472,12 +7472,12 @@ main_thread = Thread.new {
 
 			wizard_option = Gtk::RadioButton.new('Wizard')
 			stormfront_option = Gtk::RadioButton.new(wizard_option, 'Stormfront')
-			suks_option = Gtk::RadioButton.new(wizard_option, 'SUKS')
+			suks_option = Gtk::RadioButton.new(wizard_option, 'suks')
 
 			frontend_box = Gtk::HBox.new(false, 10)
 			frontend_box.pack_start(wizard_option, false, false, 0)
 			frontend_box.pack_start(stormfront_option, false, false, 0)
-			frontend_box.pack_start(suks_option, false, false, 0)
+			# frontend_box.pack_start(suks_option, false, false, 0)
 
 			make_quick_option = Gtk::CheckButton.new('Save this info for quick game entry')
 
@@ -8116,8 +8116,9 @@ main_thread = Thread.new {
 			$stderr.puts "error: launch_data contains no GAME info"
 			exit(1)
 		end
-		if $frontend == 'suks'
-			unless game_key = launch_data.find { |opt| opt =~ /KEY=/ } && game_key = game_key.split('=').last.chomp
+		if game =~ /SUKS/i
+			$frontend = 'suks'
+			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
 				$stdout.puts "error: launch_data contains no KEY info"
 				$stderr.puts "error: launch_data contains no KEY info"
 				exit(1)
@@ -8144,7 +8145,6 @@ main_thread = Thread.new {
 		$stderr.puts "info: gamehost: #{gamehost}"
 		$stderr.puts "info: gameport: #{gameport}"
 		$stderr.puts "info: game: #{game}"
-		$frontend = 'suks' if game =~ /SUKS/i
 		if $frontend == 'suks'
 			nil
 		else
@@ -8410,8 +8410,8 @@ main_thread = Thread.new {
 			game_window.add(box1)
 			
 			game_window.signal_connect('delete_event') {
-				script_exit = true
-				game_window.destroy
+				# fixme: popup confirm box, send quit to game
+				Gtk.main_quit
 			}
 			input_box_length = 0
 			input_box.child.signal_connect('activate') {
@@ -8488,7 +8488,7 @@ main_thread = Thread.new {
 			#
 			# send the login key
 			#
-			$_SERVER_.write(game_key)
+			$_SERVER_.write("#{game_key}\r\n")
 			game_key = nil
 			#
 			# send version string
@@ -8653,7 +8653,11 @@ main_thread = Thread.new {
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
-						alt_string = sf_to_wiz(alt_string) if $frontend == 'wizard'
+						if $frontend == 'wizard'
+							alt_string = sf_to_wiz(alt_string)
+						elsif $frontend == 'suks'
+							alt_string = alt_string.gsub(/<pushStream id=["'](?:spellfront|inv|bounty|society)["'][^>]*\/>.*?<popStream[^>]*>/m, '').gsub(/<stream id="Spells">.*?<\/stream>/m, '').gsub(/<(compDef|inv|component|right|left|spell|prompt)[^>]*>.*?<\/\1>/m, '').gsub(/<[^>]+>/, '').gsub('&gt;', '>').gsub('&lt;', '<').gsub('&amp;', '&')
+						end
 						$_CLIENT_.write(alt_string)
 					end
 					begin
