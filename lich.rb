@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.0'
+$version = '4.2.1'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -327,6 +327,10 @@ begin
 	require 'libxml'
 	include LibXML
 	HAVE_LIBXML = true
+rescue LoadError
+	$stderr.puts "warning: failed to load libxml: #{$!}"
+	$stderr.puts "info: rexml (slower) will be used instead of libxml"
+	HAVE_LIBXML = false
 rescue
 	$stderr.puts "warning: failed to load libxml: #{$!}"
 	$stderr.puts "info: rexml (slower) will be used instead of libxml"
