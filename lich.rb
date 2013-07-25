@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.11'
+$version = '4.2.12'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -587,6 +587,8 @@ end
 
 class XMLParser
 	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id
+	attr_accessor :send_fake_tags
+
 	include StreamListener
 
 	def initialize
@@ -1046,7 +1048,7 @@ class XMLParser
 								@pc.status = $1
 							end
 						end
-						if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s\-!\?]+)?$/
+						if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s\-!\?']+)?$/
 							@player_status = ($1.strip.gsub('the body of', 'dead')) if $1
 							@player_title = $2
 						end
@@ -1138,9 +1140,11 @@ class XMLParser
 	end
 	def tag_end(name)
 		begin
-			if (name == 'inv') and (@obj_exist != @obj_location)
-				if @obj_name == ' is closed.'
-					GameObj.delete_container(@stow_container_id)
+			if name == 'inv'
+				if @obj_exist == @obj_location
+					if @obj_after_name == 'is closed.'
+						GameObj.delete_container(@stow_container_id)
+					end
 				elsif @obj_exist
 					GameObj.new_inv(@obj_exist, @obj_noun, @obj_name, @obj_location, @obj_before_name, @obj_after_name)
 				end
@@ -5733,7 +5737,7 @@ end
 def upstream_waitfor(*strings)
 	strings.flatten!
 	script = Script.self
-	unless script.upstream then echo("This script wants to listen to the upstream, but it isn't set as receiving the upstream! This will cause a permanent hang, aborting (ask for the upstream with 'toggle_upstream' in the script)") ; return false end
+	unless script.want_upstream then echo("This script wants to listen to the upstream, but it isn't set as receiving the upstream! This will cause a permanent hang, aborting (ask for the upstream with 'toggle_upstream' in the script)") ; return false end
 	regexpstr = strings.join('|')
 	while line = script.upstream_gets
 		if line =~ /#{regexpstr}/i
