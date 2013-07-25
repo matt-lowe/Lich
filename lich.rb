@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.50'
+$version = '4.1.51'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2718,8 +2718,7 @@ class Spellsong
 		@@renewed
 	end
 	def Spellsong.timeleft
-		@@renewed = Time.now if (Time.now - @@renewed) > Spellsong.duration
-		(Spellsong.duration - (Time.now - @@renewed)) / 60.to_f
+		(Spellsong.duration - ((Time.now - @@renewed) % Spellsong.duration)) / 60.to_f
 	end
 	def Spellsong.serialize
 		Spellsong.timeleft
