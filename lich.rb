@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.40'
+$version = '4.1.41'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6556,7 +6556,7 @@ end
 
 def registry_get(key)
 	if $SAFE == 0
-		if RUBY_PLATFORM =~ /mingw|win/i
+		if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 			path = /^(.*)\\.*?$/.match(key).captures.first.split("\\")
 			value = /^.*\\(.*?)$/.match(key).captures.first
 			begin
@@ -6651,7 +6651,7 @@ end
 
 def registry_put(key, value)
 	if $SAFE == 0
-		if RUBY_PLATFORM =~ /mingw|win/i
+		if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 			path = key.split("\\")
 			path.push('') if key =~ /\\$/
 			value.concat("\0")
@@ -6731,7 +6731,7 @@ def registry_put(key, value)
 end
 
 def find_hosts_dir
-	if RUBY_PLATFORM =~ /mingw|win/i
+	if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 		if hosts_dir = registry_get('HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\Tcpip\\Parameters\\DataBasePath')
 			heal_hosts
 			return hosts_dir.gsub(/%SystemRoot%/, windir)
@@ -6938,7 +6938,7 @@ def install_to_registry(psinet_compatible = false)
 	launch_cmd = registry_get('HKEY_LOCAL_MACHINE\\Software\\Classes\\Simutronics.Autolaunch\\Shell\\Open\\command\\')
 	launch_dir = registry_get('HKEY_LOCAL_MACHINE\\Software\\Simutronics\\Launcher\\Directory')
 	return false unless launch_cmd or launch_dir
-	if RUBY_PLATFORM =~ /win|mingw/i
+	if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 		if ruby_dir = ($:).find { |path| File.exists?("#{path}/../../../bin/rubyw.exe") }
 			ruby_dir = "#{ruby_dir.scan(/[^\/]+/)[0..-4].join('\\')}\\bin\\"
 		elsif ruby_dir = ($:).find { |path| File.exists?("#{path}/../../../../bin/rubyw.exe") }
@@ -6984,7 +6984,7 @@ def install_to_registry(psinet_compatible = false)
 			registry_put('HKEY_LOCAL_MACHINE\\Software\\Simutronics\\Launcher\\Directory', lich_launch_dir) || result = false
 		end
 	end
-	unless RUBY_PLATFORM =~ /win|mingw/i
+	unless RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 		wine = `which wine`.strip
 		if File.exists?(wine)
 			registry_put('HKEY_LOCAL_MACHINE\\Software\\Simutronics\\Launcher\\Wine', wine)
@@ -7560,7 +7560,7 @@ $stormfront = true
 
 
 
-if RUBY_PLATFORM =~ /win|mingw/i
+if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 	wine_dir = wine_bin = nil
 else
 	if ENV['WINEPREFIX'] and File.exists?(ENV['WINEPREFIX'])
@@ -8194,7 +8194,7 @@ main_thread = Thread.new {
 			# install tab
 			#
 
-			if RUBY_PLATFORM =~ /mingw|win/i
+			if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 				begin
 					kernel32 = DL.dlopen('kernel32.dll')
 					get_version_ex = kernel32['GetVersionEx', 'LP']
@@ -8412,14 +8412,14 @@ main_thread = Thread.new {
 						uninstall_button.sensitive = false
 						psinet_compatible_button.sensitive = true unless ENV['OCRA_EXECUTABLE']
 					end
-					unless RUBY_PLATFORM =~ /win|mingw/i
+					unless RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 						psinet_compatible_button.active = false
 						psinet_compatible_button.visible = false
 					end
 				}
 				install_button.signal_connect('clicked') {
 					install_to_registry(psinet_compatible_button.active?)
-					if RUBY_PLATFORM =~ /win|mingw/i
+					if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 						refresh_button.clicked
 					else
 						msgbox.call('WINE will take 5-30 seconds (maybe more) to update the registry.  Wait a while and click the refresh button.')
@@ -8427,7 +8427,7 @@ main_thread = Thread.new {
 				}
 				uninstall_button.signal_connect('clicked') {
 					uninstall_from_registry
-					if RUBY_PLATFORM =~ /win|mingw/i
+					if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 						refresh_button.clicked
 					else
 						msgbox.call('WINE will take 5-30 seconds (maybe more) to update the registry.  Wait a while and click the refresh button.')
@@ -8714,7 +8714,7 @@ main_thread = Thread.new {
 			launch_data.collect! { |line| line.sub(/GAMEPORT=.+/, "GAMEPORT=#{localport}").sub(/GAMEHOST=.+/, "GAMEHOST=localhost") }
 			File.open("#{$temp_dir}lich.sal", 'w') { |f| f.puts launch_data }
 			launcher_cmd = launcher_cmd.sub('%1', "#{$temp_dir}lich.sal")
-			launcher_cmd = launcher_cmd.tr('/', "\\") if RUBY_PLATFORM =~ /win|mingw/i
+			launcher_cmd = launcher_cmd.tr('/', "\\") if RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 			launcher_cmd = "#{wine_bin} #{launcher_cmd}" if wine_bin
 			$stderr.puts "info: launcher_cmd: #{launcher_cmd}"
 			Thread.new { system(launcher_cmd) }
@@ -8859,7 +8859,7 @@ main_thread = Thread.new {
 	#
 	# drop superuser privileges
 	#
-	unless RUBY_PLATFORM =~ /win|mingw/i
+	unless RUBY_PLATFORM =~ /mingw|(?<!dar)win/i
 		$stderr.puts "info: dropping superuser privileges..."
 		begin
 			Process.uid = `id -ru`.strip.to_i
