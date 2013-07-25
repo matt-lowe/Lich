@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.52'
+$version = '4.1.53'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2430,9 +2430,13 @@ class WizardScript<Script
 			elsif line =~ /^([\s\t]*)waitfor[\s\t]+(.+)/i
 				indent, arg = $1, $2
 				line = "#{indent}waitfor #{fixstring.call(Regexp.escape(arg).inspect.gsub("\\\\ ", ' '))}"
-			elsif line =~ /^([\s\t]*)put[\s\t]+\.(.+)/i
-				indent, arg = $1, $3
-				line = "#{indent}start_script #{fixstring.call(arg.inspect)}\n#{indent}exit"
+			elsif line =~ /^([\s\t]*)put[\s\t]+(?:\.|;)(.+)$/i
+				indent, arg = $1, $2
+				if arg.include?(' ')
+					line = "#{indent}start_script(#{Regexp.escape(fixstring.call(arg.split[0].inspect))}, #{fixstring.call(arg.split[1..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).inspect)})\n#{indent}exit"
+				else
+					line = "#{indent}start_script(#{Regexp.escape(fixstring.call(arg.inspect))})\n#{indent}exit"
+				end
 			elsif line =~ /^([\s\t]*)(put|move)[\s\t]+(.+)/i
 				indent, cmd, arg = $1, $2, $3
 				line = "#{indent}waitrt?\n#{indent}clear\n#{indent}#{cmd.downcase} #{fixstring.call(arg.inspect)}"
