@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.66'
+$version = '4.1.67'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4277,7 +4277,7 @@ class GameObj
 		@@contents.dup
 	end
 	def GameObj.load_data(filename="#{$script_dir}gameobj-data.xml")
-		if $SAFE==0
+		if $SAFE == 0
 			if File.exists?(filename)
 				begin
 					@@type_data = Hash.new
@@ -4315,9 +4315,9 @@ class GameObj
 				echo "error: GameObj.load_data: file does not exist: #{filename}"
 				false
 			end
+		else
+			UNTRUSTED_GAMEOBJ_LOAD_DATA.call
 		end
-	else
-		UNTRUSTED_GAMEOBJ_LOAD_DATA.call
 	end
 end
 
