@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.69'
+$version = '4.2.0'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -312,19 +312,6 @@ begin
 			end
 		end
 	end
-	# fixme: $gtk and $lich are depreciated in version 4.0.0, remove sooner or later
-	class BeBackwardCompatible1
-		def do(what)
-			Gtk.queue { eval(what) }
-		end
-	end
-	$gtk = BeBackwardCompatible1.new
-	class BeBackwardCompatible2
-		def do(what)
-			eval(what)
-		end
-	end
-	$lich = BeBackwardCompatible2.new
 	HAVE_GTK = true
 	$stderr.puts "info: HAVE_GTK: true"
 rescue LoadError
@@ -336,7 +323,15 @@ rescue
 	$stdout.puts "warning: failed to load GTK bindings: #{$!}"
 	$stderr.puts "warning: failed to load GTK bindings: #{$!}"
 end
-
+begin
+	require 'libxml'
+	include LibXML
+	HAVE_LIBXML = true
+rescue
+	$stderr.puts "warning: failed to load libxml: #{$!}"
+	$stderr.puts "info: rexml (slower) will be used instead of libxml"
+	HAVE_LIBXML = false
+end
 # fixme: warlock
 # fixme: terminal mode
 # fixme: maybe add script dir to load path
@@ -358,7 +353,10 @@ UNTRUSTED_CHARSETTINGS_LOAD = proc { CharSettings.load }
 UNTRUSTED_CHARSETTINGS_SAVE = proc { CharSettings.save }
 UNTRUSTED_CHARSETTINGS_SAVE_ALL = proc { CharSettings.save_all }
 UNTRUSTED_MAP_LOAD = proc { Map.load }
+UNTRUSTED_MAP_LOAD_DAT = proc { Map.load_dat }
+UNTRUSTED_MAP_LOAD_XML = proc { Map.load_xml }
 UNTRUSTED_MAP_SAVE = proc { Map.save }
+UNTRUSTED_MAP_SAVE_XML = proc { Map.save_xml }
 UNTRUSTED_SPELL_LOAD = proc { Spell.load }
 UNTRUSTED_START_SCRIPT = proc { |script_name,cli_vars,force| start_script(script_name,cli_vars,force) }
 UNTRUSTED_START_EXEC_SCRIPT = proc { |cmd_data,flags|
@@ -371,7 +369,7 @@ UNTRUSTED_SCRIPT_EXISTS = proc { |scriptname|
 }
 UNTRUSTED_UNTAINT = proc { |str| str.untaint }
 UNTRUSTED_USERVARIABLES_METHOD_MISSING = proc { |arg1, arg2| UserVariables.method_missing(arg1, arg2) }
-UNTRUSTED_USERVARIABLES_DELETE = proc { |var_name, value, type| UserVariables.delete(var_name, value, type) }
+UNTRUSTED_USERVARIABLES_DELETE = proc { |var_name, type| UserVariables.delete(var_name, type) }
 UNTRUSTED_USERVARIABLES_ADD = proc { |var_name, value, type| UserVariables.add(var_name, value, type) }
 UNTRUSTED_USERVARIABLES_CHANGE = proc { |var_name, value, type| UserVariables.change(var_name, value, type) }
 UNTRUSTED_USERVARIABLES_SAVE = proc { UserVariables.save }
@@ -538,6 +536,9 @@ class TrueClass
 	def method_missing(*usersave)
 		true
 	end
+	def to_ary
+		nil
+	end
 end
 
 class FalseClass
@@ -547,9 +548,10 @@ class FalseClass
 end
 
 class String
-	def method_missing(*usersave)
-		""
-	end
+# causes an error in File.exists? for Ruby 1.9.2
+#	def method_missing(*usersave)
+#		""
+#	end
 	def silent
 		false
 	end
@@ -568,6 +570,8 @@ class XMLParser
 	include StreamListener
 
 	def initialize
+		@buffer = String.new
+		@unescape = { 'lt' => '<', 'gt' => '>', 'quot' => '"', 'apos' => "'", 'amp' => '&' }
 		@bold = false
 		@active_tags = Array.new
 		@active_ids = Array.new
@@ -657,6 +661,26 @@ class XMLParser
 
 	def make_scar_gsl
 		@scar_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",@injuries['nsys']['scar'],@injuries['leftEye']['scar'],@injuries['rightEye']['scar'],@injuries['back']['scar'],@injuries['abdomen']['scar'],@injuries['chest']['scar'],@injuries['leftHand']['scar'],@injuries['rightHand']['scar'],@injuries['leftLeg']['scar'],@injuries['rightLeg']['scar'],@injuries['leftArm']['scar'],@injuries['rightArm']['scar'],@injuries['neck']['scar'],@injuries['head']['scar'])
+	end
+
+	def parse(line)
+		@buffer.concat(line)
+		loop {
+			if str = @buffer.slice!(/^[^<]+/)
+				text(str.gsub(/&(lt|gt|quot|apos|amp)/) { @unescape[$1] })
+			elsif str = @buffer.slice!(/^<\/[^<]+>/)
+				element = /^<\/([^\s>\/]+)/.match(str).captures.first
+				tag_end(element)
+			elsif str = @buffer.slice!(/^<[^<]+>/)
+				element = /^<([^\s>\/]+)/.match(str).captures.first
+				attributes = Hash.new
+				str.scan(/([A-z][A-z0-9_\-]*)=(["'])(.*?)\2/).each { |attr| attributes[attr[0]] = attr[2] }
+				tag_start(element, attributes)
+				tag_end(element) if str =~ /\/>$/
+			else
+				break
+			end
+		}
 	end
 
 	def tag_start(name, attributes)
@@ -959,87 +983,84 @@ class XMLParser
 			reset
 		end
 	end
-	def text(text)
+	def text(text_string)
 		begin
 			# fixme: /<stream id="Spells">.*?<\/stream>/m
-			# $_CLIENT_.write(text) unless ($frontend != 'suks') or (@current_stream =~ /^(?:spellfront|inv|bounty|society)$/) or @active_tags.any? { |tag| tag =~ /^(?:compDef|inv|component|right|left|spell)$/ } or (@active_tags.include?('stream') and @active_ids.include?('Spells')) or (text == "\n" and (@last_tag =~ /^(?:popStream|prompt|compDef|dialogData|openDialog|switchQuickBar|component)$/))
+			# $_CLIENT_.write(text_string) unless ($frontend != 'suks') or (@current_stream =~ /^(?:spellfront|inv|bounty|society)$/) or @active_tags.any? { |tag| tag =~ /^(?:compDef|inv|component|right|left|spell)$/ } or (@active_tags.include?('stream') and @active_ids.include?('Spells')) or (text_string == "\n" and (@last_tag =~ /^(?:popStream|prompt|compDef|dialogData|openDialog|switchQuickBar|component)$/))
 			if @active_tags.last == 'prompt'
-				#@prompt = text
+				#@prompt = text_string
 				nil
 			elsif @active_tags.include?('right')
-				GameObj.new_right_hand(@obj_exist, @obj_noun, text)
-				$_CLIENT_.puts "\034GSm#{sprintf('%-45s', text)}\r\n" if @send_fake_tags
+				GameObj.new_right_hand(@obj_exist, @obj_noun, text_string)
+				$_CLIENT_.puts "\034GSm#{sprintf('%-45s', text_string)}\r\n" if @send_fake_tags
 			elsif @active_tags.include?('left')
-				GameObj.new_left_hand(@obj_exist, @obj_noun, text)
-				$_CLIENT_.puts "\034GSl#{sprintf('%-45s', text)}\r\n" if @send_fake_tags
+				GameObj.new_left_hand(@obj_exist, @obj_noun, text_string)
+				$_CLIENT_.puts "\034GSl#{sprintf('%-45s', text_string)}\r\n" if @send_fake_tags
 			elsif @active_tags.include?('spell')
-				@prepared_spell = text
-				$_CLIENT_.puts "\034GSn#{sprintf('%-14s', text)}\r\n" if @send_fake_tags
+				@prepared_spell = text_string
+				$_CLIENT_.puts "\034GSn#{sprintf('%-14s', text_string)}\r\n" if @send_fake_tags
 			elsif @active_tags.include?('compDef') or @active_tags.include?('component')
 				if @active_ids.include?('room objs')
 					if @active_tags.include?('a')
 						if @bold
-							GameObj.new_npc(@obj_exist, @obj_noun, text)
+							GameObj.new_npc(@obj_exist, @obj_noun, text_string)
 						else
-							GameObj.new_loot(@obj_exist, @obj_noun, text)
+							GameObj.new_loot(@obj_exist, @obj_noun, text_string)
 						end
-					elsif (text =~ /that (?:is|appears) ([\w\s]+)(?:,| and|\.)/) or (text =~ / \(([^\(]+)\)/)
+					elsif (text_string =~ /that (?:is|appears) ([\w\s]+)(?:,| and|\.)/) or (text_string =~ / \(([^\(]+)\)/)
 						GameObj.npcs[-1].status = $1
 					end
 				elsif @active_ids.include?('room players')
 					if @active_tags.include?('a')
-						@pc = GameObj.new_pc(@obj_exist, @obj_noun, "#{@player_title}#{text}", @player_status)
+						@pc = GameObj.new_pc(@obj_exist, @obj_noun, "#{@player_title}#{text_string}", @player_status)
 						@player_status = nil
 					else
-						if (text =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text =~ / \(([\w\s]+)\)/)
+						if (text_string =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text_string =~ / \(([\w\s]+)\)/)
 							if @pc.status
 								@pc.status.concat " #{$1}"
 							else
 								@pc.status = $1
 							end
 						end
-						if text =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s]+)?$/
+						if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s]+)?$/
 							@player_status = ($1.strip.gsub('the body of', 'dead')) if $1
 							@player_title = $2
 						end
 					end
 				elsif @active_ids.include?('room desc')
-					if text == '[Room window disabled at this location.]'
+					if text_string == '[Room window disabled at this location.]'
 						@room_window_disabled = true
 					else
 						@room_window_disabled = false
-						@room_description.concat(text)
+						@room_description.concat(text_string)
 						if @active_tags.include?('a')
-							GameObj.new_room_desc(@obj_exist, @obj_noun, text)
+							GameObj.new_room_desc(@obj_exist, @obj_noun, text_string)
 						end
 					end
 				elsif @active_ids.include?('room exits')
-					@room_exits_string.concat(text)
-					@room_exits.push(text) if @active_tags.include?('d')
+					@room_exits_string.concat(text_string)
+					@room_exits.push(text_string) if @active_tags.include?('d')
 				end
 			elsif @active_tags.include?('inv')
-				if @active_tags.include?('a')
-					@obj_name = text
-				elsif @active_ids.include('stow') and text == ' is closed.'
-					GameObj.delete_container(@stow_container_id)
-					@obj_location = nil
+				if @active_tags[-1] == 'a'
+					@obj_name = text_string
 				elsif @obj_name.nil?
-					@obj_before_name = text.strip
+					@obj_before_name = text_string.strip
 				else
-					@obj_after_name = text.strip
+					@obj_after_name = text_string.strip
 				end
 			elsif @current_stream == 'spellfront'
-				@spellfront.push(text.strip)
+				@spellfront.push(text_string.strip)
 			elsif @current_stream == 'bounty'
-				@bounty_task += text
+				@bounty_task += text_string
 			elsif @current_stream == 'society'
-				@society_task = text
+				@society_task = text_string
 			elsif (@current_stream == 'inv') and @active_tags.include?('a')
-				GameObj.new_inv(@obj_exist, @obj_noun, text, nil)
+				GameObj.new_inv(@obj_exist, @obj_noun, text_string, nil)
 			elsif @current_stream == 'familiar'
 				# fixme: familiar room tracking does not (can not?) auto update, status of pcs and npcs isn't tracked at all, titles of pcs aren't tracked
 				if @current_style == 'roomName'
-					@familiar_room_title = text
+					@familiar_room_title = text_string
 					@familiar_room_description = String.new
 					@familiar_room_exits = Array.new
 					GameObj.clear_fam_room_desc
@@ -1048,39 +1069,39 @@ class XMLParser
 					GameObj.clear_fam_pcs
 					@fam_mode = String.new
 				elsif @current_style == 'roomDesc'
-					@familiar_room_description.concat(text)
+					@familiar_room_description.concat(text_string)
 					if @active_tags.include?('a')
-						GameObj.new_fam_room_desc(@obj_exist, @obj_noun, text)
+						GameObj.new_fam_room_desc(@obj_exist, @obj_noun, text_string)
 					end
-				elsif text =~ /^You also see/
+				elsif text_string =~ /^You also see/
 					@fam_mode = 'things'
-				elsif text =~ /^Also here/
+				elsif text_string =~ /^Also here/
 					@fam_mode = 'people'
-				elsif text =~ /Obvious (?:paths|exits)/
+				elsif text_string =~ /Obvious (?:paths|exits)/
 					@fam_mode = 'paths'
 				elsif @fam_mode == 'things'
 					if @active_tags.include?('a')
 						if @bold
-							GameObj.new_fam_npc(@obj_exist, @obj_noun, text)
+							GameObj.new_fam_npc(@obj_exist, @obj_noun, text_string)
 						else
-							GameObj.new_fam_loot(@obj_exist, @obj_noun, text)
+							GameObj.new_fam_loot(@obj_exist, @obj_noun, text_string)
 						end
 					end
-					# puts 'things: ' + text
+					# puts 'things: ' + text_string
 				elsif @fam_mode == 'people' and @active_tags.include?('a')
-					GameObj.new_fam_pc(@obj_exist, @obj_noun, text)
-					# puts 'people: ' + text
+					GameObj.new_fam_pc(@obj_exist, @obj_noun, text_string)
+					# puts 'people: ' + text_string
 				elsif (@fam_mode == 'paths') and @active_tags.include?('a')
-					@familiar_room_exits.push(text)
+					@familiar_room_exits.push(text_string)
 				end
 			elsif @room_window_disabled
 				if @current_style == 'roomDesc'
-					@room_description.concat(text)
+					@room_description.concat(text_string)
 					if @active_tags.include?('a')
-						GameObj.new_room_desc(@obj_exist, @obj_noun, text)
+						GameObj.new_room_desc(@obj_exist, @obj_noun, text_string)
 					end
-				elsif text =~ /^Obvious (?:paths|exits): (?:none)?$/
-					@room_exits_string = text.strip
+				elsif text_string =~ /^Obvious (?:paths|exits): (?:none)?$/
+					@room_exits_string = text_string.strip
 				end
 			end
 		rescue
@@ -1094,7 +1115,11 @@ class XMLParser
 	def tag_end(name)
 		begin
 			if (name == 'inv') and (@obj_exist != @obj_location)
-				GameObj.new_inv(@obj_exist, @obj_noun, @obj_name, @obj_location, @obj_before_name, @obj_after_name)
+				if @obj_name == ' is closed.'
+					GameObj.delete_container(@stow_container_id)
+				else
+					GameObj.new_inv(@obj_exist, @obj_noun, @obj_name, @obj_location, @obj_before_name, @obj_after_name)
+				end
 			elsif @send_fake_tags and (@active_ids.last == 'room exits')
 				gsl_exits = String.new
 				@room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
@@ -1119,9 +1144,26 @@ class XMLParser
 			reset
 		end
 	end
+	if HAVE_LIBXML
+		include XML::SaxParser::Callbacks
+		def on_start_element_ns(name, attributes, prefix, uri, namespace)
+			tag_start(name, attributes)
+		end
+		def on_characters(text_string)
+			text(text_string)
+		end
+		def on_end_element_ns(name, prefix, uri)
+			tag_end(name)
+		end
+	end
 end
 
 XMLData = XMLParser.new
+
+#if HAVE_LIBXML
+#	XMLData_parser = XML::SaxParser.new
+#	XMLData_parser.callbacks = XMLData
+#end
 
 class UpstreamHook
 	@@upstream_hooks ||= Hash.new
@@ -1983,7 +2025,7 @@ class UserVariables
 				false
 			end
 		else
-			UNTRUSTED_USERVARIABLES_DELETE.call(var_name, value, type)
+			UNTRUSTED_USERVARIABLES_DELETE.call(var_name, type)
 		end
 	end
 	def UserVariables.list_global
@@ -3763,11 +3805,17 @@ class Spell
 						}
 					end
 					if @stance and checkstance != 'offensive'
-						dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
+						put 'stance offensive'
+						# dothistimeout 'stance offensive', 5, /^You (?:are now in|move into) an? offensive stance|^You are unable to change your stance\.$/
 					end
-					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^The power from your sign dissipates into the air\.$/
+# You do not know that spell!
+					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$/
+					if cast_result == "You don't seem to be able to move to do that."
+						100.times { break if clear.any? { |line| line =~ /^You regain control of your senses!$/ }; sleep 0.1 }
+						cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$/
+					end
 					if @stance and checkstance !~ /^guarded$|^defensive$/
-						dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
+						dothistimeout 'stance guarded', 5, /^You (?:are now in|move into) an? \w+ stance|^You are unable to change your stance\.$/
 					end
 					if cast_result =~ /^Cast at what\?$|^Be at peace my child, there is no need for spells of war in here\.$/
 						dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
@@ -4337,6 +4385,12 @@ class GameObj
 			UNTRUSTED_GAMEOBJ_LOAD_DATA.call
 		end
 	end
+	def GameObj.type_data
+		@@type_data
+	end
+	def GameObj.sellable_data
+		@@sellable_data
+	end
 end
 
 class RoomObj < GameObj
@@ -4344,33 +4398,32 @@ end
 
 class Map
 	@@list ||= Array.new
+	@@tags ||= Array.new
 	attr_reader :id
-	attr_accessor :title, :desc, :paths, :wayto, :timeto, :pause, :geo, :searched, :nadj, :adj, :parent, :atlas_id, :map_name, :map_x, :map_y, :map_roomsize
-	def initialize(id, title, desc, paths, wayto={}, timeto={}, geo=nil, pause = nil)
-		@id, @title, @desc, @paths, @wayto, @timeto, @geo, @pause = id, title, desc, paths, wayto, timeto, geo, pause
+	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location
+	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil)
+		@id, @title, @description, @paths, @location, @climate, @terrain, @wayto, @timeto, @image, @image_coords, @tags, @check_location = id, title, description, paths, location, climate, terrain, wayto, timeto, image, image_coords, tags, check_location
 		@@list[@id] = self
+	end
+	def outside?
+		@paths.first =~ /Obvious paths:/
+	end
+	def to_i
+		@id
+	end
+	def to_s
+		"##{@id}:\n#{@title[0]}\n#{@description[0]}\n#{@paths[0]}"
+	end
+	def inspect
+		self.instance_variables.collect { |var| var.to_s + "=" + self.instance_variable_get(var).inspect }.join("\n")
 	end
 	def Map.get_free_id
 		Map.load if @@list.empty?
 		free_id = 0
-		free_id += 1 until @@list[free_id].nil?
-		free_id
-	end
-	def Map.clear
-		@@list.clear
-	end
-	def Map.uniq_new(id, title, desc, paths, wayto={}, timeto={}, geo=nil)
-		# id ignored, but left in for backward compatability
-		Map.load if @@list.empty?
-		unless dupe_room = @@list.find { |room| room.title.include(title) and room.desc.include?(desc.strip) and room.paths.include?(paths) }
-			return Map.new(Map.get_free_id, [title], [desc], [paths], wayto, timeto, geo)
+		until @@list[free_id].nil?
+			free_id += 1
 		end
-		return dupe_room
-	end
-	def Map.uniq!
-		# fixme
-		echo 'Map.uniq! called.  Doing nothing.'
-		return false
+		free_id
 	end
 	def Map.list
 		Map.load if @@list.empty?
@@ -4383,17 +4436,57 @@ class Map
 		else
 			chkre = /#{val.strip.sub(/\.$/, '').gsub(/\.(?:\.\.)?/, '|')}/i
 			chk = /#{Regexp.escape(val.strip)}/i
-			@@list.find { |room| room.title.find { |title| title =~ chk } } || @@list.find { |room| room.desc.find { |desc| desc =~ chk } } || @@list.find { |room| room.desc.find { |desc| desc =~ chkre } }
+			@@list.find { |room| room.title.find { |title| title =~ chk } } || @@list.find { |room| room.description.find { |desc| desc =~ chk } } || @@list.find { |room| room.description.find { |desc| desc =~ chkre } }
 		end
 	end
 	def Map.current
 		Map.load if @@list.empty?
-		room = @@list.find { |room| room.title.include?(XMLData.room_title) and room.desc.include?(XMLData.room_description.strip) and room.paths.include?(XMLData.room_exits_string.strip) }
-		unless room
-			desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-			room = @@list.find { |room| room.title.include?(XMLData.room_title) and room.paths.include?(XMLData.room_exits_string.strip) and room.desc.find { |desc| desc =~ desc_regex } }
+		if @check_location
+			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$/
+			current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+			room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+			unless room
+				desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+				room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
+			end
+		else
+			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+			unless room
+				desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+				room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
+			end
 		end
-		return room
+		room
+	end
+	def Map.current_or_new
+		if XMLData.game =~ /DR/
+			Map.current || Map.new(Map.get_free_id, [ XMLData.room_title ], [ XMLData.room_description.strip ], [ XMLData.room_exits_string.strip ])
+		else
+			location_result = dothistimeout('location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$/)
+			current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+			if room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+				return room
+			elsif room = @@list.find { |r| r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+				room.location = current_location
+				return room
+			else
+				title = [ XMLData.room_title ]
+				description = [ XMLData.room_description.strip ]
+				paths = [ XMLData.room_exits_string.strip ]
+				if @@list.any? { |r| !r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+					check_location = true
+				else
+					check_location = false
+				end
+				room = Map.new(Map.get_free_id, title, description, paths, current_location)
+				room.location = current_location
+				room.check_location = check_location
+				return room
+			end
+		end
+	end
+	def Map.tags
+		@@tags.dup
 	end
 	def Map.reload
 		@@list.clear
@@ -4402,17 +4495,37 @@ class Map
 	end
 	def Map.load(filename=nil)
 		if $SAFE == 0
-			file_list = Array.new
 			if filename.nil?
-				file_list.concat Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.dat$/ }.collect { |filename| "#{$data_dir}#{XMLData.game}/#{filename}" }.sort.reverse
-				if File.exists?("#{$data_dir}#{XMLData.game}/map.dat")
-					file_list.push "#{$data_dir}#{XMLData.game}/map.dat"
-				end
-				if File.exists?("#{$script_dir}map.dat")
-					file_list.push "#{$script_dir}map.dat"
-				end
+				file_list = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.(?:dat|xml)$/ }.collect { |filename| "#{$data_dir}#{XMLData.game}/#{filename}" }.sort.reverse
 			else
-				file_list.push(filename)
+				file_list = [ filename ]
+			end
+			if file_list.empty?
+				respond "--- error: no map database found"
+				return false
+			end
+			while filename = file_list.shift
+				if filename =~ /\.xml$/
+					if Map.load_xml(filename)
+						return true
+					end
+				else
+					if Map.load_dat(filename)
+						return true
+					end
+				end
+			end
+			return false
+		else
+			UNTRUSTED_MAP_LOAD.call
+		end
+	end
+	def Map.load_dat(filename=nil)
+		if $SAFE == 0
+			if filename.nil?
+				file_list = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.dat$/ }.collect { |filename| "#{$data_dir}#{XMLData.game}/#{filename}" }.sort.reverse
+			else
+				file_list = [ filename ]
 			end
 			if file_list.empty?
 				respond "--- error: no map database found"
@@ -4422,7 +4535,25 @@ class Map
 			while filename = file_list.shift
 				begin
 					File.open(filename, 'rb') { |file| @@list = Marshal.load(file.read) }
+					if @@list[0].instance_variables.include?('@pause') or @@list[0].instance_variables.include?(:@pause)
+						respond "--- converting #{filename}"
+						temp_list = @@list
+						@@list = Array.new
+						temp_list.each { |room|
+							next if room.nil?
+							if room.instance_variable_get('@map_x') and room.instance_variable_get('@map_y') and room.instance_variable_get('@map_roomsize')
+								image_coords = [ (room.instance_variable_get('@map_x').to_i - (room.instance_variable_get('@map_roomsize')/2.0).round), (room.instance_variable_get('@map_y').to_i - (room.instance_variable_get('@map_roomsize')/2.0).round), (room.instance_variable_get('@map_x').to_i + (room.instance_variable_get('@map_roomsize')/2.0).round), (room.instance_variable_get('@map_y').to_i + (room.instance_variable_get('@map_roomsize')/2.0).round) ]
+							else
+								image_coords = nil
+							end
+							Map.new(room.id, room.title, room.instance_variable_get('@desc'), room.paths, nil, nil, nil, room.wayto, room.timeto, room.instance_variable_get('@map_name'), image_coords, Array.new, nil)
+						}
+						temp_list = nil
+						Map.save
+					end
 					GC.start
+					@@tags.clear
+					@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
 					respond "--- loaded #{filename}" if error
 					return true
 				rescue
@@ -4434,59 +4565,101 @@ class Map
 					end
 				end
 			end
+			return false
 		else
-			UNTRUSTED_MAP_LOAD.call
+			UNTRUSTED_MAP_LOAD_DAT.call
 		end
 	end
-	def Map.load_xml(filename=nil)
-		unless filename
-			if File.exists?("#{$data_dir}#{XMLData.game}/map.xml")
-				filename = "#{$data_dir}#{XMLData.game}/map.xml"
-			else
-				filename = "#{$script_dir}map.xml"
+	def Map.load_xml(filename="#{$data_dir}#{XMLData.game}/map.xml")
+		if $SAFE == 0
+			unless File.exists?(filename)
+				raise Exception.exception("MapDatabaseError"), "Fatal error: file `#{filename}' does not exist!"
 			end
-		end
-		unless File.exists?(filename)
-			raise Exception.exception("MapDatabaseError"), "Fatal error: file `#{filename}' does not exist!"
-		end
-		File.open(filename) { |file|
-			file.read.split(/(?=<room)/).each { |room_tag|
-				room = Hash.new
-				room['wayto'] = Hash.new
-				room['timeto'] = Hash.new
-				room['title'] = Array.new
-				room['description'] = Array.new
-				room['paths'] = Array.new
-				map_name, map_x, map_y, map_roomsize = nil, nil, nil, nil
-				room_tag.split(/(?=<(?:\w|\/room))/).each { |line|
-					if line =~ /<room\s+id=['"]([0-9]+)['"]>/
-						room['id'] = $1
-					elsif line =~ /<(title|description|paths)>(.*?)<\/\1>/
-						room[$1].push($2.gsub('&gt;','>').gsub('&lt;','<'))
-					elsif line =~ /<exit\s+target=['"](.*?)['"]\s+type=['"](.*?)['"]\s+cost=['"](.*?)['"]>(.*?)<\/exit>/m
-						target, type, cost, way = $1, $2, $3, $4
-						if type =~ /String/i
-							room['wayto'][target] = way
-						elsif type =~ /Proc/i
-							room['wayto'][target] = StringProc.new(way.gsub('&gt;','>').gsub('&lt;','<'))
+			missing_end = false
+			current_tag = nil
+			current_attributes = nil
+			room = nil
+			buffer = String.new
+			unescape = { 'lt' => '<', 'gt' => '>', 'quot' => '"', 'apos' => "'", 'amp' => '&' }
+			tag_start = proc { |element,attributes|
+				current_tag = element
+				current_attributes = attributes
+				if element == 'room'
+					room = Hash.new
+					room['id'] = attributes['id'].to_i
+					room['location'] = attributes['location']
+					room['climate'] = attributes['climate']
+					room['terrain'] = attributes['terrain']
+					room['wayto'] = Hash.new
+					room['timeto'] = Hash.new
+					room['title'] = Array.new
+					room['description'] = Array.new
+					room['paths'] = Array.new
+					room['tags'] = Array.new
+				elsif element =~ /^(?:image|tsoran)$/ and attributes['name'] and attributes['x'] and attributes['y'] and attributes['size']
+					room['image'] = attributes['name']
+					room['image_coords'] = [ (attributes['x'].to_i - (attributes['size']/2.0).round), (attributes['y'].to_i - (attributes['size']/2.0).round), (attributes['x'].to_i + (attributes['size']/2.0).round), (attributes['y'].to_i + (attributes['size']/2.0).round) ]
+				elsif (element == 'image') and attributes['name'] and attributes['coords'] and (attributes['coords'] =~ /[0-9]+,[0-9]+,[0-9]+,[0-9]+/)
+					room['image'] = attributes['name']
+					room['image_coords'] = attributes['coords'].split(',').collect { |num| num.to_i }
+				elsif element == 'map'
+					missing_end = true
+				end
+			}
+			text = proc { |text_string|
+				if current_tag =~ /^(?:title|description|paths|tag)$/
+					room[$1].push(text_string)
+				elsif current_tag == 'exit' and current_attributes['target']
+					if current_attributes['type'].downcase == 'string'
+						room['wayto'][current_attributes['target']] = text_string
+					elsif
+						room['wayto'][current_attributes['target']] = StringProc.new(text_string)
+					end
+					room['timeto'][current_attributes['target']] = (current_attributes['cost'] || 0.2).to_f
+				end
+			}
+			tag_end = proc { |element|
+				if element == 'room'
+					Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'])
+				elsif element == 'map'
+					missing_end = false
+				end
+			}
+			begin
+				File.open(filename) { |file|
+					while line = file.gets
+						buffer.concat(line)
+						while str = buffer.slice!(/^[^<]+(?=<)|^<[^<]+>/)
+							if str[0] == '<'
+								if str[1] == '/'
+									element = /^<\/([^\s>\/]+)/.match(str).captures.first
+									tag_end.call(element)
+								else
+									element = /^<([^\s>\/]+)/.match(str).captures.first
+									attributes = Hash.new
+									str.scan(/([A-z][A-z0-9_\-]*)=(["'])(.*?)\2/).each { |attr| attributes[attr[0]] = attr[2].gsub(/&(lt|gt|quot|apos|amp)/) { unescape[$1] } }
+									tag_start.call(element, attributes)
+									tag_end.call(element) if str[-2] == '/'
+								end
+							else
+								text.call(str.gsub(/&(lt|gt|quot|apos|amp)/) { unescape[$1] })
+							end
 						end
-						room['timeto'][target] = cost.to_f
-					elsif line =~ /<(?:image|tsoran)\s+name=['"](.*?)['"]\s+x=['"]([0-9]+)['"]\s+y=['"]([0-9]+)['"]\s+size=['"]([0-9]+)['"]\s*\/>/
-						map_name, map_x, map_y, map_roomsize = $1, $2.to_i, $3.to_i, $4.to_i
-					elsif line =~ /<\/room>/
-						new_room = Map.new(room['id'].to_i, room['title'], room['description'], room['paths'], room['wayto'], room['timeto'])
-						new_room.map_name = map_name
-						new_room.map_x = map_x
-						new_room.map_y = map_y
-						new_room.map_roomsize = map_roomsize
 					end
 				}
-			}
-		}
-	end
-	def Map.load_unique(file)
-		Map.load if @@list.empty?
-		nil
+				if missing_end
+					respond "--- error: failed to load #{filename}: unexpected end of file"
+					return false
+				end
+				@@tags.clear
+				@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
+			rescue
+				respond "--- error: failed to load #{filename}: #{$!}"
+				return false
+			end
+		else
+			UNTRUSTED_MAP_LOAD_XML.call
+		end
 	end
 	def Map.save(filename="#{$data_dir}#{XMLData.game}/map-#{Time.now.to_i}.dat")
 		if $SAFE == 0
@@ -4506,6 +4679,8 @@ class Map
 				File.open(filename, 'wb') { |file|
 					file.write(Marshal.dump(@@list))
 				}
+				@@tags.clear
+				@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
 				respond "--- Map database saved"
 			rescue
 				respond "--- error: #{$!}"
@@ -4515,57 +4690,76 @@ class Map
 			UNTRUSTED_MAP_SAVE.call
 		end
 	end
-	def Map.save_xml(filename="#{$data_dir}#{XMLData.game}/map.xml")
-		if File.exists?(filename)
-			respond "File exists!  Backing it up before proceeding..."
+	def Map.save_xml(filename="#{$data_dir}#{XMLData.game}/map-#{Time.now.to_i}.xml")
+		if $SAFE == 0
+			if File.exists?(filename)
+				respond "File exists!  Backing it up before proceeding..."
+				begin
+					file = nil
+					bakfile = nil
+					file = File.open(filename, 'rb')
+					bakfile = File.open(filename + ".bak", "wb")
+					bakfile.write(file.read)
+				rescue
+					respond $!
+				ensure
+					file ? file.close : nil
+					bakfile ? bakfile.close : nil
+				end
+			end
 			begin
-				file = nil
-				bakfile = nil
-				file = File.open(filename, 'rb')
-				bakfile = File.open(filename + ".bak", "wb")
-				bakfile.write(file.read)
+				escape = { '<' => '&lt;', '>' => '&gt;', '"' => '&quot;', "'" => "&apos;", '&' => '&amp;' }
+				File.open(filename, 'w') { |file|
+					file.write "<map>\n"
+					@@list.each { |room|
+						next if room == nil
+						if room.location
+							location = " location=#{(room.location.gsub(/(<|>|"|'|&)/) { escape[$1] }).inspect}"
+						else
+							location = ''
+						end
+						if room.climate
+							climate = " climate=#{(room.climate.gsub(/(<|>|"|'|&)/) { escape[$1] }).inspect}"
+						else
+							climate = ''
+						end
+						if room.terrain
+							terrain = " terrain=#{(room.terrain.gsub(/(<|>|"|'|&)/) { escape[$1] }).inspect}"
+						else
+							terrain = ''
+						end
+						file.write "	<room id=\"#{room.id}\"#{location}#{climate}#{terrain}>\n"
+						room.title.each { |title| file.write "		<title>#{title.gsub(/(<|>|"|'|&)/) { escape[$1] }}</title>\n" }
+						room.description.each { |desc| file.write "		<description>#{desc.gsub(/(<|>|"|'|&)/) { escape[$1] }}</description>\n" }
+						room.paths.each { |paths| file.write "		<paths>#{paths.gsub(/(<|>|"|'|&)/) { escape[$1] }}</paths>\n" }
+						room.tags.each { |tag| file.write "		<tag>#{tag.gsub(/(<|>|"|'|&)/) { escape[$1] }}</tag>\n" }
+						file.write "		<image name=\"#{room.image.gsub(/(<|>|"|'|&)/) { escape[$1] }}\" coords=\"#{room.image_coords.join(',')}\" />\n" if room.image and room.image_coords
+						room.wayto.keys.each { |target|
+							if room.timeto[target]
+								cost = " cost=\"#{room.timeto[target]}\""
+							else
+								cost = ''
+							end
+							if room.wayto[target].class == Proc
+								file.write "		<exit target=\"#{target}\" type=\"Proc\"#{cost}>#{room.wayto[target]._dump.gsub(/(<|>|"|'|&)/) { escape[$1] }}</exit>\n"
+							else
+								file.write "		<exit target=\"#{target}\" type=\"#{room.wayto[target].class}\"#{cost}>#{room.wayto[target].gsub(/(<|>|"|'|&)/) { escape[$1] }}</exit>\n"
+							end
+						}
+						file.write "	</room>\n"
+					}
+					file.write "</map>\n"
+				}
+				@@tags.clear
+				@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
+				respond "--- map database saved to: #{filename}"
 			rescue
 				respond $!
-			ensure
-				file ? file.close : nil
-				bakfile ? bakfile.close : nil
 			end
+			GC.start
+		else
+			UNTRUSTED_MAP_SAVE_XML.call
 		end
-		begin
-			file = nil
-			file = File.open(filename, 'wb')
-			@@list.each { |room|
-				next if room == nil
-				file.write "<room id=\"#{room.id}\">\n"
-				room.title.each { |title| file.write "	<title>#{title.gsub('<', '&lt;').gsub('>', '&gt;')}</title>\n" }
-				room.desc.each { |desc| file.write "	<description>#{desc.gsub('<', '&lt;').gsub('>', '&gt;')}</description>\n" }
-				room.paths.each { |paths| file.write "	<paths>#{paths.gsub('<', '&lt;').gsub('>', '&gt;')}</paths>\n" }
-				file.write "	<image name=\"#{room.map_name}\" x=\"#{room.map_x}\" y=\"#{room.map_y}\" size=\"#{room.map_roomsize}\" />\n" if room.map_name
-				room.wayto.keys.each { |target|
-					if room.timeto[target]
-						cost = " cost=\"#{room.timeto[target]}\""
-					else
-						cost = ''
-					end
-					if room.wayto[target].class == Proc
-						file.write "	<exit target=\"#{target}\" type=\"Proc\"#{cost}>#{room.wayto[target]._dump.gsub('<', '&lt;').gsub('>', '&gt;')}</exit>\n"
-					else
-						file.write "	<exit target=\"#{target}\" type=\"#{room.wayto[target].class}\"#{cost}>#{room.wayto[target].gsub('<', '&lt;').gsub('>', '&gt;')}</exit>\n"
-					end
-				}
-				file.write "</room>\n"
-			}
-			respond "The current map database has been saved!"
-		rescue
-			respond $!
-		ensure
-			file ? file.close : nil
-		end
-		GC.start
-	end
-	def Map.smart_check
-		echo 'Map.smart_check is depreciated.  Doing nothing.'
-		nil
 	end
 	def Map.estimate_time(array)
 		Map.load if @@list.empty?
@@ -4583,20 +4777,18 @@ class Map
 		end
 		time
 	end
-	def Map.findpath(source, destination)
-		Map.load if @@list.empty?
-		previous, shortest_distances = Map.dijkstra(source, destination)
-		return nil unless previous[destination]
-		path = [ destination ]
-		path.push(previous[path[-1]]) until previous[path[-1]] == source
-		path.reverse!
-		path.pop
-		return path
-	end
 	def Map.dijkstra(source, destination=nil)
+		if room = Map[source]
+			room.dijkstra(destination)
+		else
+			echo "Map.dijkstra: error: invalid source room"
+			nil
+		end
+	end
+	def dijkstra(destination=nil)
 		begin
 			Map.load if @@list.empty?
-			source = source.to_i
+			source = @id
 			visited = Array.new
 			shortest_distances = Array.new
 			previous = Array.new
@@ -4665,27 +4857,82 @@ class Map
 			nil
 		end
 	end
-	def outside?
-		@paths =~ /Obvious paths:/
+	def Map.findpath(source, destination)
+		if room = Map[source]
+			room.path_to(destination)
+		else
+			echo "Map.findpath: error: invalid source room"
+			nil
+		end
 	end
-	def to_i
-		@id
+	def path_to(destination)
+		Map.load if @@list.empty?
+		destination = destination.to_i
+		previous, shortest_distances = dijkstra(destination)
+		return nil unless previous[destination]
+		path = [ destination ]
+		path.push(previous[path[-1]]) until previous[path[-1]] == @id
+		path.reverse!
+		path.pop
+		return path
 	end
-	def to_s
-		"##{@id}:\n#{@title[0]}\n#{@desc[0]}\n#{@paths[0]}"
+	def find_nearest_by_tag(tag_name)
+		target_list = Array.new
+		@@list.each { |room| target_list.push(room.id) if room.tags.include?(tag_name) }
+		previous, shortest_distances = Map.dijkstra(@id, target_list)
+		if target_list.include?(@id)
+			@id
+		else
+			target_list.delete_if { |room_num| shortest_distances[room_num].nil? }
+			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
+			target_list.first
+		end
 	end
-	def inspect
-		self.instance_variables.collect { |var| var.to_s + "=" + self.instance_variable_get(var).inspect }.join("\n")
+	def find_all_nearest_by_tag(tag_name)
+		target_list = Array.new
+		@@list.each { |room| target_list.push(room.id) if room.tags.include?(tag_name) }
+		echo "target_list: #{target_list.inspect}"
+		previous, shortest_distances = Map.dijkstra(@id)
+		target_list.delete_if { |room_num| shortest_distances[room_num].nil? }
+		target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
 	end
-	def cinspect
-		inspect
+	def find_nearest(target_list)
+		previous, shortest_distances = Map.dijkstra(@id, target_list)
+		if target_list.include?(@id)
+			@id
+		else
+			target_list.delete_if { |room_num| shortest_distances[room_num].nil? }
+			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
+			target_list.first
+		end
 	end
-	# backward compatability
-	def guaranteed_shortest_pathfind(target)
-		Map.findpath(self.id, target.id)
+	# depreciated
+	def desc
+		@description
 	end
-	def estimation_pathfind(target)
-		Map.findpath(self.id, target.id)
+	def map_name
+		@image
+	end
+	def map_x
+		if @image_coords.nil?
+			nil
+		else
+			((image_coords[0] + image_coords[2])/2.0).round
+		end
+	end
+	def map_y
+		if @image_coords.nil?
+			nil
+		else
+			((image_coords[1] + image_coords[3])/2.0).round
+		end
+	end
+	def map_roomsize
+		if @image_coords.nil?
+			nil
+		else
+			image_coords[2] - image_coords[0]
+		end
 	end
 end
 
@@ -4826,7 +5073,11 @@ end
 def echo(*messages)
 	if script = Script.self 
 		unless script.no_echo
-			messages = messages.flatten.compact
+			if messages.class == Array
+				messages = messages.flatten.compact
+			else
+				messages = [ messages.to_s ]
+			end
 			respond if messages.empty?
 			messages.each { |message| respond("[#{script.name}: #{message.to_s.chomp}]") }
 		end
@@ -5211,8 +5462,9 @@ def waitrt
 end
 
 def waitrt?
-	if (XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0
-		sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f).abs)
+	rt = XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f
+	if rt > 0
+		sleep rt
 	end
 end
 
@@ -5222,17 +5474,18 @@ def waitcastrt
 end
 
 def waitcastrt?
-	if (XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0
-		sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f).abs)
+	rt = XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f
+	if rt > 0
+		sleep rt
 	end
 end
 
 def checkrt
-	[XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f, 0].max
+	[XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f, 0].max
 end
 
 def checkcastrt
-	[XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f, 0].max
+	[XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + "0.6".to_f, 0].max
 end
 
 def checkpoison
@@ -5569,7 +5822,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			Script.self.downstream_buffer.flatten!
 			# return nil instead of false to show the direction shouldn't be removed from the map database
 			return nil
-		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he (?:is too heavy|doesn't budge)\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "Stop\.  You need to make sure you check in at Wyveryn Keep and get proper identification papers\.  We don't let just anyone wander around here\.  Now go on through the gate and get over there\."$/
+		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he (?:is too heavy|doesn't budge)\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "Stop\.  You need to make sure you check in at Wyveryn Keep and get proper identification papers\.  We don't let just anyone wander around here\.  Now go on through the gate and get over there\."$|^You step into the root, but can see no way to climb the slippery tendrils inside\.  After a moment, you step back out\.$/
 			sleep 1
 			waitrt?
 			put_dir.call
@@ -6479,8 +6732,12 @@ def fput(message, *waitingfor)
 				while checkwebbed
 					sleep("0.25".to_f)
 				end
+			elsif string =~ /Sorry, you may only type ahead/
+				sleep 1
 			else
-				sleep(1)
+				sleep "0.1".to_f
+				script.downstream_buffer.unshift(string)
+				return false
 			end
 			clear
 			put(message)
@@ -6698,7 +6955,7 @@ def empty_hands
 	end
 	if left_hand.id
 		waitrt?
-		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
+		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
 			actions.unshift proc {
 				fput "remove ##{left_hand.id}"
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
@@ -6819,7 +7076,7 @@ def empty_hand
 			end
 		elsif left_hand.id and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
 			waitrt?
-			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
+			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
 				actions.unshift proc {
 					fput "remove ##{left_hand.id}"
 					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
@@ -6859,7 +7116,7 @@ end
 
 def dothis (action, success_line)
 	loop {
-		clear
+		Script.self.clear
 		put action
 		loop {
 			line = get
@@ -6918,12 +7175,14 @@ def dothistimeout (action, timeout, success_line)
 	end_time = Time.now.to_f + timeout
 	line = nil
 	loop {
-		clear
+		Script.self.clear
 		put action unless action.nil?
 		loop {
 			line = get?
 			if line.nil?
 				sleep "0.1".to_f
+			elsif line =~ success_line
+				return line
 			elsif line =~ /^(\.\.\.w|W)ait ([0-9]+) sec(onds)?\.$/
 				if $2.to_i > 1
 					sleep ($2.to_i - "0.5".to_f)
@@ -6971,8 +7230,6 @@ def dothistimeout (action, timeout, success_line)
 					end
 				}
 				break
-			elsif line =~ success_line
-				return line
 			end
 			if Time.now.to_f >= end_time
 				return nil
@@ -8007,7 +8264,7 @@ $stormfront = true
 if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 	wine_dir = wine_bin = nil
 else
-	if ENV['WINEPREFIX'] and File.exists?(ENV['WINEPREFIX'])
+	if ENV['WINEPREFIX'] and File.exists?(ENV['WINEPREFIX'].to_s)
 		wine_dir = ENV['WINEPREFIX']
 	elsif ENV['HOME'] and File.exists?(ENV['HOME'] + '/.wine')
 		wine_dir = ENV['HOME'] + '/.wine'
@@ -9464,6 +9721,7 @@ main_thread = Thread.new {
 			$_CLIENTBUFFER_.push("<c>\r\n")
 			$_SERVER_.write("<c>\r\n")
 		}
+		$login_time = Time.now
 	elsif $frontend == 'suks'
 =begin
 		io_string = String.new
@@ -9472,8 +9730,8 @@ main_thread = Thread.new {
 		$stdout = $_CLIENT_
 		$_CLIENT_.sync = true
 		SUKS = SuperUltraKoboldSmasher.new
-		$login_time = Time.now
 		client_thread = Thread.new {
+			$login_time = Time.now
 			begin
 				loop {
 					if client_string = $_CLIENT_READER_.gets
@@ -9680,54 +9938,6 @@ main_thread = Thread.new {
 
 	server_thread = Thread.new {
 		begin
-=begin
-			50.times {
-				server_thread.kill unless $_SERVERSTRING_ = $_SERVER_.gets
-				$stderr.puts $_SERVERSTRING_
-				$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
-				begin
-					# The Rift, Scatter is broken...
-					$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
-					# Cry For Help spell is broken...
-					if $_SERVERSTRING_ =~ /<pushStream id="familiar" \/><prompt time="[0-9]+">&gt;<\/prompt>/
-						$_SERVERSTRING_.sub!('<pushStream id="familiar" />', '')
-					end
-					$_SERVERBUFFER_.push($_SERVERSTRING_)
-					if alt_string = DownstreamHook.run($_SERVERSTRING_)
-						if $frontend =~ /^(?:wizard|avalon)$/
-							alt_string = sf_to_wiz(alt_string)
-						end
-						$_CLIENT_.write(alt_string)
-					end
-					unless $_SERVERSTRING_ =~ /^<setting/
-						begin
-							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
-						rescue
-							if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
-								# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
-								$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
-								retry
-							end
-							$stdout.puts "--- error: server_thread: #{$!}"
-							$stderr.puts "error: server_thread: #{$!}"
-							$stderr.puts $!.backtrace
-							XMLData.reset
-						end
-						Script.new_downstream_xml($_SERVERSTRING_)
-						stripped_server = strip_xml($_SERVERSTRING_)
-						stripped_server.split("\r\n").each { |line|
-							unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring\.|joins the adventure\.|(?:is off to a rough start!  (?:H|She) )?just bit the dust!|was just incinerated!|was just vaporized!|has been vaporized!|has disconnected\.)$|^ \* The death cry of [A-Z][a-z]+ echoes in your mind!$|^\r*\n*$/
-								Script.new_downstream(line) unless line.empty?
-							end
-						}
-					end
-				rescue
-					$stdout.puts "--- error: server_thread: #{$!}"
-					$stderr.puts "error: server_thread: #{$!}"
-					$stderr.puts $!.backtrace
-				end
-			}
-=end
 			while $_SERVERSTRING_ = $_SERVER_.gets
 				begin
 					$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
@@ -9762,7 +9972,14 @@ main_thread = Thread.new {
 					end
 					unless $_SERVERSTRING_ =~ /^<setting/
 						begin
-							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+							if HAVE_LIBXML
+								parser = XML::SaxParser.string("<xml>#{$_SERVERSTRING_}</xml>")
+								parser.callbacks = XMLData
+								parser.parse
+							else
+								REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+								#XMLData.parse($_SERVERSTRING_)
+							end
 						rescue
 							if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
 								# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
