@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.44'
+$version = '4.1.45'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -7810,6 +7810,8 @@ main_thread = Thread.new {
 		if ARGV.include?('--gemstone')
 			if ARGV.include?('--platinum')
 				data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSX') }
+			elsif ARGV.include?('--shattered')
+				data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSF') }
 			else
 				data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GS3') }
 			end
@@ -7995,7 +7997,7 @@ main_thread = Thread.new {
 										if response =~ /^L\t/
 											login_server.close unless login_server.closed?
 											launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-											if data[:frontend] == 'wizard'
+											if login_info[:frontend] == 'wizard'
 												launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
 											end
 											window.destroy
@@ -8026,7 +8028,7 @@ main_thread = Thread.new {
 						end
 					}
 					remove_button.signal_connect('clicked') {
-						entry_data.delete(data)
+						entry_data.delete(login_info)
 						save_entry_data = true
 						char_box.visible = false
 					}
