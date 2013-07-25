@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.34'
+$version = '4.1.35'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -64,6 +64,7 @@ if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts ''
 	puts '  -w, --wizard        Run in Wizard mode (default)'
 	puts '  -s, --stormfront    Run in StormFront mode.'
+	puts '      --avalon        Run in Avalon mode.'
 	puts ''
 	puts '      --gemstone      Connect to the Gemstone IV Prime server (default).'
 	puts '      --dragonrealms  Connect to the DragonRealms server.'
@@ -194,17 +195,17 @@ end
 if arg = ARGV.find { |a| a == '--hosts-dir' }
 	i = ARGV.index(arg)
 	ARGV.delete_at(i)
-	$hosts_dir = ARGV[i]
+	hosts_dir = ARGV[i]
 	ARGV.delete_at(i)
-	if $hosts_dir and File.exists?($hosts_dir)
-		$hosts_dir = $hosts_dir.tr('\\', '/')
-		$hosts_dir += '/' unless $hosts_dir[-1..-1] == '/'
+	if hosts_dir and File.exists?(hosts_dir)
+		hosts_dir = hosts_dir.tr('\\', '/')
+		hosts_dir += '/' unless hosts_dir[-1..-1] == '/'
 	else
-		$stdout.puts "warning: given hosts directory does not exist: #{$hosts_dir}"
-		$hosts_dir = nil
+		$stdout.puts "warning: given hosts directory does not exist: #{hosts_dir}"
+		hosts_dir = nil
 	end
 else
-	$hosts_dir = nil
+	hosts_dir = nil
 end
 
 num = Time.now.to_i
@@ -348,8 +349,13 @@ $room_count = 0
 #
 UNTRUSTED_SETTINGS_LOAD = proc { |var| Settings.load }
 UNTRUSTED_SETTINGS_SAVE = proc { |var| Settings.save }
-UNTRUSTED_OPTIONS_LOAD = proc { |var| Options.load }
-UNTRUSTED_OPTIONS_SAVE = proc { |var| Options.save }
+UNTRUSTED_SETTINGS_SAVE_ALL = proc { |var| Settings.save_all }
+UNTRUSTED_GAMESETTINGS_LOAD = proc { |var| GameSettings.load }
+UNTRUSTED_GAMESETTINGS_SAVE = proc { |var| GameSettings.save }
+UNTRUSTED_GAMESETTINGS_SAVE_ALL = proc { |var| GameSettings.save_all }
+UNTRUSTED_CHARSETTINGS_LOAD = proc { |var| CharSettings.load }
+UNTRUSTED_CHARSETTINGS_SAVE = proc { |var| CharSettings.save }
+UNTRUSTED_CHARSETTINGS_SAVE_ALL = proc { |var| CharSettings.save_all }
 UNTRUSTED_MAP_LOAD = proc { |var| Map.load }
 UNTRUSTED_MAP_SAVE = proc { |var| Map.save }
 UNTRUSTED_SPELL_LOAD = proc { |var| Spell.load }
@@ -870,7 +876,7 @@ class XMLParser
 				end
 			elsif (name == 'playerID')
 				@player_id = attributes['id']
-				unless $frontend == 'wizard'
+				unless $frontend =~ /^(?:wizard|avalon)$/
 					LichSettings[@player_id] ||= Hash.new
 					if LichSettings[@player_id]['enable_inventory_boxes']
 						DownstreamHook.remove('inventory_boxes_off')
@@ -887,7 +893,7 @@ class XMLParser
 				unless File.exists?("#{$data_dir}#{@game}/#{@name}")
 					Dir.mkdir("#{$data_dir}#{@game}/#{@name}")
 				end
-				if $frontend == 'wizard'
+				if $frontend =~ /^(?:wizard|avalon)$/
 					$_SERVER_.puts "<c>_flag Display Dialog Boxes 0"
 					sleep "0.05".to_f
 					$_SERVER_.puts "<c>_injury 2"
@@ -1131,11 +1137,6 @@ class DownstreamHook
 			echo "DownstreamHook: not a Proc (#{action})"
 			return false
 		end
-		unless $SAFE == 0
-			respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
-			respond '--- SecurityError: an untrusted script tried to add a DownstreamHook'
-			return false
-		end
 		@@downstream_hooks[name] = action
 	end
 	def DownstreamHook.run(server_string)
@@ -1221,221 +1222,399 @@ class LichSettings
 end
 
 class Settings
-	@@hash ||= Hash.new
-	@@auto ||= false
-	@@stamp ||= Hash.new
-	def Settings.auto=(val)
-		@@auto = val
-	end
-	def Settings.auto
-		@@auto
-	end
-	def Settings.save(who=Script.self)
-		if who.class == String
-			who = (Script.running.find { |s| s.name == who } || Script.hidden.find { |s| s.name == who })
-		end
-		if who =~ /^lich$/i
-			respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
-			return false
-		end
-		if who.class == Script
-			if $SAFE == 0
-				@@hash[who.name] ||= Hash.new
-				File.open("#{$data_dir}#{who.name}.sav", 'wb') { |f|
-					f.write(Marshal.dump(@@hash[who.name]))
-				}
-			else
-				UNTRUSTED_SETTINGS_SAVE.call(who)
-			end
-		else
-			respond '--- Lich: Settings.save: unable to identify calling script.'
-			return false
-		end
-	end
-	def Settings.load(who = Script.self)
-		if who.class == String
-			who = (Script.running.find { |s| s.name == who } || Script.hidden.find { |s| s.name == who })
-		end
-		if who.name =~ /^lich$/i
-			respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
-			return false
-		end
-		if who.class == Script
-			if $SAFE == 0
-				@@stamp[who.name] = Time.now
-				if File.exists?("#{$data_dir}#{who.name}.sav")
-					begin
-						File.open("#{$data_dir}#{who.name}.sav", 'rb') { |f|
-							@@hash[who.name] = Marshal.load(f.read)
-						}
-					rescue
-						respond "--- error: Settings.load: #{$!}"
-						$stderr.puts "error: Settings.load: #{$!}"
-						$stderr.puts $!.backtrace
-					end
-				else
-					nil
-				end
-			else
-				UNTRUSTED_SETTINGS_LOAD.call(who)
-			end
-		else
-			respond '--- Lich: Settings.load: unable to identify calling script.'
-			return false
-		end
-	end
-	def Settings.autoload
-		if script.to_s =~ /^lich$/i
-			respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
-			return false
-		end
-		fname = $data_dir + Script.self.to_s + '.sav'
-		if File.mtime(fname) > @@stamp[Script.self.to_s]
-			Settings.load
-			true
-		else
-			false
-		end
-	end
-	def Settings.clear
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return false
-		end
-		@@hash[script.to_s] ||= Hash.new
-		@@hash[script.to_s].clear
-	end
-	def Settings.[](val)
-		Settings.autoload if @@auto
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return nil
-		end
-		@@hash[script.to_s] ||= Hash.new
-		@@hash[script.to_s][val]
-	end
-	def Settings.[]=(setting, val)
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return nil
-		end
-		@@hash[script.to_s] ||= Hash.new
-		@@hash[script.to_s][setting] = val
-		Settings.save if @@auto
-		@@hash[script.to_s][setting]
-	end
-	def Settings.to_hash
-		unless script = Script.self
-			respond "--- Lich: The script trying to access settings cannot be identified!"
-			return nil
-		end
-		@@hash[script.to_s] ||= Hash.new
-		@@hash[script.to_s]
-	end
-end
-
-class Options
-	@@options    ||= Hash.new
+	@@settings   ||= Hash.new
 	@@timestamps ||= Hash.new
 	@@md5        ||= Hash.new
-	def Options.load
+	def Settings.load
 		if $SAFE == 0
 			if script = Script.self
 				if script.class == Script
 					if script.name =~ /^lich$/i
-						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Options, because it will conflict with Lich\'s settings.'
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
 						return false
 					end
-					filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script.name}.sav"
+					filename = "#{$data_dir}#{script.name}.sav"
 					if File.exists?(filename) and (@@timestamps[script.name].nil? or (@@timestamps[script.name] < File.mtime(filename)))
 						begin
-							File.open(filename, 'rb') { |f| @@options[script.name] = Marshal.load(f.read) }
+							File.open(filename, 'rb') { |f| @@settings[script.name] = Marshal.load(f.read) }
 							@@timestamps[script] = File.mtime(filename)
-							@@md5[script.name] = Digest::MD5.hexdigest(@@options[script.name].inspect)
+							@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						rescue
-							respond "--- error: Options.load: #{$!}"
-							$stderr.puts "error: Options.load: #{$!}"
+							respond "--- error: Settings.load: #{$!}"
+							$stderr.puts "error: Settings.load: #{$!}"
 							$stderr.puts $!.backtrace
 						end
 					end
 				end
 			else
-				respond '--- Lich: Options: cannot identify calling script'
+				respond '--- Lich: Settings: cannot identify calling script'
 			end
 		else
-			UNTRUSTED_OPTIONS_LOAD.call
+			UNTRUSTED_SETTINGS_LOAD.call
 		end
 		nil
 	end
-	def Options.save
+	def Settings.save
 		if $SAFE == 0
 			if script = Script.self
-				if script.class == Script
+				if (script.class == Script) or (script.class == WizardScript)
 					if script.name =~ /^lich$/i
-						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Options, because it will conflict with Lich\'s settings.'
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
 						return false
 					end
-					filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script.name}.sav"
-					@@options[script.name] ||= Hash.new
-					unless (@@options[script.name].empty? and not File.exists?(filename))
-						start_time = Time.now
-						md5 = Digest::MD5.hexdigest(@@options[script.name].inspect)
-						end_time = Time.now
+					filename = "#{$data_dir}#{script.name}.sav"
+					@@settings[script.name] ||= Hash.new
+					unless (@@settings[script.name].empty? and not File.exists?(filename))
+						md5 = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						unless @@md5[script.name] == md5
 							begin
-								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@options[script.name])) }
+								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script.name])) }
 								@@timestamps[script.name] = File.mtime(filename)
 								@@md5[script.name] = md5
 							rescue
-								respond "--- error: Options.save: #{$!}"
-								$stderr.puts "error: Options.save: #{$!}"
+								respond "--- error: Settings.save: #{$!}"
+								$stderr.puts "error: Settings.save: #{$!}"
 								$stderr.puts $!.backtrace
 							end
 						end
 					end
 				end
 			else
-				respond '--- Lich: Options: cannot identify calling script'
+				Settings.save_all
 			end
 		else
-			UNTRUSTED_OPTIONS_SAVE.call
+			UNTRUSTED_SETTINGS_SAVE.call
 		end
 		nil
 	end
-	def Options.clear
-		if (script = Script.self) and (script.class == Script)
-			@@options[script.name] ||= Hash.new
-			@@options[script.name].clear
+	def Settings.save_all
+		if $SAFE == 0
+			for script_name in @@settings.keys
+				filename = "#{$data_dir}#{script_name}.sav"
+				@@settings[script_name] ||= Hash.new
+				unless (@@settings[script_name].empty? and not File.exists?(filename))
+					md5 = Digest::MD5.hexdigest(@@settings[script_name].inspect)
+					unless @@md5[script_name] == md5
+						begin
+							File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script_name])) }
+							@@timestamps[script_name] = File.mtime(filename)
+							@@md5[script_name] = md5
+						rescue
+							respond "--- error: Settings.save_all: #{$!}"
+							$stderr.puts "error: Settings.save_all: #{$!}"
+							$stderr.puts $!.backtrace
+						end
+					end
+				end
+			end
 		else
-			respond '--- Lich: Options: cannot identify calling script'
+			UNTRUSTED_SETTINGS_SAVE_ALL.call
+		end
+		nil
+	end
+	def Settings.clear
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name].clear
+		else
+			respond '--- Lich: Settings: cannot identify calling script'
 			nil
 		end
 	end
-	def Options.[](val)
+	def Settings.[](val)
 		if (script = Script.self) and (script.class == Script)
-			@@options[script.name] ||= Hash.new
-			@@options[script.name][val]
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name][val]
 		else
-			respond '--- Lich: Options: cannot identify calling script'
+			respond '--- Lich: Settings: cannot identify calling script'
 			nil
 		end
 	end
-	def Options.[]=(setting, val)
+	def Settings.[]=(setting, val)
 		if (script = Script.self) and (script.class == Script)
-			@@options[script.name] ||= Hash.new
-			@@options[script.name][setting] = val
-			@@options[script.name][setting]
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name][setting] = val
+			@@settings[script.name][setting]
 		else
-			respond '--- Lich: Options: cannot identify calling script'
+			respond '--- Lich: Settings: cannot identify calling script'
 			nil
 		end
 	end
-	def Options.to_hash
+	def Settings.to_hash
 		if (script = Script.self) and (script.class == Script)
-			@@options[script.name] ||= Hash.new
-			@@options[script.name]
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name]
 		else
-			respond '--- Lich: Options: cannot identify calling script'
+			respond '--- Lich: Settings: cannot identify calling script'
+			nil
+		end
+	end
+	def Settings.auto=(val)
+		nil
+	end
+	def Settings.auto
+		nil
+	end
+	def Settings.autoload
+		nil
+	end
+end
+
+class GameSettings
+	@@settings   ||= Hash.new
+	@@timestamps ||= Hash.new
+	@@md5        ||= Hash.new
+	def GameSettings.load
+		if $SAFE == 0
+			if script = Script.self
+				if script.class == Script
+					if script.name =~ /^lich$/i
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use GameSettings, because it will conflict with Lich\'s settings.'
+						return false
+					end
+					filename = "#{$data_dir}#{XMLData.game}/#{script.name}.sav"
+					if File.exists?(filename) and (@@timestamps[script.name].nil? or (@@timestamps[script.name] < File.mtime(filename)))
+						begin
+							File.open(filename, 'rb') { |f| @@settings[script.name] = Marshal.load(f.read) }
+							@@timestamps[script] = File.mtime(filename)
+							@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
+						rescue
+							respond "--- error: GameSettings.load: #{$!}"
+							$stderr.puts "error: GameSettings.load: #{$!}"
+							$stderr.puts $!.backtrace
+						end
+					end
+				end
+			else
+				respond '--- Lich: GameSettings: cannot identify calling script'
+			end
+		else
+			UNTRUSTED_GAMESETTINGS_LOAD.call
+		end
+		nil
+	end
+	def GameSettings.save
+		if $SAFE == 0
+			if script = Script.self
+				if script.class == Script
+					if script.name =~ /^lich$/i
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
+						return false
+					end
+					filename = "#{$data_dir}#{XMLData.game}/#{script.name}.sav"
+					@@settings[script.name] ||= Hash.new
+					unless (@@settings[script.name].empty? and not File.exists?(filename))
+						md5 = Digest::MD5.hexdigest(@@settings[script.name].inspect)
+						unless @@md5[script.name] == md5
+							begin
+								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script.name])) }
+								@@timestamps[script.name] = File.mtime(filename)
+								@@md5[script.name] = md5
+							rescue
+								respond "--- error: GameSettings.save: #{$!}"
+								$stderr.puts "error: GameSettings.save: #{$!}"
+								$stderr.puts $!.backtrace
+							end
+						end
+					end
+				end
+			else
+				GameSettings.save_all
+			end
+		else
+			UNTRUSTED_GAMESETTINGS_SAVE.call
+		end
+		nil
+	end
+	def GameSettings.save_all
+		if $SAFE == 0
+			for script_name in @@settings.keys
+				filename = "#{$data_dir}#{XMLData.game}/#{script_name}.sav"
+				@@settings[script_name] ||= Hash.new
+				unless (@@settings[script_name].empty? and not File.exists?(filename))
+					md5 = Digest::MD5.hexdigest(@@settings[script_name].inspect)
+					unless @@md5[script_name] == md5
+						begin
+							File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script_name])) }
+							@@timestamps[script_name] = File.mtime(filename)
+							@@md5[script_name] = md5
+						rescue
+							respond "--- error: GameSettings.save_all: #{$!}"
+							$stderr.puts "error: GameSettings.save_all: #{$!}"
+							$stderr.puts $!.backtrace
+						end
+					end
+				end
+			end
+		else
+			UNTRUSTED_GAMESETTINGS_SAVE_ALL.call
+		end
+		nil
+	end
+	def GameSettings.clear
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name].clear
+		else
+			respond '--- Lich: GameSettings: cannot identify calling script'
+			nil
+		end
+	end
+	def GameSettings.[](val)
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name][val]
+		else
+			respond '--- Lich: GameSettings: cannot identify calling script'
+			nil
+		end
+	end
+	def GameSettings.[]=(setting, val)
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name][setting] = val
+			@@settings[script.name][setting]
+		else
+			respond '--- Lich: GameSettings: cannot identify calling script'
+			nil
+		end
+	end
+	def GameSettings.to_hash
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name]
+		else
+			respond '--- Lich: GameSettings: cannot identify calling script'
+			nil
+		end
+	end
+end
+
+class CharSettings
+	@@settings   ||= Hash.new
+	@@timestamps ||= Hash.new
+	@@md5        ||= Hash.new
+	def CharSettings.load
+		if $SAFE == 0
+			if script = Script.self
+				if script.class == Script
+					if script.name =~ /^lich$/i
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use CharSettings, because it will conflict with Lich\'s settings.'
+						return false
+					end
+					filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script.name}.sav"
+					if File.exists?(filename) and (@@timestamps[script.name].nil? or (@@timestamps[script.name] < File.mtime(filename)))
+						begin
+							File.open(filename, 'rb') { |f| @@settings[script.name] = Marshal.load(f.read) }
+							@@timestamps[script] = File.mtime(filename)
+							@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
+						rescue
+							respond "--- error: CharSettings.load: #{$!}"
+							$stderr.puts "error: CharSettings.load: #{$!}"
+							$stderr.puts $!.backtrace
+						end
+					end
+				end
+			else
+				respond '--- Lich: CharSettings: cannot identify calling script'
+			end
+		else
+			UNTRUSTED_CHARSETTINGS_LOAD.call
+		end
+		nil
+	end
+	def CharSettings.save
+		if $SAFE == 0
+			if script = Script.self
+				if script.class == Script
+					if script.name =~ /^lich$/i
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Settings, because it will conflict with Lich\'s settings.'
+						return false
+					end
+					filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script.name}.sav"
+					@@settings[script.name] ||= Hash.new
+					unless (@@settings[script.name].empty? and not File.exists?(filename))
+						md5 = Digest::MD5.hexdigest(@@settings[script.name].inspect)
+						unless @@md5[script.name] == md5
+							begin
+								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script.name])) }
+								@@timestamps[script.name] = File.mtime(filename)
+								@@md5[script.name] = md5
+							rescue
+								respond "--- error: CharSettings.save: #{$!}"
+								$stderr.puts "error: CharSettings.save: #{$!}"
+								$stderr.puts $!.backtrace
+							end
+						end
+					end
+				end
+			else
+				CharSettings.save_all
+			end
+		else
+			UNTRUSTED_CHARSETTINGS_SAVE.call
+		end
+		nil
+	end
+	def CharSettings.save_all
+		if $SAFE == 0
+			for script_name in @@settings.keys
+				filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script_name}.sav"
+				@@settings[script_name] ||= Hash.new
+				unless (@@settings[script_name].empty? and not File.exists?(filename))
+					md5 = Digest::MD5.hexdigest(@@settings[script_name].inspect)
+					unless @@md5[script_name] == md5
+						begin
+							File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script_name])) }
+							@@timestamps[script_name] = File.mtime(filename)
+							@@md5[script_name] = md5
+						rescue
+							respond "--- error: CharSettings.save_all: #{$!}"
+							$stderr.puts "error: CharSettings.save_all: #{$!}"
+							$stderr.puts $!.backtrace
+						end
+					end
+				end
+			end
+		else
+			UNTRUSTED_CHARSETTINGS_SAVE_ALL.call
+		end
+		nil
+	end
+	def CharSettings.clear
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name].clear
+		else
+			respond '--- Lich: CharSettings: cannot identify calling script'
+			nil
+		end
+	end
+	def CharSettings.[](val)
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name][val]
+		else
+			respond '--- Lich: CharSettings: cannot identify calling script'
+			nil
+		end
+	end
+	def CharSettings.[]=(setting, val)
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name][setting] = val
+			@@settings[script.name][setting]
+		else
+			respond '--- Lich: CharSettings: cannot identify calling script'
+			nil
+		end
+	end
+	def CharSettings.to_hash
+		if (script = Script.self) and (script.class == Script)
+			@@settings[script.name] ||= Hash.new
+			@@settings[script.name]
+		else
+			respond '--- Lich: CharSettings: cannot identify calling script'
 			nil
 		end
 	end
@@ -1900,37 +2079,45 @@ class Script
 	end
 	def kill
 		Thread.new {
-			die_with, dying_procs = @die_with.dup, @dying_procs.dup
-			@die_with, @dying_procs = nil, nil
-			@thread_group.list.dup.each { |thr|
-				unless thr == Thread.current
-					thr.kill rescue()
-				end
-			}
-			@thread_group.add(Thread.current)
-			die_with.each { |script_name| stop_script script_name }
-			@paused = false
-			dying_procs.each { |runme|
-				begin
-					runme.call
-				rescue SyntaxError
-					echo("Syntax error in dying code block: #{$!}")
-				rescue SystemExit
-					nil
-				rescue Exception
-					if $! == JUMP or $! == JUMP_ERROR
-						echo('Cannot execute jumps in before_dying code blocks...!')
-					else
+			begin
+				die_with, dying_procs = @die_with.dup, @dying_procs.dup
+				@die_with, @dying_procs = nil, nil
+				@thread_group.list.dup.each { |thr|
+					unless thr == Thread.current
+						thr.kill rescue()
+					end
+				}
+				@thread_group.add(Thread.current)
+				die_with.each { |script_name| stop_script script_name }
+				@paused = false
+				dying_procs.each { |runme|
+					begin
+						runme.call
+					rescue SyntaxError
+						echo("Syntax error in dying code block: #{$!}")
+					rescue SystemExit
+						nil
+					rescue Exception
+						if $! == JUMP or $! == JUMP_ERROR
+							echo('Cannot execute jumps in before_dying code blocks...!')
+						else
+							echo("--- error in dying code block: #{$!}")
+						end
+					rescue
 						echo("--- error in dying code block: #{$!}")
 					end
-				rescue
-					echo("--- error in dying code block: #{$!}")
-				end
-			}
-			@downstream_buffer = @upstream_buffer = @match_stack_labels = @match_stack_strings = nil
-			@@running.delete(self)
-			respond("--- Lich: #{@name} has exited.") unless @quiet
-			GC.start
+				}
+				@downstream_buffer = @upstream_buffer = @match_stack_labels = @match_stack_strings = nil
+				Settings.save
+				GameSettings.save
+				CharSettings.save
+				@@running.delete(self)
+				respond("--- Lich: #{@name} has exited.") unless @quiet
+				GC.start
+			rescue
+				puts $!
+				puts $!.backtrace[0..2]
+			end
 		}
 		@name
 	end
@@ -2169,6 +2356,9 @@ class WizardScript<Script
 			elsif line =~ /^([\s\t]*)waitfor[\s\t]+(.+)/i
 				indent, arg = $1, $2
 				line = "#{indent}waitfor #{fixstring.call(Regexp.escape(arg).inspect.gsub("\\\\ ", ' '))}"
+			elsif line =~ /^([\s\t]*)put[\s\t]+\.(.+)/i
+				indent, arg = $1, $3
+				line = "#{indent}start_script #{fixstring.call(arg.inspect)}\n#{indent}exit"
 			elsif line =~ /^([\s\t]*)(put|move)[\s\t]+(.+)/i
 				indent, cmd, arg = $1, $2, $3
 				line = "#{indent}waitrt?\n#{indent}clear\n#{indent}#{cmd.downcase} #{fixstring.call(arg.inspect)}"
@@ -3338,7 +3528,7 @@ class Spell
 						loop {
 							waitrt?
 							waitcastrt?
-							prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
+							prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$/
 							if prepare_result =~ /^Your spell(?:song)? is ready\./
 								break
 							elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
@@ -3347,7 +3537,7 @@ class Spell
 									echo 'cast: not enough mana'
 									return false
 								end
-							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
+							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$/
 								return false
 							end
 						}
@@ -3355,7 +3545,7 @@ class Spell
 					if @stance and checkstance != 'offensive'
 						dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
 					end
-					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$/
+					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$/
 					if @stance and checkstance !~ /^guarded$|^defensive$/
 						dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
 					end
@@ -4324,15 +4514,15 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 				respond("--- Lich: #{script.name} active.") unless script.quiet
 				if trusted
 					begin
-						Options.load
+						Settings.load
+						GameSettings.load
+						CharSettings.load
 						while (script = Script.self) and script.current_label
 							eval(script.labels[script.current_label].to_s, script_binding, script.name)
 							Script.self.get_next_label
 						end
-						Options.save
 						Script.self.kill
 					rescue SystemExit
-						Options.save
 						Script.self.kill
 					rescue SyntaxError
 						respond "--- SyntaxError: #{$!}"
@@ -4340,28 +4530,24 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						$stderr.puts "--- SyntaxError: #{$!}"
 						$stderr.puts $!.backtrace
 						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
-						Options.save
 						Script.self.kill
 					rescue ScriptError
 						respond "--- ScriptError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ScriptError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue NoMemoryError
 						respond "--- NoMemoryError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- NoMemoryError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue LoadError
 						respond "--- LoadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- LoadError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue SecurityError
 						respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
@@ -4369,21 +4555,18 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace[0..1]
 						$stderr.puts "--- SecurityError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue ThreadError
 						respond "--- ThreadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ThreadError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue SystemStackError
 						respond "--- SystemStackError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- SystemStackError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue Exception
 						if $! == JUMP
@@ -4392,14 +4575,12 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 							respond $!.backtrace.first
 							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
 							$stderr.puts $!.backtrace
-							Options.save
 							Script.self.kill
 						else
 							respond "--- Exception: #{$!}"
 							respond $!.backtrace.first
 							$stderr.puts "--- Exception: #{$!}"
 							$stderr.puts $!.backtrace
-							Options.save
 							Script.self.kill
 						end
 					rescue
@@ -4407,20 +4588,19 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace.first
 						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					end
 				else
 					begin
-						Options.load
+						Settings.load
+						GameSettings.load
+						CharSettings.load
 						while (script = Script.self) and script.current_label
-							proc { script.labels[script.current_label].untaint; $SAFE = 3; eval(script.labels[script.current_label], script_binding, script.name, 0) }.call
+							proc { script.labels[script.current_label].untaint; $SAFE = 3; eval(script.labels[script.current_label], script_binding, script.name, 1) }.call
 							Script.self.get_next_label
 						end
-						Options.save
 						Script.self.kill
 					rescue SystemExit
-						Options.save
 						Script.self.kill
 					rescue SyntaxError
 						respond "--- SyntaxError: #{$!}"
@@ -4428,28 +4608,24 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						$stderr.puts "--- SyntaxError: #{$!}"
 						$stderr.puts $!.backtrace
 						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
-						Options.save
 						Script.self.kill
 					rescue ScriptError
 						respond "--- ScriptError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ScriptError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue NoMemoryError
 						respond "--- NoMemoryError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- NoMemoryError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue LoadError
 						respond "--- LoadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- LoadError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue SecurityError
 						respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
@@ -4457,21 +4633,18 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace[0..1]
 						$stderr.puts "--- SecurityError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue ThreadError
 						respond "--- ThreadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ThreadError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue SystemStackError
 						respond "--- SystemStackError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- SystemStackError: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					rescue Exception
 						if $! == JUMP
@@ -4480,14 +4653,12 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 							respond $!.backtrace.first
 							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
 							$stderr.puts $!.backtrace
-							Options.save
 							Script.self.kill
 						else
 							respond "--- Exception: #{$!}"
 							respond $!.backtrace.first
 							$stderr.puts "--- Exception: #{$!}"
 							$stderr.puts $!.backtrace
-							Options.save
 							Script.self.kill
 						end
 					rescue
@@ -4495,7 +4666,6 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace.first
 						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 						$stderr.puts $!.backtrace
-						Options.save
 						Script.self.kill
 					end
 				end
@@ -5034,7 +5204,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			need_full_hands = true
 			empty_hands
 			put_dir.call
-		elsif line =~ /(?:appears|seems) to be closed\.$/
+		elsif line =~ /(?:appears|seems) to be closed\.$|^You cannot quite manage to squeeze between the stone doors\.$/
 			if tried_open
 				fill_hands if need_full_hands
 				Script.self.downstream_buffer.unshift(save_stream)
@@ -6475,58 +6645,40 @@ def registry_put(key, value)
 end
 
 def find_hosts_dir
-	(windir = ENV['windir']) || (windir = ENV['SYSTEMROOT'])
 	if RUBY_PLATFORM =~ /mingw|win/i
 		if hosts_dir = registry_get('HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\Tcpip\\Parameters\\DataBasePath')
+			heal_hosts
 			return hosts_dir.gsub(/%SystemRoot%/, windir)
 		elsif hosts_dir = registry_get('HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\DataBasePath')
+			heal_hosts
 			return hosts_dir.gsub(/%SystemRoot%/, windir)
-		end
-	end
-	if windir
-		winxp = "\\system32\\drivers\\etc\\"
-		win98 = "\\"
-		if File.exists?(windir + winxp + "hosts.bak")
-			heal_hosts(windir + winxp)
-			return windir + winxp
-		elsif File.exists?(windir + win98 + "hosts.bak")
-			heal_hosts(windir + win98)
-			return windir + win98
-		elsif File.exists?(windir + winxp + "hosts")
-			return windir + winxp
-		elsif File.exists?(windir + win98 + "hosts")
-			return windir + win98
-		end
-	end
-	if Dir.pwd.to_s[0..1] =~ /(C|D|E|F|G|H)/
-		prefix = "#{$1.dup}:"
-	else
-		prefix = String.new
-	end
-	winxp_pro = "#{prefix}\\winnt\\system32\\drivers\\etc\\"
-	winxp_home = "#{prefix}\\windows\\system32\\drivers\\etc\\"
-	win98 = "#{prefix}\\windows\\"
-	nix = "/etc/"
-	[ winxp_pro, winxp_home, win98, nix ].each { |windir|
-		if File.exists?(windir + "hosts.bak") or File.exists?(windir + "hosts")
-			heal_hosts(windir)
-			return windir
-		end
-	}
-	winxp_pro.sub!(/[A-Z]:/, '')
-	winxp_home.sub!(/[A-Z]:/, '')
-	win98.sub!(/[A-Z]:/, '')
-	[ "hosts" ].each { |fname|
-		[ "C:", "D:", "E:", "F:", "G:" ].each { |drive|
-			[ winxp_pro, winxp_home, win98 ].each { |windir|
-				if File.exists?(drive + windir + "hosts.bak") or File.exists?(drive + windir + "hosts")
-					heal_hosts(drive + windir)
-					return drive + windir
+		else
+			test_dirs = Array.new
+			if windir = ENV['windir'] || ENV['SYSTEMROOT']
+				test_dirs.push "#{windir}\\system32\\drivers\\etc\\" # winxp
+				test_dirs.push "#{windir}\\" # win98
+			end
+			if prefix = /(C|D|E|F|G|H)/.match(Dir.pwd.to_s[0..1]).captures.first
+				test_dirs.push "#{prefix}:\\winnt\\system32\\drivers\\etc\\"   # winxp_pro
+				test_dirs.push "#{prefix}:\\windows\\system32\\drivers\\etc\\" # winxp_home
+				test_dirs.push "#{prefix}:\\windows\\"                         # win98
+				if prefix != 'C:'
+					test_dirs.push "C:\\winnt\\system32\\drivers\\etc\\"   # winxp_pro
+					test_dirs.push "C:\\windows\\system32\\drivers\\etc\\" # winxp_home
+					test_dirs.push "C:\\windows\\"                         # win98
 				end
-			}
-		}
+			end
+		end
+	else
+		test_dirs = [ '/etc', '/private/etc' ]
+	end
+	test_dirs.each { |dir|
+		if File.exists?("#{dir}hosts.bak") or File.exists?("#{dir}hosts")
+			heal_hosts(dir)
+			return dir
+		end
 	}
-	nil
+	return nil
 end
 
 def hack_hosts(hosts_dir, game_host)
@@ -6671,7 +6823,7 @@ def strip_xml(line)
 end
 
 def monsterbold_start
-	if $frontend == 'wizard'
+	if $frontend =~ /^(?:wizard|avalon)$/
 		"\034GSL\r\n"
 	elsif $frontend == 'stormfront'
 		'<pushBold/>'
@@ -6681,7 +6833,7 @@ def monsterbold_start
 end
 
 def monsterbold_end
-	if $frontend == 'wizard'
+	if $frontend =~ /^(?:wizard|avalon)$/
 		"\034GSM\r\n"
 	elsif $frontend == 'stormfront'
 		'<popBold/>'
@@ -7148,7 +7300,7 @@ def do_client(client_string)
 		if $offline_mode
 			respond "--- Lich: offline mode: ignoring #{client_string}"
 		else
-			client_string = "<c>bbs\n" if ($frontend == 'wizard') and (client_string == "<c>\egbbk\n") # launch forum
+			client_string = "<c>bbs\n" if ($frontend =~ /^(?:wizard|avalon)$/) and (client_string == "<c>\egbbk\n") # launch forum
 			$_SERVER_.puts client_string
 		end
 		$_CLIENTBUFFER_.push client_string
@@ -7398,6 +7550,8 @@ if arg = ARGV.find { |a| (a == '-g') or (a == '--game') }
 		$frontend = 'stormfront'
 	elsif ARGV.any? { |arg| (arg == '-w') or (arg == '--wizard') }
 		$frontend = 'wizard'
+	elsif ARGV.any? { |arg| arg == '--avalon' }
+		$frontend = 'avalon'
 	else
 		$frontend = 'unknown'
 	end
@@ -7411,7 +7565,11 @@ elsif ARGV.include?('--gemstone')
 		else
 			game_host = 'gs-plat.simutronics.net'
 			game_port = 10121
-			$frontend = 'wizard'
+			if ARGV.any? { |arg| arg == '--avalon' }
+				$frontend = 'avalon'
+			else
+				$frontend = 'wizard'
+			end
 		end
 	else
 		$platinum = false
@@ -7422,7 +7580,11 @@ elsif ARGV.include?('--gemstone')
 		else
 			game_host = 'gs3.simutronics.net'
 			game_port = 4900
-			$frontend = 'wizard'
+			if ARGV.any? { |arg| arg == '--avalon' }
+				$frontend = 'avalon'
+			else
+				$frontend = 'wizard'
+			end
 		end
 	end
 elsif ARGV.include?('--dragonrealms')
@@ -7449,7 +7611,11 @@ elsif ARGV.include?('--dragonrealms')
 		else
 			game_host = 'dr.simutronics.net'
 			game_port = 4901
-			$frontend = 'wizard'
+			if ARGV.any? { |arg| arg == '--avalon' }
+				$frontend = 'avalon'
+			else
+				$frontend = 'wizard'
+			end
 		end
 	end
 else
@@ -8422,7 +8588,7 @@ main_thread = Thread.new {
 				$frontend = 'unknown'
 			end
 			begin
-				listener = TCPServer.new("localhost", nil)
+				listener = TCPServer.new('127.0.0.1', nil)
 			rescue
 				$stdout.puts "--- error: cannot bind listen socket to local port: #{$!}"
 				$stderr.puts "error: cannot bind listen socket to local port: #{$!}"
@@ -8472,7 +8638,7 @@ main_thread = Thread.new {
 		game_quad_ip = IPSocket.getaddress(game_host)
 		error_count = 0
 		begin
-			listener = TCPServer.new('localhost', game_port)
+			listener = TCPServer.new('127.0.0.1', game_port)
 			begin
 				listener.setsockopt(Socket::SOL_SOCKET,Socket::SO_REUSEADDR,1)
 			rescue
@@ -8528,7 +8694,7 @@ main_thread = Thread.new {
 		$offline_mode = true
 		unless $frontend == 'suks'
 			begin
-				listener = TCPServer.new("localhost", nil)
+				listener = TCPServer.new('127.0.0.1', nil)
 			rescue
 				$stdout.puts "Cannot bind listening socket to local port: #{$!}"
 				$stderr.puts "Cannot bind listening socket to local port: #{$!}"
@@ -8571,7 +8737,7 @@ main_thread = Thread.new {
 				$stderr.puts $!
 			end
 			$_SERVER_ = $stdin
-			if $frontend == 'wizard'
+			if $frontend =~ /^(?:wizard|avalon)$/
 				$_CLIENT_.puts "\034GSB0000000000Lich\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
 			end
 		end
@@ -8603,7 +8769,7 @@ main_thread = Thread.new {
 	end
 
 	# backward compatibility
-	if $frontend == 'wizard'
+	if $frontend =~ /^(?:wizard|avalon)$/
 		$fake_stormfront = true
 	else
 		$fake_stormfront = false
@@ -8798,7 +8964,7 @@ main_thread = Thread.new {
 
 			if $offline_mode
 				nil
-			elsif $frontend == 'wizard'
+			elsif $frontend =~ /^(?:wizard|avalon)$/
 				#
 				# send the login key
 				#
@@ -8891,7 +9057,7 @@ main_thread = Thread.new {
 
 			begin
 				while client_string = $_CLIENT_.gets
-					client_string = '<c>' + client_string if $frontend == 'wizard'
+					client_string = '<c>' + client_string if $frontend =~ /^(?:wizard|avalon)$/
 					begin
 						$_IDLETIMESTAMP_ = Time.now
 						if Alias.find(client_string)
@@ -8931,29 +9097,31 @@ main_thread = Thread.new {
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
-						alt_string = sf_to_wiz(alt_string) if $frontend == 'wizard'
+						alt_string = sf_to_wiz(alt_string) if $frontend =~ /^(?:wizard|avalon)$/
 						$_CLIENT_.write(alt_string) unless $frontend == 'suks'
 					end
-					begin
-						REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
-					rescue
-						if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
-							# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
-							$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
-							retry
+					unless $_SERVERSTRING_ =~ /^<settings /
+						begin
+							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+						rescue
+							if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
+								# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
+								$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
+								retry
+							end
+							$stdout.puts "--- error: server_thread: #{$!}"
+							$stderr.puts "error: server_thread: #{$!}"
+							$stderr.puts $!.backtrace
+							XMLData.reset
 						end
-						$stdout.puts "--- error: server_thread: #{$!}"
-						$stderr.puts "error: server_thread: #{$!}"
-						$stderr.puts $!.backtrace
-						XMLData.reset
+						Script.new_downstream_xml($_SERVERSTRING_)
+						stripped_server = strip_xml($_SERVERSTRING_)
+						stripped_server.split("\r\n").each { |line|
+							unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring\.|joins the adventure\.|(?:is off to a rough start!  (?:H|She) )?just bit the dust!|was just incinerated!|was just vaporized!|has been vaporized!|has disconnected\.)$|^ \* The death cry of [A-Z][a-z]+ echoes in your mind!$|^\r*\n*$/
+								Script.new_downstream(line) unless line.empty?
+							end
+						}
 					end
-					Script.new_downstream_xml($_SERVERSTRING_)
-					stripped_server = strip_xml($_SERVERSTRING_)
-					stripped_server.split("\r\n").each { |line|
-						unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring\.|joins the adventure\.|(?:is off to a rough start!  (?:H|She) )?just bit the dust!|was just incinerated!|was just vaporized!|has been vaporized!|has disconnected\.)$|^ \* The death cry of [A-Z][a-z]+ echoes in your mind!$|^\r*\n*$/
-							Script.new_downstream(line) unless line.empty?
-						end
-					}
 				rescue
 					$stdout.puts "--- error: server_thread: #{$!}"
 					$stderr.puts "error: server_thread: #{$!}"
@@ -8988,7 +9156,7 @@ main_thread = Thread.new {
 		output.concat "** The authors do not condone violation of game policy,\n"
 		output.concat "** nor are they in any way attempting to encourage it.\n"
 		output.concat "**\n"
-		output.concat "** (this notice will not repeat) \n"
+		output.concat "** (this notice probably won't repeat) \n"
 		output.concat "**\n"
 		respond output
 		LichSettings['seen_notice'] = true
@@ -9001,6 +9169,9 @@ main_thread = Thread.new {
 	Script.running.each { |script| script.kill }
 	Script.hidden.each { |script| script.kill }
 	100.times { sleep "0.1".to_f; break if Script.running.empty? and Script.hidden.empty? }
+	Settings.save_all
+	GameSettings.save_all
+	CharSettings.save_all
 	# sending quit seems to cause Lich to hang.  $_SERVER_.closed? is false even though it appears to be closed.
 	# $_SERVER_.puts('quit') unless $_SERVER_.closed?
 	$_SERVER_.close rescue()
