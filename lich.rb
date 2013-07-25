@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.43'
+$version = '4.1.44'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -7940,11 +7940,12 @@ main_thread = Thread.new {
 				box = Gtk::HBox.new
 				box.pack_start(Gtk::Label.new('You have no saved login info.'), true, true, 0)
 				quick_game_entry_tab = Gtk::VBox.new
+				quick_game_entry_tab.border_width = 5
 				quick_game_entry_tab.pack_start(box, true, true, 0)
 			else
 				quick_box = Gtk::VBox.new
-				entry_data.each { |data|
-					label = Gtk::Label.new("#{data[:char_name]} (#{data[:game_name]})")
+				entry_data.each { |login_info|
+					label = Gtk::Label.new("#{login_info[:char_name]} (#{login_info[:game_name]})")
 					play_button = Gtk::Button.new('Play')
 					remove_button = Gtk::Button.new('X')
 					char_box = Gtk::HBox.new
@@ -7964,15 +7965,15 @@ main_thread = Thread.new {
 							login_server.puts "K\n"
 							hashkey = login_server.gets
 							if 'test'[0].class == String
-								password = data[:password].split('').collect { |c| c.getbyte(0) }
+								password = login_info[:password].split('').collect { |c| c.getbyte(0) }
 								hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
 							else
-								password = data[:password].split('').collect { |c| c[0] }
+								password = login_info[:password].split('').collect { |c| c[0] }
 								hashkey = hashkey.split('').collect { |c| c[0] }
 							end
 							password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
 							password = password.collect { |c| c.chr }.join
-							login_server.puts "A\t#{data[:user_id]}\t#{password}\n"
+							login_server.puts "A\t#{login_info[:user_id]}\t#{password}\n"
 							password = nil
 							response = login_server.gets
 							login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
@@ -7980,15 +7981,15 @@ main_thread = Thread.new {
 								login_server.puts "M\n"
 								response = login_server.gets
 								if response =~ /^M\t/
-									login_server.puts "F\t#{data[:game_code]}\n"
+									login_server.puts "F\t#{login_info[:game_code]}\n"
 									response = login_server.gets
 									if response =~ /NORMAL|PREMIUM|TRIAL/
-										login_server.puts "G\t#{data[:game_code]}\n"
+										login_server.puts "G\t#{login_info[:game_code]}\n"
 										login_server.gets
-										login_server.puts "P\t#{data[:game_code]}\n"
+										login_server.puts "P\t#{login_info[:game_code]}\n"
 										login_server.gets
 										login_server.puts "C\n"
-										char_code = login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/).find { |c| c.split("\t")[1] == data[:char_name] }.split("\t")[0]
+										char_code = login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/).find { |c| c.split("\t")[1] == login_info[:char_name] }.split("\t")[0]
 										login_server.puts "L\t#{char_code}\tSTORM\n"
 										response = login_server.gets
 										if response =~ /^L\t/
@@ -8040,6 +8041,7 @@ main_thread = Thread.new {
 				quick_sw.add(quick_vp)
 
 				quick_game_entry_tab = Gtk::VBox.new
+				quick_game_entry_tab.border_width = 5
 				quick_game_entry_tab.pack_start(quick_sw, true, true, 5)
 			end
 
@@ -8108,6 +8110,7 @@ main_thread = Thread.new {
 			play_button_box.pack_end(play_button, false, false, 5)
 
 			game_entry_tab = Gtk::VBox.new
+			game_entry_tab.border_width = 5
 			game_entry_tab.pack_start(login_table, false, false, 0)
 			game_entry_tab.pack_start(login_button_box, false, false, 0)
 			game_entry_tab.pack_start(sw, true, true, 3)
@@ -8315,6 +8318,7 @@ main_thread = Thread.new {
 				box = Gtk::HBox.new
 				box.pack_start(restart_button, true, false, 5)
 				install_tab = Gtk::VBox.new
+				install_tab.border_width = 5
 				install_tab.pack_start(box, true, false, 5)
 				restart_button.signal_connect('clicked') {
 					begin
@@ -8396,6 +8400,7 @@ main_thread = Thread.new {
 				install_table.attach(uninstall_button, 1, 2, 0, 1, Gtk::EXPAND|Gtk::FILL, Gtk::EXPAND|Gtk::FILL, 5, 5)
 
 				install_tab = Gtk::VBox.new
+				install_tab.border_width = 5
 				install_tab.pack_start(website_order_frame, false, false, 5)
 				install_tab.pack_start(sge_order_frame, false, false, 5)
 				install_tab.pack_start(refresh_box, false, false, 5)
@@ -8578,6 +8583,7 @@ main_thread = Thread.new {
 			save_button_box.pack_end(save_button, false, false, 5)
 
 			options_tab = Gtk::VBox.new
+			options_tab.border_width = 5
 			options_tab.pack_start(lich_box, false, false, 5)
 			options_tab.pack_start(serverbuffer_frame, false, false, 5)
 			options_tab.pack_start(clientbuffer_frame, false, false, 5)
