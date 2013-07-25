@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.18'
+$version = '4.3.0'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -271,13 +271,12 @@ begin
 	require 'gtk2'
 	module Gtk
 		@@pending_blocks = Array.new
-
 		def Gtk.queue &block
 			@@pending_blocks.push(block)
+			GLib::Timeout.add(1) { Gtk.do_queue; false }
 		end
-
 		def Gtk.do_queue
-			while block = @@pending_blocks.shift
+			if block = @@pending_blocks.shift
 				begin
 					block.call
 				rescue
@@ -3324,10 +3323,10 @@ class Spell
 	@@loaded ||= false
 	@@load_lock = Array.new
 	@@cast_lock ||= Array.new
-	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command, :castProc, :real_time, :max_duration
+	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command, :castProc, :real_time, :max_duration, :clear_on_death
 	attr_accessor :stance, :channel
-	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration)
-		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@castProc,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel,@real_time,@max_duration = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration
+	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration,clear_on_death)
+		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@castProc,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel,@real_time,@max_duration,@clear_on_death = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration,clear_on_death
 		@time_per_formula.untaint
 		@mana_cost_formula.untaint
 		@spirit_cost_formula.untaint
@@ -3376,8 +3375,8 @@ class Spell
 					File.open(filename) { |file|
 						file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
 							spell = Hash.new
-							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|castProc|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel|realtime|maxduration)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['castProc'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end),(if spell['realtime'] and spell['realtime'] == 'true' then true else false end),(if spell['maxduration'] then spell['maxduration'].to_f else 250.0 end))
+							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|castProc|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel|realtime|maxduration|clearondeath)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['castProc'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end),(if spell['realtime'] and spell['realtime'] == 'true' then true else false end),(if spell['maxduration'] then spell['maxduration'].to_f else 250.0 end),(if spell['clearondeath'] and spell['clearondeath'] != 'false' then true else false end))
 						}
 					}
 					@@list.each { |spell|
@@ -4599,9 +4598,9 @@ class Map
 	@@current_location ||= nil
 	@@current_location_count ||= -1
 	attr_reader :id
-	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location
-	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil)
-		@id, @title, @description, @paths, @location, @climate, @terrain, @wayto, @timeto, @image, @image_coords, @tags, @check_location = id, title, description, paths, location, climate, terrain, wayto, timeto, image, image_coords, tags, check_location
+	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location, :unique_loot
+	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil, unique_loot=nil)
+		@id, @title, @description, @paths, @location, @climate, @terrain, @wayto, @timeto, @image, @image_coords, @tags, @check_location, @unique_loot = id, title, description, paths, location, climate, terrain, wayto, timeto, image, image_coords, tags, check_location, unique_loot
 		@@list[@id] = self
 	end
 	def outside?
@@ -4611,7 +4610,7 @@ class Map
 		@id
 	end
 	def to_s
-		"##{@id}:\n#{@title[0]}\n#{@description[0]}\n#{@paths[0]}"
+		"##{@id}:\n#{@title[-1]}\n#{@description[-1]}\n#{@paths[-1]}"
 	end
 	def inspect
 		self.instance_variables.collect { |var| var.to_s + "=" + self.instance_variable_get(var).inspect }.join("\n")
@@ -4643,10 +4642,10 @@ class Map
 			script = Script.self
 			save_want_downstream = script.want_downstream
 			script.want_downstream = true
-			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$|^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$/
+			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$|^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$|^You carefully survey your surroundings but are unable to guess your current location\.$/
 			script.want_downstream = save_want_downstream
 			@@current_location_count = XMLData.room_count
-			if location_result =~ /^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$/
+			if location_result =~ /^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$|^You carefully survey your surroundings but are unable to guess your current location\.$/
 				@@current_location = false
 			else
 				@@current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
@@ -4656,24 +4655,25 @@ class Map
 	end
 	def Map.current
 		Map.load if @@list.empty?
+		count = XMLData.room_count
 		if (XMLData.room_count == @@current_room_count) and (room = @@list[@@current_room_id])
 			room
 		else
-			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 			unless room
 				desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-				room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
+				room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex }  and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 			end
 			if room.check_location
 				current_location = Map.get_location
-				room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+				room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 				unless room
 					desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-					room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
+					room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 				end
 			end
 			if room
-				@@current_room_count = XMLData.room_count
+				@@current_room_count = count
 				@@current_room_id = room.id
 			end
 			room
@@ -4684,9 +4684,9 @@ class Map
 			Map.current || Map.new(Map.get_free_id, [ XMLData.room_title ], [ XMLData.room_description.strip ], [ XMLData.room_exits_string.strip ])
 		else
 			current_location = Map.get_location
-			if room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+			if room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 				return room
-			elsif room = @@list.find { |r| r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+			elsif room = @@list.find { |r| r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 				room.location = current_location
 				return room
 			else
@@ -4694,8 +4694,7 @@ class Map
 				description = [ XMLData.room_description.strip ]
 				paths = [ XMLData.room_exits_string.strip ]
 				room = Map.new(Map.get_free_id, title, description, paths, current_location)
-				room.location = current_location
-				identical_rooms = @@list.find_all { |r| (r.location != current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+				identical_rooms = @@list.find_all { |r| (r.location != current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 				if identical_rooms.length > 0
 					room.check_location = true
 					identical_rooms.each { |r| r.check_location = true }
@@ -4739,30 +4738,6 @@ class Map
 			UNTRUSTED_MAP_LOAD.call
 		end
 	end
-	def Map.on_load
-		@@list.each { |room|
-			room.tags.each { |tag|
-				if tag =~ /^on\-load\: (.*)$/
-					str = $1
-					if $SAFE == 0
-						str.untaint
-					else
-						UNTRUSTED_UNTAINT.call(str)
-					end
-					begin
-						if $SAFE < 3
-							proc { $SAFE = 3; eval(str) }.call
-						else
-							eval(str)
-						end
-					rescue
-						respond "--- error: Map.on_load (#{room.id}): #{$!}"
-						respond $!.backtrace[0..1]
-					end
-				end
-			}
-		}
-	end
 	def Map.load_dat(filename=nil)
 		if $SAFE == 0
 			if filename.nil?
@@ -4798,7 +4773,6 @@ class Map
 					@@tags.clear
 					@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
 					respond "--- loaded #{filename}" if error
-					Map.on_load
 					return true
 				rescue
 					error = true
@@ -4840,6 +4814,7 @@ class Map
 					room['description'] = Array.new
 					room['paths'] = Array.new
 					room['tags'] = Array.new
+					room['unique_loot'] = Array.new
 				elsif element =~ /^(?:image|tsoran)$/ and attributes['name'] and attributes['x'] and attributes['y'] and attributes['size']
 					room['image'] = attributes['name']
 					room['image_coords'] = [ (attributes['x'].to_i - (attributes['size']/2.0).round), (attributes['y'].to_i - (attributes['size']/2.0).round), (attributes['x'].to_i + (attributes['size']/2.0).round), (attributes['y'].to_i + (attributes['size']/2.0).round) ]
@@ -4851,7 +4826,7 @@ class Map
 				end
 			}
 			text = proc { |text_string|
-				if current_tag =~ /^(?:title|description|paths|tag)$/
+				if current_tag =~ /^(?:title|description|paths|tag|unique_loot)$/
 					room[$1].push(text_string)
 				elsif current_tag == 'exit' and current_attributes['target']
 					if current_attributes['type'].downcase == 'string'
@@ -4859,12 +4834,19 @@ class Map
 					elsif
 						room['wayto'][current_attributes['target']] = StringProc.new(text_string)
 					end
-					room['timeto'][current_attributes['target']] = (current_attributes['cost'] || 0.2).to_f
+					if current_attributes['cost'] =~ /^[0-9\.]+$/
+						room['timeto'][current_attributes['target']] = current_attributes['cost'].to_f
+					elsif current_attributes['cost'].length > 0
+						room['timeto'][current_attributes['target']] = StringProc.new(current_attributes['cost'])
+					else
+						room['timeto'][current_attributes['target']] = 0.2
+					end
 				end
 			}
 			tag_end = proc { |element|
 				if element == 'room'
-					Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'])
+					room['unique_loot'] = nil if room['unique_loot'].empty?
+					Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'])
 				elsif element == 'map'
 					missing_end = false
 				end
@@ -4896,8 +4878,7 @@ class Map
 					return false
 				end
 				@@tags.clear
-				@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
-				Map.on_load
+				@@list.each { |room| (@@tags = @@tags | room.tags) unless room.tags.nil? }
 				true
 			rescue
 				respond "--- error: failed to load #{filename}: #{$!}"
@@ -4979,9 +4960,12 @@ class Map
 						room.description.each { |desc| file.write "		<description>#{desc.gsub(/(<|>|"|'|&)/) { escape[$1] }}</description>\n" }
 						room.paths.each { |paths| file.write "		<paths>#{paths.gsub(/(<|>|"|'|&)/) { escape[$1] }}</paths>\n" }
 						room.tags.each { |tag| file.write "		<tag>#{tag.gsub(/(<|>|"|'|&)/) { escape[$1] }}</tag>\n" }
+						room.unique_loot.to_a.each { |loot| file.write "		<unique_loot>#{loot.gsub(/(<|>|"|'|&)/) { escape[$1] }}</unique_loot>\n" }
 						file.write "		<image name=\"#{room.image.gsub(/(<|>|"|'|&)/) { escape[$1] }}\" coords=\"#{room.image_coords.join(',')}\" />\n" if room.image and room.image_coords
 						room.wayto.keys.each { |target|
-							if room.timeto[target]
+							if room.timeto[target].class == Proc
+								cost = " cost=\"#{room.timeto[target]._dump.gsub(/(<|>|"|'|&)/) { escape[$1] }}\""
+							elsif room.timeto[target]
 								cost = " cost=\"#{room.timeto[target]}\""
 							else
 								cost = ''
@@ -5058,11 +5042,20 @@ class Map
 					visited[v] = true
 					@@list[v].wayto.keys.each { |adj_room|
 						adj_room_i = adj_room.to_i
-						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || "0.2".to_f)
-						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-							shortest_distances[adj_room_i] = nd
-							previous[adj_room_i] = v
-							pq_push.call(adj_room_i)
+						unless visited[adj_room_i] 
+							if @@list[v].timeto[adj_room].class == Proc
+								nd = @@list[v].timeto[adj_room].call
+							else
+								nd = @@list[v].timeto[adj_room]
+							end
+							if nd
+								nd += shortest_distances[v]
+								if shortest_distances[adj_room_i].nil? or (shortest_distances[adj_room_i] > nd)
+									shortest_distances[adj_room_i] = nd
+									previous[adj_room_i] = v
+									pq_push.call(adj_room_i)
+								end
+							end
 						end
 					}
 				end
@@ -5073,11 +5066,20 @@ class Map
 					visited[v] = true
 					@@list[v].wayto.keys.each { |adj_room|
 						adj_room_i = adj_room.to_i
-						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || "0.2".to_f)
-						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-							shortest_distances[adj_room_i] = nd
-							previous[adj_room_i] = v
-							pq_push.call(adj_room_i)
+						unless visited[adj_room_i] 
+							if @@list[v].timeto[adj_room].class == Proc
+								nd = @@list[v].timeto[adj_room].call
+							else
+								nd = @@list[v].timeto[adj_room]
+							end
+							if nd
+								nd += shortest_distances[v]
+								if shortest_distances[adj_room_i].nil? or (shortest_distances[adj_room_i] > nd)
+									shortest_distances[adj_room_i] = nd
+									previous[adj_room_i] = v
+									pq_push.call(adj_room_i)
+								end
+							end
 						end
 					}
 				end
@@ -5089,11 +5091,20 @@ class Map
 					visited[v] = true
 					@@list[v].wayto.keys.each { |adj_room|
 						adj_room_i = adj_room.to_i
-						nd = shortest_distances[v] + (@@list[v].timeto[adj_room] || "0.2".to_f)
-						if !visited[adj_room.to_i] and (shortest_distances[adj_room_i].nil? or shortest_distances[adj_room_i] > nd)
-							shortest_distances[adj_room_i] = nd
-							previous[adj_room_i] = v
-							pq_push.call(adj_room_i)
+						unless visited[adj_room_i] 
+							if @@list[v].timeto[adj_room].class == Proc
+								nd = @@list[v].timeto[adj_room].call
+							else
+								nd = @@list[v].timeto[adj_room]
+							end
+							if nd
+								nd += shortest_distances[v]
+								if shortest_distances[adj_room_i].nil? or (shortest_distances[adj_room_i] > nd)
+									shortest_distances[adj_room_i] = nd
+									previous[adj_room_i] = v
+									pq_push.call(adj_room_i)
+								end
+							end
 						end
 					}
 				end
@@ -6185,7 +6196,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				sleep "0.3".to_f
 			end
 			put_dir.call
-		elsif line =~ /will have to stand up first|must be standing first|You'll have to get up first\.|But you're already sitting!|Shouldn't you be standing first|Try standing up\.|Perhaps you should stand up/
+		elsif line =~ /will have to stand up first|must be standing first|^You'll have to get up first|^But you're already sitting!|^Shouldn't you be standing first|^Try standing up|^Perhaps you should stand up|^Standing up might help|^You should really stand up first/
 			fput 'stand'
 			waitrt?
 			put_dir.call
@@ -7968,6 +7979,9 @@ def sf_to_wiz(line)
 		if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?:(.*?)<popStream\/>/m
 			line = line.sub(/<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*[\s\[\]\(\)A-z]+:.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}#{$3}")
 		end
+		if line =~ /<pushStream id="voln"[^>]*>\[Voln \- (?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\]\s*(".*")[\r\n]*<popStream\/>/m
+			line = line.sub(/<pushStream id="voln"[^>]*>\[Voln \- (?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\]\s*(".*")[\r\n]*<popStream\/>/m, "The Symbol of Thought begins to burn in your mind and you hear #{$1} thinking, #{$2}\r\n")
+		end
 		if line =~ /<stream id="thoughts"[^>]*>([^:]+): (.*?)<\/stream>/m
 			line = line.sub(/<stream id="thoughts"[^>]*>.*?<\/stream>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}")
 		end
@@ -8517,6 +8531,64 @@ def do_client(client_string)
 	Script.new_upstream(client_string)
 end
 
+def report_errors(&block)
+	begin
+		block.call
+	rescue
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue SyntaxError
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue SystemExit
+		nil
+	rescue SecurityError
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue ThreadError
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue SystemStackError
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue Exception
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue ScriptError
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue LoadError
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue NoMemoryError
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	rescue
+		respond "--- error: #{$!}"
+		respond $!.backtrace[0..1]
+		$stderr.puts "--- error: #{$!}"
+		$stderr.puts $!.backtrace
+	end
+end
+
 sock_keepalive_proc = proc { |sock|
 	err_msg = proc { |err|
 		err ||= $!
@@ -8658,6 +8730,23 @@ get_process_list = proc {
 	rescue
 		$stderr.puts "error: #{$!}"
 		Array.new
+	end
+}
+
+reconnect_if_wanted = proc {
+	if ARGV.include?('--reconnect') and ARGV.include?('--login')
+		$stderr.puts 'info: waiting 60 seconds to reconnect...'
+		sleep 60
+		$stderr.puts 'info: reconnecting...'
+		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+			args = [ 'rubyw.exe' ]
+		else
+			args = [ 'ruby' ]
+		end
+		args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
+		args.concat ARGV
+		args.push '--reconnected' unless args.include?('--reconnected')
+		exec args.join(' ')
 	end
 }
 
@@ -9011,7 +9100,19 @@ main_thread = Thread.new {
 			}
 	
 			begin
-				login_server = TCPSocket.new('eaccess.play.net', 7900)
+				login_server = nil
+				connect_thread = Thread.new {
+					login_server = TCPSocket.new('eaccess.play.net', 7900)
+				}
+				300.times {
+					sleep 0.1
+					break unless connect_thread.status
+				}
+				if connect_thread.status
+					connect_thread.kill rescue()
+					$stdout.puts "error: timed out connecting to eaccess.play.net:7900"
+					$stderr.puts "error: timed out connecting to eaccess.play.net:7900"
+				end
 			rescue
 				$stdout.puts "error connecting to server: #{$!}"
 				$stderr.puts "error connecting to server: #{$!}"
@@ -9080,8 +9181,12 @@ main_thread = Thread.new {
 					$stderr.puts "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
 				end
 			else
-				$stdout.puts "failed to connect to server"
-				$stderr.puts "failed to connect to server"
+				$stdout.puts "error: failed to connect to server"
+				$stderr.puts "error: failed to connect to server"
+				reconnect_if_wanted.call
+				$stderr.puts "info: exiting..."
+				Gtk.queue { Gtk.main_quit } if HAVE_GTK
+				exit
 			end
 		else
 				$stdout.puts "error: failed to find login data for #{char_name}"
@@ -9136,7 +9241,18 @@ main_thread = Thread.new {
 					play_button.signal_connect('clicked') {
 						play_button.sensitive = false
 						begin
-							login_server = TCPSocket.new('eaccess.play.net', 7900)
+							login_server = nil
+							connect_thread = Thread.new {
+								login_server = TCPSocket.new('eaccess.play.net', 7900)
+							}
+							300.times {
+								sleep 0.1
+								break unless connect_thread.status
+							}
+							if connect_thread.status
+								connect_thread.kill rescue()
+								msgbox.call "error: timed out connecting to eaccess.play.net:7900"
+							end
 						rescue
 							msgbox.call "error connecting to server: #{$!}"
 							play_button.sensitive = true
@@ -9207,7 +9323,7 @@ main_thread = Thread.new {
 								play_button.sensitive = true
 							end
 						else
-							msgbox.call "failed to connect to server"
+							msgbox.call "error: failed to connect to server"
 							play_button.sensitive = true
 						end
 					}
@@ -9328,7 +9444,18 @@ main_thread = Thread.new {
 				iter[1] = 'working...'
 				Gtk.queue {
 					begin
-						login_server = TCPSocket.new('eaccess.play.net', 7900)
+						login_server = nil
+						connect_thread = Thread.new {
+							login_server = TCPSocket.new('eaccess.play.net', 7900)
+						}
+						300.times {
+							sleep 0.1
+							break unless connect_thread.status
+						}
+						if connect_thread.status
+							connect_thread.kill rescue()
+							msgbox.call "error: timed out connecting to eaccess.play.net:7900"
+						end
 					rescue
 						msgbox.call "error connecting to server: #{$!}"
 						connect_button.sensitive = true
@@ -10089,21 +10216,10 @@ main_thread = Thread.new {
 				end
 				listener.close rescue()
 				$_CLIENT_.close rescue()
-				if ARGV.include?('--reconnect') and ARGV.include?('--login')
-					$stderr.puts 'info: waiting 60 seconds to reconnect...'
-					sleep 60
-					$stderr.puts 'info: reconnecting...'
-					if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-						args = [ 'rubyw.exe' ]
-					else
-						args = [ 'ruby' ]
-					end
-					args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
-					args.concat ARGV
-					args.push '--reconnected' unless args.include?('--reconnected')
-					exec args.join(' ')
-				end
-				exit(1)
+				reconnect_if_wanted.call
+				$stderr.puts "info: exiting..."
+				Gtk.queue { Gtk.main_quit } if HAVE_GTK
+				exit
 			}
 			$stderr.puts 'info: waiting for client to connect...'
 			$_CLIENT_ = listener.accept
@@ -10122,31 +10238,39 @@ main_thread = Thread.new {
 		gamehost, gameport = fix_game_host_port.call(gamehost, gameport)
 		$stderr.puts "info: connecting to game server (#{gamehost}:#{gameport})"
 		begin
-			$_SERVER_ = TCPSocket.open(gamehost, gameport)
+			connect_thread = Thread.new {
+				$_SERVER_ = TCPSocket.open(gamehost, gameport)
+			}
+			300.times {
+				sleep 0.1
+				break unless connect_thread.status
+			}
+			if connect_thread.status
+				connect_thread.kill rescue()
+				raise "error: timed out connecting to #{gamehost}:#{gameport}"
+			end
 		rescue
 			$stderr.puts "error: #{$!}"
 			gamehost, gameport = break_game_host_port.call(gamehost, gameport)
 			$stderr.puts "info: connecting to game server (#{gamehost}:#{gameport})"
 			begin
-				$_SERVER_ = TCPSocket.open(gamehost, gameport)
+				connect_thread = Thread.new {
+					$_SERVER_ = TCPSocket.open(gamehost, gameport)
+				}
+				300.times {
+					sleep 0.1
+					break unless connect_thread.status
+				}
+				if connect_thread.status
+					connect_thread.kill rescue()
+					raise "error: timed out connecting to #{gamehost}:#{gameport}"
+				end
 			rescue
 				$stderr.puts "error: #{$!}"
 				$_CLIENT_.close rescue()
-				if ARGV.include?('--reconnect') and ARGV.include?('--login')
-					$stderr.puts 'info: waiting 60 seconds to reconnect...'
-					sleep 60
-					$stderr.puts 'info: reconnecting...'
-					if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-						args = [ 'rubyw.exe' ]
-					else
-						args = [ 'ruby' ]
-					end
-					args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
-					args.concat ARGV
-					args.push '--reconnected' unless args.include?('--reconnected')
-					exec args.join(' ')
-				end
+				reconnect_if_wanted.call
 				$stderr.puts "info: exiting..."
+				Gtk.queue { Gtk.main_quit } if HAVE_GTK
 				exit
 			end
 		end
@@ -10206,7 +10330,17 @@ main_thread = Thread.new {
 			$stderr.puts 'info: connecting to the real game host...'
 			game_host, game_port = fix_game_host_port.call(game_host, game_port)
 			begin
-				$_SERVER_ = TCPSocket.open(game_host, game_port)
+				connect_thread = Thread.new {
+					$_SERVER_ = TCPSocket.open(gamehost, gameport)
+				}
+				300.times {
+					sleep 0.1
+					break unless connect_thread.status
+				}
+				if connect_thread.status
+					connect_thread.kill rescue()
+					raise "error: timed out connecting to #{gamehost}:#{gameport}"
+				end
 			rescue
 				puts $!
 				exit
@@ -10307,27 +10441,29 @@ main_thread = Thread.new {
 	$_SERVER_.sync = true
 
 	if ARGV.include?('--without-frontend')
-		client_thread = nil
-		#
-		# send the login key
-		#
-		$_SERVER_.write("#{game_key}\r\n")
-		game_key = nil
-		#
-		# send version string
-		#
-		client_string = "/FE:WIZARD /VERSION:1.0.1.22 /P:#{RUBY_PLATFORM} /XML\r\n"
-		$_CLIENTBUFFER_.push(client_string.dup)
-		$_SERVER_.write(client_string)
-		#
-		# tell the server we're ready
-		#
-		2.times {
-			sleep "0.3".to_f
-			$_CLIENTBUFFER_.push("<c>\r\n")
-			$_SERVER_.write("<c>\r\n")
+		Thread.new {
+			client_thread = nil
+			#
+			# send the login key
+			#
+			$_SERVER_.write("#{game_key}\r\n")
+			game_key = nil
+			#
+			# send version string
+			#
+			client_string = "/FE:WIZARD /VERSION:1.0.1.22 /P:#{RUBY_PLATFORM} /XML\r\n"
+			$_CLIENTBUFFER_.push(client_string.dup)
+			$_SERVER_.write(client_string)
+			#
+			# tell the server we're ready
+			#
+			2.times {
+				sleep "0.3".to_f
+				$_CLIENTBUFFER_.push("<c>\r\n")
+				$_SERVER_.write("<c>\r\n")
+			}
+			$login_time = Time.now
 		}
-		$login_time = Time.now
 	elsif $frontend == 'suks'
 =begin
 		io_string = String.new
@@ -10548,6 +10684,7 @@ main_thread = Thread.new {
 	Thread.new {
 		loop {
 			if last_server_thread_recv + 300 < Time.now
+				$stderr.puts "#{Time.now}: error: nothing recieved from server in 5 minutes"
 				server_thread.kill rescue()
 			end
 			sleep (300 - (Time.now - last_server_thread_recv))
@@ -10571,6 +10708,7 @@ main_thread = Thread.new {
 					end
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
+=begin
 						if defined?(SUKS) and SUKS.active
 							begin
 								REXML::Document.parse_stream(alt_string, SUKS)
@@ -10586,6 +10724,7 @@ main_thread = Thread.new {
 								SUKS.reset
 							end
 						end
+=end
 						if $frontend =~ /^(?:wizard|avalon)$/
 							alt_string = sf_to_wiz(alt_string)
 						end
@@ -10672,28 +10811,14 @@ main_thread = Thread.new {
 	$stderr.puts 'info: closing connections...'
 	$_SERVER_.close rescue()
 	$_CLIENT_.close rescue()
-	if ARGV.include?('--reconnect') and ARGV.include?('--login') and not $_CLIENTBUFFER_.any? { |cmd| cmd =~ /^(?:\[.*?\])?(?:<c>)?(?:quit|exit)/i }
-		$stderr.puts 'info: waiting 30 seconds to reconnect...'
-		sleep 30
-		$stderr.puts 'info: reconnecting...'
-		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-			args = [ 'rubyw.exe' ]
-		else
-			args = [ 'ruby' ]
-		end
-		args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
-		args.concat ARGV
-		args.push '--reconnected' unless args.include?('--reconnected')
-		exec args.join(' ')
-	end
-	$stderr.puts 'info: exiting'
+	reconnect_if_wanted.call
+	$stderr.puts "info: exiting..."
 	Gtk.queue { Gtk.main_quit } if HAVE_GTK
 	exit
 }
 
 if HAVE_GTK
 	Thread.current.priority = -10
-	GLib::Timeout.add(100) { Gtk.do_queue; true }
 	Gtk.main
 else
 	main_thread.join
