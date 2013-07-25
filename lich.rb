@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.35'
+$version = '4.1.36'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -554,7 +554,7 @@ class String
 end
 
 class XMLParser
-	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id
 	include StreamListener
 
 	def initialize
@@ -615,6 +615,7 @@ class XMLParser
 		@max_health = 0
 		@spirit = 0
 		@max_spirit = 0
+		@last_spirit = nil
 		@stamina = 0
 		@max_stamina = 0
 		@stance_text = String.new
@@ -736,7 +737,9 @@ class XMLParser
 					@health, @max_health = attributes['text'].scan(/-?\d+/).collect { |num| num.to_i }
 					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, @wound_gsl, @scar_gsl)}\r\n" if @send_fake_tags
 				elsif attributes['id'] == 'spirit'
+					@last_spirit = @spirit if @last_spirit
 					@spirit, @max_spirit = attributes['text'].scan(/-?\d+/).collect { |num| num.to_i }
+					@last_spirit = @spirit unless @last_spirit
 					$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, @wound_gsl, @scar_gsl)}\r\n" if @send_fake_tags
 				elsif attributes['id'] == 'nextLvlPB'
 					Gift.pulse unless @next_level_text == attributes['text']
@@ -3783,6 +3786,7 @@ end
 class GameObj
 	@@loot ||= Array.new
 	@@npcs ||= Array.new
+	@@npc_status ||= Hash.new
 	@@pcs ||= Array.new
 	@@inv ||= Array.new
 	@@contents ||= Hash.new
@@ -3793,8 +3797,9 @@ class GameObj
 	@@fam_npcs ||= Array.new
 	@@fam_pcs ||= Array.new
 	@@fam_room_desc ||= Array.new
+
 	attr_reader :id
-	attr_accessor :noun, :name, :status, :before_name, :after_name
+	attr_accessor :noun, :name, :before_name, :after_name
 	def initialize(id, noun, name, status=nil, before=nil, after=nil)
 		@id = id
 		@noun = noun
@@ -3802,18 +3807,30 @@ class GameObj
 		# fixme: 'mother-of-pearl' gives 'pearl' as the noun?
 		@noun = 'mother-of-pearl' if (@noun == 'pearl') and (@name =~ /mother\-of\-pearl/)
 		@name = name
+		@@npc_status[@id] = status
 		@before_name = before
 		@after_name = after
-		@status = status
 	end
-	def GameObj
-		@noun
+	def status
+		if @@npc_status.keys.include?(@id)
+			@@npc_status[@id]
+		elsif @@loot.find { |obj| obj.id == @id } or @@pcs.find { |obj| obj.id == @id } or @@inv.find { |obj| obj.id == @id } or @@room_desc.find { |obj| obj.id == @id } or @@fam_loot.find { |obj| obj.id == @id } or @@fam_npcs.find { |obj| obj.id == @id } or @@fam_pcs.find { |obj| obj.id == @id } or @@fam_room_desc.find { |obj| obj.id == @id } or (@@right_hand.id == @id) or (@@left_hand.id == @id) or @@contents.values.find { |list| list.find { |obj| obj.id == @id  } }
+			nil
+		else
+			'gone'
+		end
+	end
+	def status=(val)
+		@@npc_status[@id] = val
 	end
 	def to_s
 		@noun
 	end
 	def empty?
 		false
+	end
+	def GameObj
+		@noun
 	end
 	def full_name
 		"#{@before_name}#{' ' unless @before_name.nil?}#{name}#{' ' unless @after_name.nil?}#{@after_name}"
@@ -3875,6 +3892,7 @@ class GameObj
 	end
 	def GameObj.clear_npcs
 		@@npcs.clear
+		@@npc_status.clear
 	end
 	def GameObj.clear_pcs
 		@@pcs.clear
