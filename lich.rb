@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.58'
+$version = '4.1.59'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3161,6 +3161,9 @@ class SpellRanks
 					respond "--- error: SpellRanks.load: #{$!}"
 					$stderr.puts "error: SpellRanks.load: #{$!}"
 					$stderr.puts $!.backtrace
+					@@list      = Array.new
+					@@timestamp = 0
+					@@loaded = true
 				end
 			else
 				@@loaded = true
