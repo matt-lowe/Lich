@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.48'
+$version = '4.1.49'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -374,6 +374,8 @@ UNTRUSTED_USERVARIABLES_DELETE = proc { |var_name, value, type| UserVariables.de
 UNTRUSTED_USERVARIABLES_ADD = proc { |var_name, value, type| UserVariables.add(var_name, value, type) }
 UNTRUSTED_USERVARIABLES_CHANGE = proc { |var_name, value, type| UserVariables.change(var_name, value, type) }
 UNTRUSTED_USERVARIABLES_SAVE = proc { UserVariables.save }
+UNTRUSTED_SPELL_RANKS_LOAD = proc { SpellRanks.load }
+UNTRUSTED_SPELL_RANKS_SAVE = proc { SpellRanks.save }
 
 JUMP = Exception.exception('JUMP')
 JUMP_ERROR = Exception.exception('JUMP_ERROR')
@@ -3134,21 +3136,69 @@ class Spells
 	end
 end
 
-class CMan
-	def CMan.method_missing(arg1, arg2='')
-		if arg2.class == Array
-			instance_eval("@@#{arg1}[#{arg2.join(',')}]", if Script.self then Script.self.name else 'Lich' end)
-		elsif arg2.to_s =~ /^\d+$/
-			instance_eval("@@#{arg1}#{arg2}", if Script.self then Script.self.name else 'Lich' end)
-		elsif arg2.empty?
-			begin
-				instance_eval("@@#{arg1}", if Script.self then Script.self.name else 'Lich' end)
-			rescue
-				nil
+class SpellRanks
+	@@list      ||= Array.new
+	@@timestamp ||= 0
+	@@loaded    ||= false
+	attr_reader :name
+	attr_accessor :minorspiritual, :majorspiritual, :cleric, :minorelemental, :majorelemental, :ranger, :sorcerer, :wizard, :bard, :empath, :paladin, :arcanesymbols, :magicitemuse
+	def SpellRanks.load
+		if $SAFE == 0
+			if File.exists?("#{$data_dir}#{XMLData.game}/spell-ranks.dat")
+				begin
+					File.open("#{$data_dir}#{XMLData.game}/spell-ranks.dat", 'rb') { |f|
+						@@timestamp, @@list = Marshal.load(f.read)
+					}
+					@@loaded = true
+				rescue
+					respond "--- error: SpellRanks.load: #{$!}"
+					$stderr.puts "error: SpellRanks.load: #{$!}"
+					$stderr.puts $!.backtrace
+				end
+			else
+				@@loaded = true
 			end
 		else
-			instance_eval("@@#{arg1}'#{arg2}'", if Script.self then Script.self.name else 'Lich' end)
+			UNTRUSTED_SPELL_RANKS_LOAD.call
 		end
+	end
+	def SpellRanks.save
+		if $SAFE == 0
+			begin
+				File.open("#{$data_dir}#{XMLData.game}/spell-ranks.dat", 'wb') { |f|
+					f.write(Marshal.dump([@@timestamp, @@list]))
+				}
+			rescue
+				respond "--- error: SpellRanks.save: #{$!}"
+				$stderr.puts "error: SpellRanks.save: #{$!}"
+				$stderr.puts $!.backtrace
+			end
+		else
+			UNTRUSTED_SPELL_RANKS_SAVE.call
+		end
+	end
+	def SpellRanks.timestamp
+		@@timestamp
+	end
+	def SpellRanks.timestamp=(val)
+		@@timestamp = val
+	end
+	def SpellRanks.[](name)
+		SpellRanks.load unless @@loaded
+		@@list.find { |n| n == name }
+	end
+	def SpellRanks.list
+		SpellRanks.load unless @@loaded
+		@@list
+	end
+	def SpellRanks.method_missing(arg=nil)
+		echo "error: unknown method #{arg} for class SpellRanks"
+		respond caller[0..1]
+	end
+	def initialize(name)
+		@name = name
+		@minorspiritual, @majorspiritual, @cleric, @minorelemental, @majorelemental, @ranger, @sorcerer, @wizard, @bard, @empath, @paladin, @arcanesymbols, @magicitemuse = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+		@@list.push(self)
 	end
 end
 
@@ -3689,6 +3739,24 @@ class Spell
 	def elementalTD;   @elemental_td_formula;   end
 	def spiritTD;      @spirit_td_formula;      end
 	def sorcererTD;    @sorcerer_td_formula;    end
+end
+
+class CMan
+	def CMan.method_missing(arg1, arg2='')
+		if arg2.class == Array
+			instance_eval("@@#{arg1}[#{arg2.join(',')}]", if Script.self then Script.self.name else 'Lich' end)
+		elsif arg2.to_s =~ /^\d+$/
+			instance_eval("@@#{arg1}#{arg2}", if Script.self then Script.self.name else 'Lich' end)
+		elsif arg2.empty?
+			begin
+				instance_eval("@@#{arg1}", if Script.self then Script.self.name else 'Lich' end)
+			rescue
+				nil
+			end
+		else
+			instance_eval("@@#{arg1}'#{arg2}'", if Script.self then Script.self.name else 'Lich' end)
+		end
+	end
 end
 
 class Stats
@@ -6142,8 +6210,8 @@ def reget(*lines)
 		history.gsub!(/<[^>]+>/, '')
 		history.gsub!('&gt;', '>')
 		history.gsub!('&lt;', '<')
-		history = history.split("\n").delete_if { |line| line.nil? or line.empty? or line =~ /^[\r\n\s\t]*$/ }
 	end
+	history = history.split("\n").delete_if { |line| line.nil? or line.empty? or line =~ /^[\r\n\s\t]*$/ }
 	if lines.first.kind_of?(Numeric) or lines.first.to_i.nonzero?
 		history = history[-([lines.shift.to_i,history.length].min)..-1]
 	end
