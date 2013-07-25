@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.19'
+$version = '4.1.20'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6617,7 +6617,7 @@ def do_client(client_string)
 				respond('--- Lich: no scripts to unpause')
 			end
 			unpaused_scripts = nil
-		elsif cmd =~ /^(?:k|kill|stop|p|pause|u|unpause)\s(.+)/
+		elsif cmd =~ /^(k|kill|stop|p|pause|u|unpause)\s(.+)/
 			action = $1
 			target = $2
 			script = Script.running.find { |scr| scr.name == target }
