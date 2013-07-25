@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.67'
+$version = '4.1.68'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2031,7 +2031,7 @@ end
 class Script
 	@@running ||= Array.new
 	attr_reader :name, :vars, :safe, :labels, :file_name, :label_order, :thread_group
-	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings, :watchfor
+	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :want_script_output, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings, :watchfor
 	def Script.self
 		if script = @@running.find { |scr| scr.thread_group == Thread.current.group }
 			sleep "0.2".to_f while script.paused
@@ -2099,6 +2099,11 @@ class Script
 			end
 		}
 	end
+	def Script.new_script_output(line)
+		for script in @@running
+			script.downstream_buffer.push(line.chomp) if script.want_script_output
+		end
+	end
 	def Script.log(data)
 		if $SAFE == 0
 			if script = Script.self
@@ -2138,6 +2143,7 @@ class Script
 		@downstream_buffer = LimitedArray.new
 		@want_downstream = true
 		@want_downstream_xml = false
+		@want_script_output = false
 		@upstream_buffer = LimitedArray.new
 		@want_upstream = false
 		@unique_buffer = LimitedArray.new
@@ -2264,7 +2270,7 @@ class Script
 		@name
 	end
 	def gets
-		if @want_downstream or @want_downstream_xml
+		if @want_downstream or @want_downstream_xml or @want_script_output
 			sleep "0.05".to_f while @downstream_buffer.empty?
 			@downstream_buffer.shift
 		else
@@ -2274,7 +2280,7 @@ class Script
 		end
 	end
 	def gets?
-		if @want_downstream or @want_downstream_xml
+		if @want_downstream or @want_downstream_xml or @want_script_output
 			if @downstream_buffer.empty?
 				nil
 			else
@@ -5544,7 +5550,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			Script.self.downstream_buffer.unshift(save_stream)
 			Script.self.downstream_buffer.flatten!
 			return false
-		elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down|^The clerk stops you from entering the partition and says, "I'll need to see your ticket!"$|^The guard stops you, saying, "Only members of registered groups may enter the Meeting Hall\.  If you'd like to visit, ask a group officer for a guest pass\."$|^An? .*? reaches over and grasps [A-Z][a-z]+ by the neck preventing (?:him|her) from being dragged anywhere\.$/
+		elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down|^The clerk stops you from entering the partition and says, "I'll need to see your ticket!"$|^The guard stops you, saying, "Only members of registered groups may enter the Meeting Hall\.  If you'd like to visit, ask a group officer for a guest pass\."$|^An? .*? reaches over and grasps [A-Z][a-z]+ by the neck preventing (?:him|her) from being dragged anywhere\.$|^You'll have to wait, [A-Z][a-z]+ .* locker/
 			echo 'move: failed'
 			fill_hands if need_full_hands
 			Script.self.downstream_buffer.unshift(save_stream)
@@ -6628,6 +6634,7 @@ def respond(first = "", *messages)
 			str += sprintf("%s\r\n", first.to_s.chomp)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
+		str.split(/\r?\n/).each { |line| Script.new_script_output(line) }
 		str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"\"/>\r\n" if $frontend == 'stormfront'
 		wait_while { XMLData.in_stream }
 		$_CLIENT_.puts(str)
@@ -6677,6 +6684,35 @@ def empty_hands
 	else
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
+	if left_hand.id
+		waitrt?
+		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$/)
+			actions.unshift proc {
+				fput "remove ##{left_hand.id}"
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				fput "swap" if GameObj.right_hand.id == left_hand.id
+			}
+		elsif lootsack
+			actions.unshift proc {
+				fput "get ##{left_hand.id}"
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				fput "swap" if GameObj.right_hand.id == left_hand.id
+			}
+			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+			if result =~ /^You can't .+ It's closed!$/
+				actions.push proc { fput "close ##{lootsack.id}" }
+				fput "open ##{lootsack.id}"
+				fput "put ##{left_hand.id} in ##{lootsack.id}"
+			end
+		else
+			actions.unshift proc {
+				fput "get ##{left_hand.id}"
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				fput "swap" if GameObj.right_hand.id == left_hand.id
+			}
+			fput 'stow left'
+		end
+	end
 	if right_hand.id
 		waitrt?
 		if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
@@ -6693,7 +6729,11 @@ def empty_hands
 			}
 			fput 'stop 1012'
 		elsif lootsack
-			actions.unshift proc { fput "get ##{right_hand.id}" }
+			actions.unshift proc {
+				fput "get ##{right_hand.id}"
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				fput "swap" if GameObj.left_hand.id == right_hand.id
+			}
 			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
 			if result =~ /^You can't .+ It's closed!$/
 				actions.push proc { fput "close ##{lootsack.id}" }
@@ -6701,25 +6741,12 @@ def empty_hands
 				fput "put ##{right_hand.id} in ##{lootsack.id}"
 			end
 		else
-			actions.unshift proc { fput "get ##{right_hand.id}" }
+			actions.unshift proc {
+				fput "get ##{right_hand.id}"
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				fput "swap" if GameObj.left_hand.id == right_hand.id
+			}
 			fput 'stow right'
-		end
-	end
-	if left_hand.id
-		waitrt?
-		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$/)
-			actions.unshift proc { fput "remove ##{left_hand.id}" }
-		elsif lootsack
-			actions.unshift proc { fput "get ##{left_hand.id}" }
-			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
-			if result =~ /^You can't .+ It's closed!$/
-				actions.push proc { fput "close ##{lootsack.id}" }
-				fput "open ##{lootsack.id}"
-				fput "put ##{left_hand.id} in ##{lootsack.id}"
-			end
-		else
-			actions.unshift proc { fput "get ##{left_hand.id}" }
-			fput 'stow left'
 		end
 	end
 	$fill_hands_actions.push(actions)
@@ -6743,7 +6770,7 @@ def empty_hand
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
 	unless (right_hand.id.nil? and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3)) or (left_hand.id.nil? and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3))
-		if right_hand.id and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3)
+		if right_hand.id and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3) and not (XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')) and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
 			waitrt?
 			if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
 				type = right_hand.noun
@@ -6759,7 +6786,11 @@ def empty_hand
 				}
 				fput 'stop 1012'
 			elsif lootsack
-				actions.unshift proc { fput "get ##{right_hand.id}" }
+				actions.unshift proc {
+					fput "get ##{right_hand.id}"
+					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+					fput "swap" if GameObj.left_hand.id == right_hand.id
+				}
 				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
@@ -6767,15 +6798,27 @@ def empty_hand
 					fput "put ##{right_hand.id} in ##{lootsack.id}"
 				end
 			else
-				actions.unshift proc { fput "get ##{right_hand.id}" }
+				actions.unshift proc {
+					fput "get ##{right_hand.id}"
+					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+					fput "swap" if GameObj.left_hand.id == right_hand.id
+				}
 				fput 'stow right'
 			end
 		elsif left_hand.id and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
 			waitrt?
 			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$/)
-				actions.unshift proc { fput "remove ##{left_hand.id}" }
+				actions.unshift proc {
+					fput "remove ##{left_hand.id}"
+					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+					fput "swap" if GameObj.right_hand.id == left_hand.id
+				}
 			elsif lootsack
-				actions.unshift proc { fput "get ##{left_hand.id}" }
+				actions.unshift proc {
+					fput "get ##{left_hand.id}"
+					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+					fput "swap" if GameObj.right_hand.id == left_hand.id
+				}
 				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
@@ -6783,7 +6826,11 @@ def empty_hand
 					fput "put ##{left_hand.id} in ##{lootsack.id}"
 				end
 			else
-				actions.unshift proc { fput "get ##{left_hand.id}" }
+				actions.unshift proc {
+					fput "get ##{left_hand.id}"
+					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+					fput "swap" if GameObj.right_hand.id == left_hand.id
+				}
 				fput 'stow left'
 			end
 		end
