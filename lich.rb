@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.30'
+$version = '4.1.31'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -545,7 +545,7 @@ class String
 end
 
 class XMLParser
-	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :in_stream
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream
 	include StreamListener
 
 	def initialize
@@ -593,6 +593,7 @@ class XMLParser
 		@society_task = String.new
 
 		@name = String.new
+		@game = String.new
 		@mana = 0
 		@max_mana = 0
 		@health = 0
@@ -849,6 +850,7 @@ class XMLParser
 					@bounty_task = String.new
 				end
 			elsif (name == 'app') and (@name = attributes['char'])
+				@game = attributes['game']
 				if $frontend == 'wizard'
 					$_SERVER_.puts "<c>_flag Display Dialog Boxes 0"
 					sleep "0.05".to_f
@@ -3082,9 +3084,9 @@ class Spell
 	def putup(mod_skills=Hash.new)
 		if @stacks
 			if (@num == 9710) or (@num == 9711) or (@num == 9719)
-				self.timeleft = [ self.timeleft + self.time_per(mod_skills), 3.0].min
+				self.timeleft = [ self.timeleft + self.time_per(mod_skills), 3.to_f].min
 			else
-				self.timeleft = [ self.timeleft + self.time_per(mod_skills), 250.0].min
+				self.timeleft = [ self.timeleft + self.time_per(mod_skills), 250.to_f].min
 			end
 		else
 			self.timeleft = self.time_per(mod_skills)
@@ -4893,6 +4895,8 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			fput 'stand' unless standing?
 			waitrt?
 			put_dir.call
+		elsif line =~ /^You flick your hand (?:up|down)wards and focus your aura on your disk, but your disk only wobbles briefly\.$/
+			put_dir.call
 		end
 		if XMLData.room_count > room_count
 			fill_hands if need_full_hands
@@ -5954,10 +5958,10 @@ def empty_hands
 		if $empty_hands['left'].noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/
 			fput "wear ##{$empty_hands['left'].id}"
 		elsif lootsack
-			result = dothistimeout "_drag ##{$empty_hands['left'].id} ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+			result = dothistimeout "put ##{$empty_hands['left'].id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
 			if result =~ /^You can't .+ It's closed!$/
 				fput "open ##{lootsack.id}"
-				fput "_drag ##{$empty_hands['left'].id} ##{lootsack.id}"
+				fput "put ##{$empty_hands['left'].id} in ##{lootsack.id}"
 				$empty_hands['close_lootsack'] = true
 			end
 		else
