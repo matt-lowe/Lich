@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.10'
+$version = '4.1.11'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2943,7 +2943,7 @@ class Spell
 			break unless @@cast_lock
 			break unless locking_script = (Script.running.find { |s| s.name == @@cast_lock } || Script.hidden.find { |s| s.name == @@cast_lock })
 			break if locking_script.paused
-			break if locking_script == Script.self.name
+			break if locking_script == Script.self
 			sleep 0.1
 		}
 		@@cast_lock = Script.self.name
@@ -4111,8 +4111,8 @@ end
 
 def start_exec_script(cmd_data, flags=Hash.new)
 	flags = { :quiet => true } if flags == true
-	trusted = flags[:trusted]
 	if $SAFE == 0
+		trusted = flags[:trusted]
 		unless new_script = ExecScript.new(cmd_data, flags)
 			respond '--- Lich: failed to start exec script'
 			return false
@@ -6118,8 +6118,8 @@ def sf_to_wiz(line)
 		if line =~ /<LaunchURL src="(\/gs4\/play\/cm\/loader.asp[^"]*)" \/>/
 			$_CLIENT_.puts "\034GSw00005\r\nhttps://www.play.net#{$1}\r\n"
 		end
-		if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]A-Za-z]+)?:(.*?)<popStream\/>/m
-			line = line.sub(/<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*[\s\[\]A-Za-z]*:.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}#{$3}")
+		if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?:(.*?)<popStream\/>/m
+			line = line.sub(/<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*[\s\[\]\(\)A-z]+:.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}#{$3}")
 		end
 		if line =~ /<stream id="thoughts"[^>]*>([^:]+): (.*?)<\/stream>/m
 			line = line.sub(/<stream id="thoughts"[^>]*>.*?<\/stream>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}")
