@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.26'
+$version = '4.1.27'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -883,7 +883,7 @@ class XMLParser
 				Favorites.init
 			end
 		rescue
-			respond "--- error: XMLParser.tag_start: #{$!}"
+			$stdout.puts "--- error: XMLParser.tag_start: #{$!}"
 			$stderr.puts "error: XMLParser.tag_start: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.1
@@ -1021,7 +1021,7 @@ class XMLParser
 				end
 			end
 		rescue
-			respond "--- error: XMLParser.text: #{$!}"
+			$stdout.puts "--- error: XMLParser.text: #{$!}"
 			$stderr.puts "error: XMLParser.text: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.1
@@ -1047,7 +1047,7 @@ class XMLParser
 			@last_tag = @active_tags.pop
 			@last_id = @active_ids.pop
 		rescue
-			respond "--- error: XMLParser.tag_end: #{$!}"
+			$stdout.puts "--- error: XMLParser.tag_end: #{$!}"
 			$stderr.puts "error: XMLParser.tag_end: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.1
@@ -1738,6 +1738,7 @@ class Script
 		end
 		@quiet = true if data[0] =~ /^[\t\s]*#?[\t\s]*(?:quiet|hush)$/i
 		@current_label = '~start'
+		@labels[@current_label] = String.new
 		@label_order.push(@current_label)
 		for line in data
 			if line =~ /^([\d_\w]+):$/
@@ -2102,6 +2103,7 @@ class WizardScript<Script
 		end
 		
 		@current_label = '~start'
+		@labels[@current_label] = String.new
 		@label_order.push(@current_label)
 		for line in data
 			if line =~ /^([\d_\w]+):$/
@@ -5942,7 +5944,6 @@ def empty_hands
 		else
 			fput 'stow right'
 		end
-		
 	end
 	if $empty_hands['left'].id
 		waitrt?
@@ -5958,7 +5959,6 @@ def empty_hands
 		else
 			fput 'stow left'
 		end
-		
 	end
 end
 
@@ -8760,7 +8760,7 @@ main_thread = Thread.new {
 							$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
 							retry
 						end
-						respond "--- error: server_thread: #{$!}"
+						$stdout.puts "--- error: server_thread: #{$!}"
 						$stderr.puts "error: server_thread: #{$!}"
 						$stderr.puts $!.backtrace
 						XMLData.reset
@@ -8773,19 +8773,19 @@ main_thread = Thread.new {
 						end
 					}
 				rescue
-					respond "--- error: server_thread: #{$!}"
+					$stdout.puts "--- error: server_thread: #{$!}"
 					$stderr.puts "error: server_thread: #{$!}"
 					$stderr.puts $!.backtrace
 				end
 			end
 		rescue Exception
-			respond "--- error: server_thread: #{$!}"
+			$stdout.puts "--- error: server_thread: #{$!}"
 			$stderr.puts "error: server_thread: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.2
 			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or ($!.to_s =~ /invalid argument/i)
 		rescue
-			respond "--- error: server_thread: #{$!}"
+			$stdout.puts "--- error: server_thread: #{$!}"
 			$stderr.puts "error: server_thread: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.2
