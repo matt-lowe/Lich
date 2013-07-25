@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.60'
+$version = '4.1.61'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -5459,6 +5459,10 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			waitrt?
 			fput 'stand' unless standing?
 			waitrt?
+			put_dir.call
+		elsif line == "You can't do that while engaged!"
+			# DragonRealms
+			fput 'retreat'
 			put_dir.call
 		elsif line == 'You are too injured to be doing any climbing!'
 			if (resolve = Spell[9704]) and resolve.known?
