@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.39'
+$version = '4.1.40'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -337,7 +337,6 @@ end
 
 # fixme: warlock
 # fixme: terminal mode
-# fixme: signs3 uses Script.self.io
 # fixme: maybe add script dir to load path
 
 # at_exit { Process.waitall }
@@ -7476,6 +7475,9 @@ fix_game_host_port = proc { |gamehost,gameport|
 	elsif (gamehost == 'gs3.simutronics.net') and (gameport.to_i == 4900)
 		gamehost = 'storm.gs4.game.play.net'
 		gameport = 10024
+	elsif (gamehost == 'gs4.simutronics.net') and (gameport.to_i == 10321)
+		game_host = 'storm.gs4.game.play.net'
+		game_port = 10324
 	elsif (gamehost == 'prime.dr.game.play.net') and (gameport.to_i == 4901)
 		gamehost = 'dr.simutronics.net'
 		gameport = 11024
@@ -7678,6 +7680,21 @@ elsif ARGV.include?('--gemstone')
 			else
 				$frontend = 'wizard'
 			end
+		end
+	end
+elsif ARGV.include?('--shattered')
+	$platinum = false
+	if ARGV.any? { |arg| (arg == '-s') or (arg == '--stormfront') }
+		game_host = 'storm.gs4.game.play.net'
+		game_port = 10324
+		$frontend = 'stormfront'
+	else
+		game_host = 'gs4.simutronics.net'
+		game_port = 10321
+		if ARGV.any? { |arg| arg == '--avalon' }
+			$frontend = 'avalon'
+		else
+			$frontend = 'wizard'
 		end
 	end
 elsif ARGV.include?('--dragonrealms')
