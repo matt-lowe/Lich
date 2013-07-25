@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.51'
+$version = '4.1.52'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3324,119 +3324,119 @@ class Spell
 	end
 	def mana_cost
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@mana_cost_formula) }.call
+			proc { $SAFE = 3; eval(@mana_cost_formula) }.call.to_i
 		else
-			eval(@mana_cost_formula)
+			eval(@mana_cost_formula).to_i
 		end
 	end
 	def spirit_cost
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@spirit_cost_formula) }.call
+			proc { $SAFE = 3; eval(@spirit_cost_formula) }.call.to_i
 		else
-			eval(@spirit_cost_formula)
+			eval(@spirit_cost_formula).to_i
 		end
 	end
 	def stamina_cost
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@stamina_cost_formula) }.call
+			proc { $SAFE = 3; eval(@stamina_cost_formula) }.call.to_i
 		else
-			eval(@stamina_cost_formula)
+			eval(@stamina_cost_formula).to_i
 		end
 	end
 	def time_per(mod_skills=Hash.new)
 		if mod_skills.empty?
 			if $SAFE < 3
-				proc { $SAFE = 3; eval(@time_per_formula) }.call
+				proc { $SAFE = 3; eval(@time_per_formula) }.call.to_i
 			else
-				eval(@time_per_formula)
+				eval(@time_per_formula).to_i
 			end
 		else
 			formula = @time_per_formula.dup
 			mod_skills.each_pair { |name,value| formula.gsub!(name, value.to_i.to_s) }
 			if $SAFE < 3
 				formula.untaint
-				proc { $SAFE = 3; eval(formula) }.call
+				proc { $SAFE = 3; eval(formula) }.call.to_i
 			else
 				UNTRUSTED_UNTAINT.call(formula)
-				eval(formula)
+				eval(formula).to_i
 			end
 		end
 	end
 	def renew_cost
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@renew_cost_formula) }.call
+			proc { $SAFE = 3; eval(@renew_cost_formula) }.call.to_i
 		else
-			eval(@renew_cost_formula)
+			eval(@renew_cost_formula).to_i
 		end
 	end
 	def bolt_as
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@bolt_as_formula) }.call
+			proc { $SAFE = 3; eval(@bolt_as_formula) }.call.to_i
 		else
-			eval(@bolt_as_formula)
+			eval(@bolt_as_formula).to_i
 		end
 	end
 	def physical_as
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@physical_as_formula) }.call
+			proc { $SAFE = 3; eval(@physical_as_formula) }.call.to_i
 		else
-			eval(@physical_as_formula)
+			eval(@physical_as_formula).to_i
 		end
 	end
 	def bolt_ds
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@bolt_ds_formula) }.call
+			proc { $SAFE = 3; eval(@bolt_ds_formula) }.call.to_i
 		else
-			eval(@bolt_ds_formula)
+			eval(@bolt_ds_formula).to_i
 		end
 	end
 	def physical_ds
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@physical_ds_formula) }.call
+			proc { $SAFE = 3; eval(@physical_ds_formula) }.call.to_i
 		else
-			eval(@physical_ds_formula)
+			eval(@physical_ds_formula).to_i
 		end
 	end
 	def elemental_cs
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@elemental_cs_formula) }.call
+			proc { $SAFE = 3; eval(@elemental_cs_formula) }.call.to_i
 		else
-			eval(@elemental_cs_formula)
+			eval(@elemental_cs_formula).to_i
 		end
 	end
 	def spirit_cs
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@spirit_cs_formula) }.call
+			proc { $SAFE = 3; eval(@spirit_cs_formula) }.call.to_i
 		else
-			eval(@spirit_cs_formula)
+			eval(@spirit_cs_formula).to_i
 		end
 	end
 	def sorcerer_cs
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@sorcerer_cs_formula) }.call
+			proc { $SAFE = 3; eval(@sorcerer_cs_formula) }.call.to_i
 		else
-			eval(@sorcerer_cs_formula)
+			eval(@sorcerer_cs_formula).to_i
 		end
 	end
 	def elemental_td
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@elemental_td_formula) }.call
+			proc { $SAFE = 3; eval(@elemental_td_formula) }.call.to_i
 		else
-			eval(@elemental_td_formula)
+			eval(@elemental_td_formula).to_i
 		end
 	end
 	def spirit_td
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@spirit_td_formula) }.call
+			proc { $SAFE = 3; eval(@spirit_td_formula) }.call.to_i
 		else
-			eval(@spirit_td_formula)
+			eval(@spirit_td_formula).to_i
 		end
 	end
 	def sorcerer_td
 		if $SAFE < 3
-			proc { $SAFE = 3; eval(@sorcerer_td_formula) }.call
+			(proc { $SAFE = 3; eval(@sorcerer_td_formula) }.call).to_i
 		else
-			eval(@sorcerer_td_formula)
+			eval(@sorcerer_td_formula).to_i
 		end
 	end
 	def strength
