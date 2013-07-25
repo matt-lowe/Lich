@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.13'
+$version = '4.2.14'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3290,9 +3290,11 @@ class SpellRanks
 		end
 	end
 	def SpellRanks.timestamp
+		SpellRanks.load unless @@loaded
 		@@timestamp
 	end
 	def SpellRanks.timestamp=(val)
+		SpellRanks.load unless @@loaded
 		@@timestamp = val
 	end
 	def SpellRanks.[](name)
@@ -3308,6 +3310,7 @@ class SpellRanks
 		respond caller[0..1]
 	end
 	def initialize(name)
+		SpellRanks.load unless @@loaded
 		@name = name
 		@minorspiritual, @majorspiritual, @cleric, @minorelemental, @majorelemental, @ranger, @sorcerer, @wizard, @bard, @empath, @paladin, @arcanesymbols, @magicitemuse = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 		@@list.push(self)
@@ -8856,6 +8859,9 @@ main_thread = Thread.new {
 								end
 								if data[:custom_launch]
 									launch_data.push "CUSTOMLAUNCH=#{data[:custom_launch]}"
+									if data[:custom_launch_dir]
+										launch_data.push "CUSTOMLAUNCHDIR=#{data[:custom_launch_dir]}"
+									end
 								end
 							else
 								login_server.close unless login_server.closed?
@@ -8978,6 +8984,9 @@ main_thread = Thread.new {
 											end
 											if login_info[:custom_launch]
 												launch_data.push "CUSTOMLAUNCH=#{login_info[:custom_launch]}"
+												if login_info[:custom_launch_dir]
+													launch_data.push "CUSTOMLAUNCHDIR=#{login_info[:custom_launch_dir]}"
+												end
 											end
 											window.destroy
 											done = true
@@ -9082,9 +9091,13 @@ main_thread = Thread.new {
 
 			custom_launch_option = Gtk::CheckButton.new('Custom launch command')
 			custom_launch_entry = Gtk::ComboBoxEntry.new()
-			custom_launch_entry.append_text("../simu/wizard/Wizard.Exe /GGS /H127.0.0.1 /P%port% /K%key%")
-			# running Stormfront from a usb stick probably sucks, because settings are stored in the user directory
-			# custom_launch_entry.append_text("../simu/StormFront/Stormfront.exe /GGS /H127.0.0.1 /P%port% /K%key%")
+			custom_launch_entry.child.text = "(enter custom launch command)"
+			custom_launch_entry.append_text("Wizard.Exe /GGS /H127.0.0.1 /P%port% /K%key%")
+			custom_launch_entry.append_text("Stormfront.exe /GGS /H127.0.0.1 /P%port% /K%key%")
+			custom_launch_dir = Gtk::ComboBoxEntry.new()
+			custom_launch_dir.child.text = "(enter working directory for command)"
+			custom_launch_dir.append_text("../wizard")
+			custom_launch_dir.append_text("../StormFront")
 
 			make_quick_option = Gtk::CheckButton.new('Save this info for quick game entry')
 
@@ -9102,11 +9115,13 @@ main_thread = Thread.new {
 			game_entry_tab.pack_start(frontend_box, false, false, 3)
 			game_entry_tab.pack_start(custom_launch_option, false, false, 3)
 			game_entry_tab.pack_start(custom_launch_entry, false, false, 3)
+			game_entry_tab.pack_start(custom_launch_dir, false, false, 3)
 			game_entry_tab.pack_start(make_quick_option, false, false, 3)
 			game_entry_tab.pack_start(play_button_box, false, false, 3)
 
 			custom_launch_option.signal_connect('toggled') {
 				custom_launch_entry.visible = custom_launch_option.active?
+				custom_launch_dir.visible = custom_launch_option.active?
 			}
 
 			connect_button.signal_connect('clicked') {
@@ -9228,6 +9243,9 @@ main_thread = Thread.new {
 						end
 						if custom_launch_option.active?
 							launch_data.push "CUSTOMLAUNCH=#{custom_launch_entry.child.text}"
+							unless custom_launch_dir.child.text.empty? or custom_launch_dir.child.text == "(enter working directory for command)"
+								launch_data.push "CUSTOMLAUNCHDIR=#{custom_launch_dir.child.text}"
+							end
 						end
 						if make_quick_option.active?
 							if wizard_option.active?
@@ -9237,10 +9255,16 @@ main_thread = Thread.new {
 							end
 							if custom_launch_option.active?
 								custom_launch = custom_launch_entry.child.text
+								if custom_launch_dir.child.text.empty? or custom_launch_dir.child.text == "(enter working directory for command)"
+									custom_launch_dir = nil
+								else
+									custom_launch_dir = custom_launch_dir.child.text
+								end
 							else
 								custom_launch = nil
+								custom_launch_dir = nil
 							end
-							entry_data.push h={ :char_name => treeview.selection.selected[3], :game_code => treeview.selection.selected[0], :game_name => treeview.selection.selected[1], :user_id => user_id_entry.text, :password => pass_entry.text, :frontend => frontend, :custom_launch => custom_launch }
+							entry_data.push h={ :char_name => treeview.selection.selected[3], :game_code => treeview.selection.selected[0], :game_name => treeview.selection.selected[1], :user_id => user_id_entry.text, :password => pass_entry.text, :frontend => frontend, :custom_launch => custom_launch, :custom_launch_dir => custom_launch_dir }
 							save_entry_data = true
 						end
 						user_id_entry.text = String.new
@@ -9664,6 +9688,7 @@ main_thread = Thread.new {
 			window.show_all
 
 			custom_launch_entry.visible = false
+			custom_launch_dir.visible = false
 
 			notebook.set_page(1) if entry_data.empty?
 		}
@@ -9746,6 +9771,10 @@ main_thread = Thread.new {
 			custom_launch.sub!(/^.*?\=/, '')
 			$stderr.puts "info: using custom launch command: #{custom_launch}"
 		end
+		if custom_launch_dir = launch_data.find { |opt| opt =~ /CUSTOMLAUNCHDIR=/ }
+			custom_launch_dir.sub!(/^.*?\=/, '')
+			$stderr.puts "info: using working directory for custom launch command: #{custom_launch_dir}"
+		end
 		if ARGV.include?('--without-frontend')
 			$frontend = 'unknown'
 			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
@@ -9821,6 +9850,7 @@ main_thread = Thread.new {
 			end
 			localport = listener.addr[1]
 			if custom_launch
+				sal_filename = nil
 				launcher_cmd = custom_launch.sub(/\%port\%/, localport.to_s).sub(/\%key\%/, game_key.to_s)
 				# fixme: ok to log the one use key?
 				# $stderr.puts "info: launcher_cmd: #{launcher_cmd}"
@@ -9845,6 +9875,9 @@ main_thread = Thread.new {
 			end
 			Thread.new {
 				begin
+					if custom_launch_dir
+						Dir.chdir(custom_launch_dir)
+					end
 					system(launcher_cmd)
 				rescue
 					$stderr.puts $!
@@ -9854,7 +9887,10 @@ main_thread = Thread.new {
 				sleep 30
 				$stdout.puts "error: timeout waiting for client to connect"
 				$stderr.puts "error: timeout waiting for client to connect"
-				File.delete(sal_filename) rescue()
+				Dir.chdir($lich_dir)
+				if sal_filename
+					File.delete(sal_filename) rescue()
+				end
 				listener.close rescue()
 				$_CLIENT_.close rescue()
 				if ARGV.include?('--reconnect') and ARGV.include?('--login')
@@ -9876,7 +9912,10 @@ main_thread = Thread.new {
 			$stderr.puts 'info: waiting for client to connect...'
 			$_CLIENT_ = listener.accept
 			$stderr.puts 'info: connected'
-			File.delete(sal_filename) rescue()
+			Dir.chdir($lich_dir)
+			if sal_filename
+				File.delete(sal_filename) rescue()
+			end
 			begin
 				timeout_thr.kill
 				listener.close
