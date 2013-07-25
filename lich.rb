@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.17'
+$version = '4.1.18'
 
 # rubyw.exe doesn't have $stdout or $stderr, warnings caused by stupid Windows bugs crash Lich
 begin
@@ -2661,26 +2661,49 @@ class Spells
 	def Spells.bard;                 @@bard;                 end
 	def Spells.get_circle_name(num)
 		val = num.to_s
-		if val == '1' then 'Minor Spirit'
-		elsif val == '2' then 'Major Spirit'
-		elsif val == '3' then 'Cleric'
-		elsif val == '4' then 'Minor Elemental'
-		elsif val == '5' then 'Major Elemental'
-		elsif val == '6' then 'Ranger'
-		elsif val == '7' then 'Sorcerer'
-		elsif val == '9' then 'Wizard'
-		elsif val == '10' then 'Bard'
-		elsif val == '11' then 'Empath'
-		elsif val == '16' then 'Paladin'
-		elsif val == '17' then 'Arcane'
-		elsif val == '66' then 'Death'
-		elsif val == '65' then 'Imbedded Enchantment'
-		elsif val == '90' then 'Miscellaneous'
-		elsif val == '96' then 'Combat Maneuvers'
-		elsif val == '97' then 'Guardians of Sunfist'
-		elsif val == '98' then 'Order of Voln'
-		elsif val == '99' then 'Council of Light'
-		else 'Unknown Circle' end
+		if val == '1'
+			'Minor Spirit'
+		elsif val == '2'
+			'Major Spirit'
+		elsif val == '3'
+			'Cleric'
+		elsif val == '4'
+			'Minor Elemental'
+		elsif val == '5'
+			'Major Elemental'
+		elsif val == '6'
+			'Ranger'
+		elsif val == '7'
+			'Sorcerer'
+		elsif val == '9'
+			'Wizard'
+		elsif val == '10'
+			'Bard'
+		elsif val == '11'
+			'Empath'
+		elsif val == '16'
+			'Paladin'
+		elsif val == '17'
+			'Arcane'
+		elsif val == '66'
+			'Death'
+		elsif val == '65'
+			'Imbedded Enchantment'
+		elsif val == '90'
+			'Miscellaneous'
+		elsif val == '95'
+			'Armor Specialization'
+		elsif val == '96'
+			'Combat Maneuvers'
+		elsif val == '97'
+			'Guardians of Sunfist'
+		elsif val == '98'
+			'Order of Voln'
+		elsif val == '99'
+			'Council of Light'
+		else
+			'Unknown Circle'
+		end
 	end
 	def Spells.active
 		Spell.active
