@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.25'
+$version = '4.1.26'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -5929,7 +5929,7 @@ def empty_hands
 	end
 	if $empty_hands['right'].id
 		waitrt?
-		if XMLData.spellfront.include?("Sonic Weapon Song")
+		if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
 			$empty_hands['sonic'] = true
 			fput 'stop 1012'
 		elsif lootsack
@@ -5987,7 +5987,9 @@ def fill_hands
 		fput 'swap' if GameObj.right_hand.id == $empty_hands['left'].id
 		$empty_hands['left'] = nil
 	end
-	fput "close ##{lootsack.id}" if $empty_hands['close_lootsack']
+	if $empty_hands['close_lootsack'] and (lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i })
+		fput "close ##{lootsack.id}"
+	end
 	$empty_hands['close_lootsack'] = false
 	$empty_hands['sonic'] = false
 end
