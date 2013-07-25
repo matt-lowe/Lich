@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.68'
+$version = '4.1.69'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3608,6 +3608,18 @@ class Spell
 			true
 		end
 	end
+	def Spell.lock_cast
+		script = Script.self
+		@@cast_lock.push(script)
+		until (@@cast_lock.first == script) or @@cast_lock.empty?
+			sleep "0.1".to_f
+			Script.self # allows this loop to be paused
+			@@cast_lock.delete_if { |s| s.paused }
+		end
+	end
+	def Spell.unlock_cast
+		@@cast_lock.delete(Script.self)
+	end
 	def cast(target=nil)
 		script = Script.self
 		if @type.nil?
@@ -3637,7 +3649,7 @@ class Spell
 			until (@@cast_lock.first == script) or @@cast_lock.empty?
 				sleep "0.1".to_f
 				Script.self # allows this loop to be paused
-				@@cast_lock.delete_if { |s| s.paused }
+				@@cast_lock.delete_if { |s| s.paused or not (Script.running + Script.hidden).include?(s) }
 			end
 			unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 				echo 'cast: not enough mana'
@@ -5541,7 +5553,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 		end
 		if line.nil?
 			sleep "0.1".to_f
-		elsif line =~ /^You can't enter .+ and remain hidden or invisible\.|if he can't see you!$|^You can't enter .+ when you can't be seen\.$|^You can't do that without being seen\.$/
+		elsif line =~ /^You can't enter .+ and remain hidden or invisible\.|if he can't see you!$|^You can't enter .+ when you can't be seen\.$|^You can't do that without being seen\.$|^How do you intend to get .*? attention\?  After all, no one can see you right now\.$/
 			fput 'unhide'
 			put_dir.call
 		elsif line =~ /^You can't go there|^You can't swim in that direction\.|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails|^There doesn't seem to be any way to do that at the moment\.$/
@@ -5550,7 +5562,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			Script.self.downstream_buffer.unshift(save_stream)
 			Script.self.downstream_buffer.flatten!
 			return false
-		elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down|^The clerk stops you from entering the partition and says, "I'll need to see your ticket!"$|^The guard stops you, saying, "Only members of registered groups may enter the Meeting Hall\.  If you'd like to visit, ask a group officer for a guest pass\."$|^An? .*? reaches over and grasps [A-Z][a-z]+ by the neck preventing (?:him|her) from being dragged anywhere\.$|^You'll have to wait, [A-Z][a-z]+ .* locker/
+		elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down|^The clerk stops you from entering the partition and says, "I'll need to see your ticket!"$|^The guard stops you, saying, "Only members of registered groups may enter the Meeting Hall\.  If you'd like to visit, ask a group officer for a guest pass\."$|^An? .*? reaches over and grasps [A-Z][a-z]+ by the neck preventing (?:him|her) from being dragged anywhere\.$|^You'll have to wait, [A-Z][a-z]+ .* locker|^As you move toward the gate, you carelessly bump into the guard/
 			echo 'move: failed'
 			fill_hands if need_full_hands
 			Script.self.downstream_buffer.unshift(save_stream)
@@ -6686,7 +6698,7 @@ def empty_hands
 	end
 	if left_hand.id
 		waitrt?
-		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$/)
+		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
 			actions.unshift proc {
 				fput "remove ##{left_hand.id}"
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
@@ -6807,7 +6819,7 @@ def empty_hand
 			end
 		elsif left_hand.id and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
 			waitrt?
-			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$/)
+			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
 				actions.unshift proc {
 					fput "remove ##{left_hand.id}"
 					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
