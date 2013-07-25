@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.14'
+$version = '4.3.15'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1010,7 +1010,7 @@ class XMLParser
 				UserVariables.init
 				Alias.init
 				Favorites.init
-				if arg = ARGV.find { |a| a=~ /^\-\-start\-scripts=[A-z,]+$/ }
+				if arg = ARGV.find { |a| a=~ /^\-\-start\-scripts=/ }
 					for script_name in arg.sub('--start-scripts=', '').split(',')
 						start_script(script_name)
 					end
@@ -4062,6 +4062,11 @@ class CMan
 	@@duck_and_weave     ||= 0
 	@@slipery_mind       ||= 0
 	@@predators_eye      ||= 0
+	@@rolling_krynch_stance  ||= 0
+	@@stance_of_the_mongoose ||= 0
+	@@slippery_mind          ||= 0
+	@@flurry_of_blows        ||= 0
+	@@inner_harmony          ||= 0
 
 	def CMan.bearhug;            @@bearhug;            end
 	def CMan.berserk;            @@berserk;            end
@@ -4810,6 +4815,52 @@ class Map
 					room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 				end
 			end
+			if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
+				need_desc, peer_direction, peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
+				if need_desc
+					unless last_roomdesc = $_SERVERBUFFER_.reverse.find { |line| line =~ /<style id="roomDesc"\/>/ } and (last_roomdesc =~ /<style id="roomDesc"\/>[^<]/)
+						put 'set description on'
+					end
+				end
+				script = Script.self
+				save_want_downstream = script.want_downstream
+				script.want_downstream = true
+				squelch_started = false
+				squelch_proc = proc { |server_string|
+					if squelch_started
+						if server_string =~ /<prompt/
+							DownstreamHook.remove('squelch-peer')
+						end
+						nil
+					elsif server_string =~ /^You peer/
+						squelch_started = true
+						nil
+					else
+						server_string
+					end
+				}
+				DownstreamHook.add('squelch-peer', squelch_proc)
+				result = dothistimeout "peer #{peer_direction}", 3, /^You peer|^\[Usage: PEER/
+				if result =~ /^You peer/
+					peer_results = Array.new
+					5.times {
+						if line = get?
+							peer_results.push line
+							break if line =~ /^Obvious/
+						end
+					}
+					unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
+						room = @@list[(room.id+1)..-1].find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+						if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
+							need_desc, peer_direction, peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
+							unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
+								room = nil
+							end
+						end
+					end
+				end
+				script.want_downstream = save_want_downstream
+			end
 			if room
 				@@current_room_count = count
 				@@current_room_id = room.id
@@ -4821,10 +4872,56 @@ class Map
 		if XMLData.game =~ /DR/
 			Map.current || Map.new(Map.get_free_id, [ XMLData.room_title ], [ XMLData.room_description.strip ], [ XMLData.room_exits_string.strip ])
 		else
+			peer_tag_good = proc { |r|
+				if peer_tag = r.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
+					good = false
+					need_desc, peer_direction, peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
+					if need_desc
+						unless last_roomdesc = $_SERVERBUFFER_.reverse.find { |line| line =~ /<style id="roomDesc"\/>/ } and (last_roomdesc =~ /<style id="roomDesc"\/>[^<]/)
+							put 'set description on'
+						end
+					end
+					script = Script.self
+					save_want_downstream = script.want_downstream
+					script.want_downstream = true
+					squelch_started = false
+					squelch_proc = proc { |server_string|
+						if squelch_started
+							if server_string =~ /<prompt/
+								DownstreamHook.remove('squelch-peer')
+							end
+							nil
+						elsif server_string =~ /^You peer/
+							squelch_started = true
+							nil
+						else
+							server_string
+						end
+					}
+					DownstreamHook.add('squelch-peer', squelch_proc)
+					result = dothistimeout "peer #{peer_direction}", 3, /^You peer|^\[Usage: PEER/
+					if result =~ /^You peer/
+						peer_results = Array.new
+						5.times {
+							if line = get?
+								peer_results.push line
+								break if line =~ /^Obvious/
+							end
+						}
+						if peer_results.any? { |line| line =~ /#{peer_requirement}/ }
+							good = true
+						end
+					end
+					script.want_downstream = save_want_downstream
+				else
+					good = true
+				end
+				good
+			}
 			current_location = Map.get_location
-			if room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+			if room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) and peer_tag_good.call(r) }
 				return room
-			elsif room = @@list.find { |r| r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+			elsif room = @@list.find { |r| r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) and peer_tag_good.call(r) }
 				room.location = current_location
 				return room
 			else
