@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.47'
+$version = '4.1.48'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3516,22 +3516,22 @@ class Spell
 		script = Script.self
 		if @type.nil?
 			echo "cast: spell missing type (#{@name})"
-			sleep 0.1
+			sleep "0.1".to_f
 			return false
 		end
 		unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 			echo 'cast: not enough mana'
-			sleep 0.1
+			sleep "0.1".to_f
 			return false
 		end
 		unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 			echo 'cast: not enough spirit'
-			sleep 0.1
+			sleep "0.1".to_f
 			return false
 		end
 		unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 			echo 'cast: not enough stamina'
-			sleep 0.1
+			sleep "0.1".to_f
 			return false
 		end
 		begin
@@ -3545,23 +3545,44 @@ class Spell
 			end
 			unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 				echo 'cast: not enough mana'
-				sleep 0.1
+				sleep "0.1".to_f
 				return false
 			end
 			unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 				echo 'cast: not enough spirit'
-				sleep 0.1
+				sleep "0.1".to_f
 				return false
 			end
 			unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 				echo 'cast: not enough stamina'
-				sleep 0.1
+				sleep "0.1".to_f
 				return false
 			end
 			if @castProc
 				waitrt?
 				waitcastrt?
-				eval(@castProc)
+				unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
+					echo 'cast: not enough mana'
+					sleep "0.1".to_f
+					return false
+				end
+				unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+					echo 'cast: not enough spirit'
+					sleep "0.1".to_f
+					return false
+				end
+				unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
+					echo 'cast: not enough stamina'
+					sleep "0.1".to_f
+					return false
+				end
+				begin
+					eval(@castProc)
+				rescue
+					echo "cast: error: #{$!}"
+					respond $!.backtrace[0..2]
+					return false
+				end
 			elsif @command
 				cmd = @command
 				if target.class == GameObj
@@ -3600,17 +3621,17 @@ class Spell
 							dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 							unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 								echo 'cast: not enough mana'
-								sleep 0.1
+								sleep "0.1".to_f
 								return false
 							end
 							unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 								echo 'cast: not enough spirit'
-								sleep 0.1
+								sleep "0.1".to_f
 								return false
 							end
 							unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 								echo 'cast: not enough stamina'
-								sleep 0.1
+								sleep "0.1".to_f
 								return false
 							end
 						end
@@ -3624,11 +3645,11 @@ class Spell
 								dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 								unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 									echo 'cast: not enough mana'
-									sleep 0.1
+									sleep "0.1".to_f
 									return false
 								end
 							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$/
-								sleep 0.1
+								sleep "0.1".to_f
 								return false
 							end
 						}
