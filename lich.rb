@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.12'
+$version = '4.2.13'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -253,6 +253,18 @@ require 'zlib'
 require 'drb'
 require 'resolv'
 require 'digest/md5'
+
+# stupid workaround for Windows to avoid 10 second or so freeze when lnet starts up
+# no idea why this works
+if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+	begin
+		require 'openssl'
+		OpenSSL::PKey::RSA.new(512)
+	rescue
+		$stderr.puts "warning: failed to load openssl: #{$!}"
+	end
+end
+
 begin
 	require 'gtk2'
 	module Gtk
@@ -8842,6 +8854,9 @@ main_thread = Thread.new {
 								if data[:frontend] == 'wizard'
 									launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
 								end
+								if data[:custom_launch]
+									launch_data.push "CUSTOMLAUNCH=#{data[:custom_launch]}"
+								end
 							else
 								login_server.close unless login_server.closed?
 								$stdout.puts "error: unrecognized response from server. (#{response})"
@@ -8961,6 +8976,9 @@ main_thread = Thread.new {
 											if login_info[:frontend] == 'wizard'
 												launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
 											end
+											if login_info[:custom_launch]
+												launch_data.push "CUSTOMLAUNCH=#{login_info[:custom_launch]}"
+											end
 											window.destroy
 											done = true
 										else
@@ -9062,9 +9080,13 @@ main_thread = Thread.new {
 			frontend_box.pack_start(stormfront_option, false, false, 0)
 			#frontend_box.pack_start(suks_option, false, false, 0)
 
-			make_quick_option = Gtk::CheckButton.new('Save this info for quick game entry')
+			custom_launch_option = Gtk::CheckButton.new('Custom launch command')
+			custom_launch_entry = Gtk::ComboBoxEntry.new()
+			custom_launch_entry.append_text("../simu/wizard/Wizard.Exe /GGS /H127.0.0.1 /P%port% /K%key%")
+			# running Stormfront from a usb stick probably sucks, because settings are stored in the user directory
+			# custom_launch_entry.append_text("../simu/StormFront/Stormfront.exe /GGS /H127.0.0.1 /P%port% /K%key%")
 
-			# fixme: add option to use launcher or not
+			make_quick_option = Gtk::CheckButton.new('Save this info for quick game entry')
 
 			play_button = Gtk::Button.new(' Play ')
 			play_button.sensitive = false
@@ -9078,8 +9100,14 @@ main_thread = Thread.new {
 			game_entry_tab.pack_start(login_button_box, false, false, 0)
 			game_entry_tab.pack_start(sw, true, true, 3)
 			game_entry_tab.pack_start(frontend_box, false, false, 3)
+			game_entry_tab.pack_start(custom_launch_option, false, false, 3)
+			game_entry_tab.pack_start(custom_launch_entry, false, false, 3)
 			game_entry_tab.pack_start(make_quick_option, false, false, 3)
 			game_entry_tab.pack_start(play_button_box, false, false, 3)
+
+			custom_launch_option.signal_connect('toggled') {
+				custom_launch_entry.visible = custom_launch_option.active?
+			}
 
 			connect_button.signal_connect('clicked') {
 				connect_button.sensitive = false
@@ -9198,13 +9226,21 @@ main_thread = Thread.new {
 						elsif suks_option.active?
 							launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=SUKS") }
 						end
+						if custom_launch_option.active?
+							launch_data.push "CUSTOMLAUNCH=#{custom_launch_entry.child.text}"
+						end
 						if make_quick_option.active?
 							if wizard_option.active?
 								frontend = 'wizard'
 							else
 								frontend = 'stormfront'
 							end
-							entry_data.push h={ :char_name => treeview.selection.selected[3], :game_code => treeview.selection.selected[0], :game_name => treeview.selection.selected[1], :user_id => user_id_entry.text, :password => pass_entry.text, :frontend => frontend }
+							if custom_launch_option.active?
+								custom_launch = custom_launch_entry.child.text
+							else
+								custom_launch = nil
+							end
+							entry_data.push h={ :char_name => treeview.selection.selected[3], :game_code => treeview.selection.selected[0], :game_name => treeview.selection.selected[1], :user_id => user_id_entry.text, :password => pass_entry.text, :frontend => frontend, :custom_launch => custom_launch }
 							save_entry_data = true
 						end
 						user_id_entry.text = String.new
@@ -9627,6 +9663,8 @@ main_thread = Thread.new {
 
 			window.show_all
 
+			custom_launch_entry.visible = false
+
 			notebook.set_page(1) if entry_data.empty?
 		}
 
@@ -9704,6 +9742,10 @@ main_thread = Thread.new {
 			$stderr.puts "error: launch_data contains no GAME info"
 			exit(1)
 		end
+		if custom_launch = launch_data.find { |opt| opt =~ /CUSTOMLAUNCH=/ }
+			custom_launch.sub!(/^.*?\=/, '')
+			$stderr.puts "info: using custom launch command: #{custom_launch}"
+		end
 		if ARGV.include?('--without-frontend')
 			$frontend = 'unknown'
 			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
@@ -9713,6 +9755,12 @@ main_thread = Thread.new {
 			end
 		elsif game =~ /SUKS/i
 			$frontend = 'suks'
+			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
+				$stdout.puts "error: launch_data contains no KEY info"
+				$stderr.puts "error: launch_data contains no KEY info"
+				exit(1)
+			end
+		elsif custom_launch
 			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
 				$stdout.puts "error: launch_data contains no KEY info"
 				$stderr.puts "error: launch_data contains no KEY info"
@@ -9772,24 +9820,36 @@ main_thread = Thread.new {
 				$stderr.puts "Cannot set SO_REUSEADDR sockopt"
 			end
 			localport = listener.addr[1]
-			launch_data.collect! { |line| line.sub(/GAMEPORT=.+/, "GAMEPORT=#{localport}").sub(/GAMEHOST=.+/, "GAMEHOST=localhost") }
-			sal_filename = "#{$temp_dir}lich#{rand(10000)}.sal"
-			while File.exists?(sal_filename)
+			if custom_launch
+				launcher_cmd = custom_launch.sub(/\%port\%/, localport.to_s).sub(/\%key\%/, game_key.to_s)
+				# fixme: ok to log the one use key?
+				# $stderr.puts "info: launcher_cmd: #{launcher_cmd}"
+			else
+				launch_data.collect! { |line| line.sub(/GAMEPORT=.+/, "GAMEPORT=#{localport}").sub(/GAMEHOST=.+/, "GAMEHOST=localhost") }
 				sal_filename = "#{$temp_dir}lich#{rand(10000)}.sal"
+				while File.exists?(sal_filename)
+					sal_filename = "#{$temp_dir}lich#{rand(10000)}.sal"
+				end
+				File.open(sal_filename, 'w') { |f| f.puts launch_data }
+				launcher_cmd = launcher_cmd.sub('%1', sal_filename)
+				launcher_cmd = launcher_cmd.tr('/', "\\") if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+				launcher_cmd = "#{wine_bin} #{launcher_cmd}" if wine_bin
+				$stderr.puts "info: launcher_cmd: #{launcher_cmd}"
+				if get_process_list.call.any? { |line| line =~ /Launcher\.exe/i }
+					$stderr.puts "info: waiting for launcher to exit..."
+					20.times {
+						sleep "0.5".to_f
+						break unless get_process_list.call.any? { |line| line =~ /Launcher\.exe/i }
+					}
+				end
 			end
-			File.open(sal_filename, 'w') { |f| f.puts launch_data }
-			launcher_cmd = launcher_cmd.sub('%1', sal_filename)
-			launcher_cmd = launcher_cmd.tr('/', "\\") if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-			launcher_cmd = "#{wine_bin} #{launcher_cmd}" if wine_bin
-			$stderr.puts "info: launcher_cmd: #{launcher_cmd}"
-			if get_process_list.call.any? { |line| line =~ /Launcher\.exe/i }
-				$stderr.puts "info: waiting for launcher to exit..."
-				20.times {
-					sleep "0.5".to_f
-					break unless get_process_list.call.any? { |line| line =~ /Launcher\.exe/i }
-				}
-			end
-			Thread.new { system(launcher_cmd) }
+			Thread.new {
+				begin
+					system(launcher_cmd)
+				rescue
+					$stderr.puts $!
+				end
+			}
 			timeout_thr = Thread.new {
 				sleep 30
 				$stdout.puts "error: timeout waiting for client to connect"
