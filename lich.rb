@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.4'
+$version = '4.3.5'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6248,6 +6248,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				tried_fix_drag = true
 				name = /^You grab (.*?)('s body)? and drag/.match(drag_line).captures.first
 				target = /^(?:go|climb) (.+)$/.match(dir).captures.first
+				fput "drag #{name}"
 				dir = "drag #{name} #{target}"
 				put_dir.call
 			else
