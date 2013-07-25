@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.15'
+$version = '4.2.16'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -260,6 +260,8 @@ if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 	begin
 		require 'openssl'
 		OpenSSL::PKey::RSA.new(512)
+	rescue LoadError
+		$stderr.puts "warning: failed to load openssl: #{$!}"
 	rescue
 		$stderr.puts "warning: failed to load openssl: #{$!}"
 	end
@@ -3322,10 +3324,10 @@ class Spell
 	@@loaded ||= false
 	@@load_lock = Array.new
 	@@cast_lock ||= Array.new
-	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command, :castProc
+	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command, :castProc, :real_time, :max_duration
 	attr_accessor :stance, :channel
-	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
-		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@castProc,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
+	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration)
+		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@castProc,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel,@real_time,@max_duration = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration
 		@time_per_formula.untaint
 		@mana_cost_formula.untaint
 		@spirit_cost_formula.untaint
@@ -3374,8 +3376,8 @@ class Spell
 					File.open(filename) { |file|
 						file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
 							spell = Hash.new
-							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|castProc|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['castProc'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
+							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|castProc|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel|realtime|maxduration)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['castProc'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end),(if spell['realtime'] and spell['realtime'] == 'true' then true else false end),(if spell['maxduration'] then spell['maxduration'].to_f else 250.0 end))
 						}
 					}
 					@@list.each { |spell|
@@ -3634,10 +3636,16 @@ class Spell
 			ranks = Society.rank
 		elsif (circle_num == 99) and (Society.status == 'Council of Light')
 			ranks = Society.rank
+		elsif (circle_num == 96)
+			if CMan.send(@name.downcase.gsub(' ', '_'))
+				return true
+			else
+				return false
+			end
 		else
 			return false
 		end
-		if @num.to_s[-2..-1].to_i <= ranks
+		if (@num % 100) <= ranks
 			return true
 		else
 			return false
@@ -3648,13 +3656,9 @@ class Spell
 	end
 	def putup(mod_skills=Hash.new)
 		if @stacks
-			if (@num == 9710) or (@num == 9711) or (@num == 9719)
-				self.timeleft = [ self.timeleft + self.time_per(mod_skills), 3.to_f].min
-			else
-				self.timeleft = [ self.timeleft + self.time_per(mod_skills), 250.to_f].min
-			end
+			self.timeleft = [ self.timeleft + self.time_per(mod_skills), self.max_duration ].min
 		else
-			self.timeleft = [ self.time_per(mod_skills), 250 ].min
+			self.timeleft = [ self.time_per(mod_skills), self.max_duration ].min
 		end
 		@active = true
 	end
@@ -4480,10 +4484,14 @@ class Map
 			script = Script.self
 			save_want_downstream = script.want_downstream
 			script.want_downstream = true
-			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$/
+			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$|^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$/
 			script.want_downstream = save_want_downstream
 			@@current_location_count = XMLData.room_count
-			@@current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+			if location_result =~ /^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$/
+				@@current_location = false
+			else
+				@@current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+			end
 		end
 		@@current_location
 	end
@@ -5808,7 +5816,11 @@ end
 def send_to_script(*values)
 	values.flatten!
 	if script = (Script.running + Script.hidden).find { |val| val.name =~ /^#{values.first}/i }
-		values[1..-1].each { |val| script.downstream_buffer.push(val) }
+		if script.want_downstream
+			values[1..-1].each { |val| script.downstream_buffer.push(val) }
+		else
+			values[1..-1].each { |val| script.unique_buffer.push(val) }
+		end
 		echo("Sent to #{script.name} -- '#{values[1..-1].join(' ; ')}'")
 		return true
 	else
@@ -5881,7 +5893,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 
 	need_full_hands = false
 	tried_open = false
-	tried_fix_drag = 0
+	tried_fix_drag = false
 	line_count = 0
 	room_count = XMLData.room_count
 	giveup_time = Time.now.to_i + giveup_seconds.to_i
@@ -5936,11 +5948,11 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			Script.self.downstream_buffer.flatten!
 			# return nil instead of false to show the direction shouldn't be removed from the map database
 			return nil
-		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he (?:is too heavy|doesn't budge)\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "(?:Stop\.Halt!)  You need to make sure you check in at Wyveryn Keep and get proper identification papers\.  We don't let just anyone wander around here\.  Now go on through the gate and get over there\."$|^You step into the root, but can see no way to climb the slippery tendrils inside\.  After a moment, you step back out\.$|^As you start .*? back to safe ground\.$|^You stumble a bit as you try to enter the pool but feel that your persistence will pay off\.$/
+		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he (?:is too heavy|doesn't budge)\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "(?:Stop\.|Halt!)  You need to make sure you check in|^You step into the root, but can see no way to climb the slippery tendrils inside\.  After a moment, you step back out\.$|^As you start .*? back to safe ground\.$|^You stumble a bit as you try to enter the pool but feel that your persistence will pay off\.$|^A shimmering field of magical crimson and gold energy flows through the area\.$/
 			sleep 1
 			waitrt?
 			put_dir.call
-		elsif line =~ /^Climbing.*(?:plunge|fall)|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$|^You search for a way to make the climb .*? but without success\.$|^You start to climb .* you fall to the ground|^You attempt to climb .* wrong approach/
+		elsif line =~ /^Climbing.*(?:plunge|fall)|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$|^You search for a way to make the climb .*? but without success\.$|^You start to climb .* you fall to the ground|^You attempt to climb .* wrong approach|^You run towards .*? slowly retreat back, reassessing the situation\./
 			sleep 1
 			waitrt?
 			fput 'stand' unless standing?
@@ -5976,21 +5988,21 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			dir.gsub!('climb', 'go')
 			put_dir.call
 		elsif line =~ /^You can't drag/
-			if tried_fix_drag == 0
-				tried_fix_drag = 1
-				dir.sub!(/^climb /, 'go ')
-				put_dir.call
-			elsif (tried_fix_drag == 1) and (dir =~ /^(?:go|climb) .+$/) and (line = reget.reverse.find { |line| line =~ /^You grab .*?(?:'s body)? and drag/ })
-				tried_fix_drag = 2
-				name = /^You grab (.*?)('s body)? and drag/.match(line).captures.first
-				target = /^(?:go|climb) (.+)$/.match(dir).captures.first
-				dir = "drag #{name} #{target}"
-				put_dir.call
-			else
+			if tried_fix_drag
 				fill_hands if need_full_hands
 				Script.self.downstream_buffer.unshift(save_stream)
 				Script.self.downstream_buffer.flatten!
 				return false
+			elsif (dir =~ /^(?:go|climb) .+$/) and (drag_line = reget.reverse.find { |l| l =~ /^You grab .*?(?:'s body)? and drag/ })
+				tried_fix_drag = true
+				name = /^You grab (.*?)('s body)? and drag/.match(drag_line).captures.first
+				target = /^(?:go|climb) (.+)$/.match(dir).captures.first
+				dir = "drag #{name} #{target}"
+				put_dir.call
+			else
+				tried_fix_drag = true
+				dir.sub!(/^climb /, 'go ')
+				put_dir.call
 			end
 		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$|^It's a bit too difficult to swim holding|^You will need both hands free for such a difficult task\./
 			need_full_hands = true
