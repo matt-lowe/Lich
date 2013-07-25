@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.2'
+$version = '4.3.3'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -788,6 +788,7 @@ class XMLParser
 					last_mana = @mana
 					@mana, @max_mana = attributes['text'].scan(/-?\d+/).collect { |num| num.to_i }
 					difference = @mana - last_mana
+					# fixme: enhancives screw this up
 					if (difference == noded_pulse) or (difference == unnoded_pulse) or ( (@mana == @max_mana) and (last_mana + noded_pulse > @max_mana) )
 						@last_pulse = Time.now.to_i
 						if @send_fake_tags
@@ -1353,6 +1354,18 @@ class Settings
 							respond "--- error: Settings.load: #{$!}"
 							$stderr.puts "error: Settings.load: #{$!}"
 							$stderr.puts $!.backtrace
+							begin
+								filename.concat '~'
+								if File.exists?(filename)
+									File.open(filename, 'rb') { |f| @@settings[script.name] = Marshal.load(f.read) }
+									@@timestamps[script] = File.mtime(filename)
+									@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
+								end
+							rescue
+								respond "--- error: Settings.load: #{$!}"
+								$stderr.puts "error: Settings.load: #{$!}"
+								$stderr.puts $!.backtrace
+							end
 						end
 					end
 				end
@@ -1378,6 +1391,9 @@ class Settings
 						md5 = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						unless @@md5[script.name] == md5
 							begin
+								if File.exists?(filename)
+									File.rename(filename, "#{filename}~")
+								end
 								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script.name])) }
 								@@timestamps[script.name] = File.mtime(filename)
 								@@md5[script.name] = md5
@@ -1406,6 +1422,9 @@ class Settings
 					md5 = Digest::MD5.hexdigest(@@settings[script_name].inspect)
 					unless @@md5[script_name] == md5
 						begin
+							if File.exists?(filename)
+								File.rename(filename, "#{filename}~")
+							end
 							File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script_name])) }
 							@@timestamps[script_name] = File.mtime(filename)
 							@@md5[script_name] = md5
@@ -1492,6 +1511,18 @@ class GameSettings
 							respond "--- error: GameSettings.load: #{$!}"
 							$stderr.puts "error: GameSettings.load: #{$!}"
 							$stderr.puts $!.backtrace
+							begin
+								filename.concat '~'
+								if File.exists?(filename)
+									File.open(filename, 'rb') { |f| @@settings[script.name] = Marshal.load(f.read) }
+									@@timestamps[script] = File.mtime(filename)
+									@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
+								end
+							rescue
+								respond "--- error: GameSettings.load: #{$!}"
+								$stderr.puts "error: GameSettings.load: #{$!}"
+								$stderr.puts $!.backtrace
+							end
 						end
 					end
 				end
@@ -1517,6 +1548,9 @@ class GameSettings
 						md5 = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						unless @@md5[script.name] == md5
 							begin
+								if File.exists?(filename)
+									File.rename(filename, "#{filename}~")
+								end
 								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script.name])) }
 								@@timestamps[script.name] = File.mtime(filename)
 								@@md5[script.name] = md5
@@ -1545,6 +1579,9 @@ class GameSettings
 					md5 = Digest::MD5.hexdigest(@@settings[script_name].inspect)
 					unless @@md5[script_name] == md5
 						begin
+							if File.exists?(filename)
+								File.rename(filename, "#{filename}~")
+							end
 							File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script_name])) }
 							@@timestamps[script_name] = File.mtime(filename)
 							@@md5[script_name] = md5
@@ -1622,6 +1659,18 @@ class CharSettings
 							respond "--- error: CharSettings.load: #{$!}"
 							$stderr.puts "error: CharSettings.load: #{$!}"
 							$stderr.puts $!.backtrace
+							begin
+								filename.concat '~'
+								if File.exists?(filename)
+									File.open(filename, 'rb') { |f| @@settings[script.name] = Marshal.load(f.read) }
+									@@timestamps[script] = File.mtime(filename)
+									@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
+								end
+							rescue
+								respond "--- error: CharSettings.load: #{$!}"
+								$stderr.puts "error: CharSettings.load: #{$!}"
+								$stderr.puts $!.backtrace
+							end
 						end
 					end
 				end
@@ -1647,6 +1696,9 @@ class CharSettings
 						md5 = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						unless @@md5[script.name] == md5
 							begin
+								if File.exists?(filename)
+									File.rename(filename, "#{filename}~")
+								end
 								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script.name])) }
 								@@timestamps[script.name] = File.mtime(filename)
 								@@md5[script.name] = md5
@@ -1675,6 +1727,9 @@ class CharSettings
 					md5 = Digest::MD5.hexdigest(@@settings[script_name].inspect)
 					unless @@md5[script_name] == md5
 						begin
+							if File.exists?(filename)
+								File.rename(filename, "#{filename}~")
+							end
 							File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@settings[script_name])) }
 							@@timestamps[script_name] = File.mtime(filename)
 							@@md5[script_name] = md5
@@ -5022,7 +5077,11 @@ class Map
 		until array.length < 2
 			room = array.shift
 			if t = Map[room].timeto[array.first.to_s]
-				time += t.to_f
+				if t.class == Proc
+					time += t.call.to_f
+				else
+					time += t.to_f
+				end
 			else
 				time += "0.2".to_f
 			end
