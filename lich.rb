@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.1'
+$version = '4.3.2'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -386,14 +386,8 @@ UNTRUSTED_MAP_SAVE = proc { Map.save }
 UNTRUSTED_MAP_SAVE_XML = proc { Map.save_xml }
 UNTRUSTED_SPELL_LOAD = proc { Spell.load }
 UNTRUSTED_START_SCRIPT = proc { |script_name,cli_vars,force| start_script(script_name,cli_vars,force) }
-UNTRUSTED_START_EXEC_SCRIPT = proc { |cmd_data,flags|
-	flags = Hash.new unless flags.class == Hash
-	flags[:trusted] = false
-	start_exec_script(cmd_data, flags)
-}
-UNTRUSTED_SCRIPT_EXISTS = proc { |scriptname|
-	Script.exists?(scriptname)
-}
+UNTRUSTED_START_EXEC_SCRIPT = proc { |cmd_data,flags| flags = Hash.new unless flags.class == Hash; flags[:trusted] = false; start_exec_script(cmd_data, flags) }
+UNTRUSTED_SCRIPT_EXISTS = proc { |scriptname| Script.exists?(scriptname) }
 UNTRUSTED_UNTAINT = proc { |str| str.untaint }
 UNTRUSTED_USERVARIABLES_METHOD_MISSING = proc { |arg1, arg2| UserVariables.method_missing(arg1, arg2) }
 UNTRUSTED_USERVARIABLES_DELETE = proc { |var_name, type| UserVariables.delete(var_name, type) }
@@ -1048,16 +1042,49 @@ class XMLParser
 						@pc = GameObj.new_pc(@obj_exist, @obj_noun, "#{@player_title}#{text_string}", @player_status)
 						@player_status = nil
 					else
-						if (text_string =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text_string =~ / \(([\w\s]+)\)/)
-							if @pc.status
-								@pc.status.concat " #{$1}"
-							else
-								@pc.status = $1
+						if @game =~ /^DR/
+							GameObj.clear_pcs
+							text_string.sub(/^Also here\: /, '').sub(/ and ([^,]+)\./) { ", #{$1}" }.split(', ').each { |player|
+								if player =~ / who is (.+)/
+									status = $1
+									player.sub!(/ who is .+/, '')
+								elsif player =~ / \((.+)\)/
+									status = $1
+									player.sub!(/ \(.+\)/, '')
+								else
+									status = nil
+								end
+								noun = player.slice(/\b[A-Z][a-z]+$/)
+								if player =~ /the body of /
+									player.sub!('the body of ', '')
+									if status
+										status.concat ' dead'
+									else
+										status = 'dead'
+									end
+								end
+								if player =~ /a stunned /
+									player.sub!('a stunned ', '')
+									if status
+										status.concat ' stunned'
+									else
+										status = 'stunned'
+									end
+								end
+								GameObj.new_pc(nil, noun, player, status)
+							}
+						else
+							if (text_string =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text_string =~ / \(([\w\s]+)\)/)
+								if @pc.status
+									@pc.status.concat " #{$1}"
+								else
+									@pc.status = $1
+								end
 							end
-						end
-						if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s\-!\?']+)?$/
-							@player_status = ($1.strip.gsub('the body of', 'dead')) if $1
-							@player_title = $2
+							if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s\-!\?']+)?$/
+								@player_status = ($1.strip.gsub('the body of', 'dead')) if $1
+								@player_title = $2
+							end
 						end
 					end
 				elsif @active_ids.include?('room desc')
@@ -2331,6 +2358,7 @@ class Script
 		@name
 	end
 	def gets
+		# fixme: no xml gets
 		if @want_downstream or @want_downstream_xml or @want_script_output
 			sleep "0.05".to_f while @downstream_buffer.empty?
 			@downstream_buffer.shift
@@ -9103,7 +9131,7 @@ main_thread = Thread.new {
 					if response =~ /^M\t/
 						login_server.puts "F\t#{data[:game_code]}\n"
 						response = login_server.gets
-						if response =~ /NORMAL|PREMIUM|TRIAL/
+						if response =~ /NORMAL|PREMIUM|TRIAL|INTERNAL/
 							login_server.puts "G\t#{data[:game_code]}\n"
 							login_server.gets
 							login_server.puts "P\t#{data[:game_code]}\n"
@@ -9243,7 +9271,7 @@ main_thread = Thread.new {
 								if response =~ /^M\t/
 									login_server.puts "F\t#{login_info[:game_code]}\n"
 									response = login_server.gets
-									if response =~ /NORMAL|PREMIUM|TRIAL/
+									if response =~ /NORMAL|PREMIUM|TRIAL|INTERNAL/
 										login_server.puts "G\t#{login_info[:game_code]}\n"
 										login_server.gets
 										login_server.puts "P\t#{login_info[:game_code]}\n"
@@ -9454,7 +9482,7 @@ main_thread = Thread.new {
 									login_server.puts "N\t#{game_code}\n"
 									if login_server.gets =~ /STORM/
 										login_server.puts "F\t#{game_code}\n"
-										if login_server.gets =~ /NORMAL|PREMIUM|TRIAL/
+										if login_server.gets =~ /NORMAL|PREMIUM|TRIAL|INTERNAL/
 											login_server.puts "G\t#{game_code}\n"
 											login_server.gets
 											login_server.puts "P\t#{game_code}\n"
