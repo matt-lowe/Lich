@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.16'
+$version = '4.1.17'
 
 # rubyw.exe doesn't have $stdout or $stderr, warnings caused by stupid Windows bugs crash Lich
 begin
@@ -1485,20 +1485,18 @@ class Alias
 		target = target.split('\\r')
 		if extra.empty?
 			target.collect! { |line| line.gsub('\\?', '') }
-		else
+		elsif target.any? { |line| line.include?('\\?') }
 			target.collect! { |line|
-				if line.include?('\?')
-					if (line =~ /^;e/) and line.include?('"\?"')
-						line.gsub('"\?"', extra.inspect)
-					elsif (line =~ /^;e/) and line.include?('\'\?\'')
-						line.gsub('\'\?\'', "'#{extra.split("'").join("\\\\'")}'")
-					else
-						line.gsub('\?', extra)
-					end
+				if line =~ /^;e.*"\\\?"/
+					line.gsub('"\\?"', extra.inspect)
+				elsif line.include?('\\?')
+					line.gsub('\\?', extra)
 				else
-					"#{line} #{extra}"
+					line
 				end
 			}
+		elsif target.length == 1
+			target.first.concat(" #{extra}")
 		end
 		target.each { |line| do_client("#{line.chomp}\n") }
 	end
@@ -4415,27 +4413,25 @@ def parse_list(string)
 end
 
 def waitrt
-	until XMLData.roundtime_end > XMLData.server_time
-		sleep 0.1
-	end
-	if XMLData.server_time >= XMLData.roundtime_end then return end
+	wait_until { (XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0 }
 	sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
 end
 
 def waitrt?
-	if XMLData.roundtime_end > XMLData.server_time then waitrt end
+	if (XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0
+		sleep((XMLData.roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
+	end
 end
 
 def waitcastrt
-	until XMLData.cast_roundtime_end > XMLData.server_time
-		sleep 0.1
-	end
-	if XMLData.server_time >= XMLData.cast_roundtime_end then return end
+	wait_until { (XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0 }
 	sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
 end
 
 def waitcastrt?
-	if XMLData.cast_roundtime_end > XMLData.server_time then waitcastrt end
+	if (XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f) > 0
+		sleep((XMLData.cast_roundtime_end.to_f - Time.now.to_f + XMLData.server_time_offset.to_f + 0.6).abs)
+	end
 end
 
 def checkrt
