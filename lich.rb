@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.5'
+$version = '4.2.6'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -312,7 +312,6 @@ begin
 			end
 		end
 	end
-	# fixme: $gtk and $lich are depreciated in version 4.0.0, remove sooner or later
 	$warned_depreciated_gtk_do = false
 	class BeBackwardCompatible1
 		def do(what)
@@ -3757,7 +3756,7 @@ class Spell
 				else
 					cast_cmd = 'cast'
 				end
-				if (target.nil? or target.to_s.empty?) and (@type =~ /attack/i) and not [410,912,909].include?(@num)
+				if (target.nil? or target.to_s.empty?) and (@type =~ /attack/i) and not [410,435,525,912,909,609].include?(@num)
 					cast_cmd += ' target'
 				elsif target.class == GameObj
 					cast_cmd += " ##{target.id}"
@@ -4403,6 +4402,8 @@ end
 class Map
 	@@list ||= Array.new
 	@@tags ||= Array.new
+	@@warned_depreciated_guaranteed_shortest_pathfind = false
+	@@warned_depreciated_estimation_pathfind = false
 	attr_reader :id
 	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location
 	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil)
@@ -4899,7 +4900,6 @@ class Map
 	def find_all_nearest_by_tag(tag_name)
 		target_list = Array.new
 		@@list.each { |room| target_list.push(room.id) if room.tags.include?(tag_name) }
-		echo "target_list: #{target_list.inspect}"
 		previous, shortest_distances = Map.dijkstra(@id)
 		target_list.delete_if { |room_num| shortest_distances[room_num].nil? }
 		target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
@@ -4944,6 +4944,26 @@ class Map
 	end
 	def geo
 		nil
+	end
+	def guaranteed_shortest_pathfind(target)
+		unless @@warned_depreciated_guaranteed_shortest_pathfind
+			unless script_name = Script.self.name
+				script_name = 'unknown script'
+			end
+			respond "--- warning: #{script_name} is using depreciated method guaranteed_shortest_pathfind"
+			@@warned_depreciated_guaranteed_shortest_pathfind = true
+		end
+		path_to(target)
+	end
+	def estimation_pathfind(target)
+		unless @@warned_depreciated_estimation_pathfind
+			unless script_name = Script.self.name
+				script_name = 'unknown script'
+			end
+			respond "--- warning: #{script_name} is using depreciated method estimation_pathfind"
+			@@warned_depreciated_estimation_pathfind = true
+		end
+		path_to(target)
 	end
 end
 
@@ -7144,6 +7164,123 @@ def fill_hand
 		action.call
 	end
 end
+
+def empty_right_hand
+	$fill_right_hand_actions ||= Array.new
+	actions = Array.new
+	right_hand = GameObj.right_hand
+	if UserVars.lootsack.nil? or UserVars.lootsack.empty?
+		lootsack = nil
+	else
+		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
+	end
+	if right_hand.id
+		waitrt?
+		if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
+			type = right_hand.noun
+			if (type == 'sword') and right_hand.name =~ /short/
+				type = 'short'
+			elsif (type.downcase == 'hammer') and right_hand.name =~ /Hammer of Kai/
+				type = 'hammer of kai'
+			end
+			actions.unshift proc {
+				if (sonic_weapon_song = Spell[1012]) and sonic_weapon_song.known? and sonic_weapon_song.affordable?
+					sonic_weapon_song.cast(type)
+				end
+			}
+			fput 'stop 1012'
+		elsif lootsack
+			actions.unshift proc {
+				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				if GameObj.left_hand.id == right_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
+			}
+			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+			if result =~ /^You can't .+ It's closed!$/
+				actions.push proc { fput "close ##{lootsack.id}" }
+				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+			end
+		else
+			actions.unshift proc {
+				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				if GameObj.left_hand.id == right_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
+			}
+			dothistimeout 'stow right', 3, /^You put|^You are not holding anything/
+		end
+	end
+	$fill_right_hand_actions.push(actions)
+end
+
+def fill_right_hand
+	$fill_right_hand_actions ||= Array.new
+	for action in $fill_right_hand_actions.pop
+		action.call
+	end
+end
+
+def empty_left_hand
+	$fill_left_hand_actions ||= Array.new
+	actions = Array.new
+	left_hand = GameObj.left_hand
+	if UserVars.lootsack.nil? or UserVars.lootsack.empty?
+		lootsack = nil
+	else
+		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
+	end
+	if left_hand.id
+		waitrt?
+		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
+			actions.unshift proc {
+				dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				if GameObj.right_hand.id == left_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
+			}
+		elsif lootsack
+			actions.unshift proc {
+				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				if GameObj.right_hand.id == left_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
+			}
+			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+			if result =~ /^You can't .+ It's closed!$/
+				actions.push proc { fput "close ##{lootsack.id}" }
+				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+			end
+		else
+			actions.unshift proc {
+				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				if GameObj.right_hand.id == left_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
+			}
+			dothistimeout 'stow left', 3, /^You put|^You are not holding anything/
+		end
+	end
+	$fill_left_hand_actions.push(actions)
+end
+
+def fill_left_hand
+	$fill_left_hand_actions ||= Array.new
+	for action in $fill_left_hand_actions.pop
+		action.call
+	end
+end
+
+
+
+
 
 def dothis (action, success_line)
 	loop {
