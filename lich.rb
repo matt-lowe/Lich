@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.7'
+$version = '4.2.8'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1042,7 +1042,7 @@ class XMLParser
 								@pc.status = $1
 							end
 						end
-						if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s]+)?$/
+						if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s\-!\?]+)?$/
 							@player_status = ($1.strip.gsub('the body of', 'dead')) if $1
 							@player_title = $2
 						end
@@ -3436,7 +3436,7 @@ class Spell
 		end
 	end
 	def time_per(mod_skills=Hash.new)
-		if mod_skills.empty?
+		if mod_skills.nil? or mod_skills.empty?
 			if $SAFE < 3
 				proc { $SAFE = 3; eval(@time_per_formula) }.call.to_f
 			else
@@ -3583,27 +3583,27 @@ class Spell
 			return false
 		end
 		if circle_num == 1
-			ranks = Spells.minorspiritual
+			ranks = [ Spells.minorspiritual, XMLData.level ].min
 		elsif circle_num == 2
-			ranks = Spells.majorspiritual
+			ranks = [ Spells.majorspiritual, XMLData.level ].min
 		elsif circle_num == 3
-			ranks = Spells.cleric
+			ranks = [ Spells.cleric, XMLData.level ].min
 		elsif circle_num == 4
-			ranks = Spells.minorelemental
+			ranks = [ Spells.minorelemental, XMLData.level ].min
 		elsif circle_num == 5
-			ranks = Spells.majorelemental
+			ranks = [ Spells.majorelemental, XMLData.level ].min
 		elsif circle_num == 6
-			ranks = Spells.ranger
+			ranks = [ Spells.ranger, XMLData.level ].min
 		elsif circle_num == 7
-			ranks = Spells.sorcerer
+			ranks = [ Spells.sorcerer, XMLData.level ].min
 		elsif circle_num == 9
-			ranks = Spells.wizard
+			ranks = [ Spells.wizard, XMLData.level ].min
 		elsif circle_num == 10
-			ranks = Spells.bard
+			ranks = [ Spells.bard, XMLData.level ].min
 		elsif circle_num == 11
-			ranks = Spells.empath
+			ranks = [ Spells.empath, XMLData.level ].min
 		elsif circle_num == 16
-			ranks = Spells.paladin
+			ranks = [ Spells.paladin, XMLData.level ].min
 		elsif (circle_num == 97) and (Society.status == 'Guardians of Sunfist')
 			ranks = Society.rank
 		elsif (circle_num == 98) and (Society.status == 'Order of Voln')
@@ -3659,7 +3659,7 @@ class Spell
 		until (@@cast_lock.first == script) or @@cast_lock.empty?
 			sleep "0.1".to_f
 			Script.self # allows this loop to be paused
-			@@cast_lock.delete_if { |s| s.paused }
+			@@cast_lock.delete_if { |s| s.paused or not (Script.running + Script.hidden).include?(s) }
 		end
 	end
 	def Spell.unlock_cast
@@ -3811,16 +3811,15 @@ class Spell
 						put 'stance offensive'
 						# dothistimeout 'stance offensive', 5, /^You (?:are now in|move into) an? offensive stance|^You are unable to change your stance\.$/
 					end
-# You do not know that spell!
-					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$/
+					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$/
 					if cast_result == "You don't seem to be able to move to do that."
 						100.times { break if clear.any? { |line| line =~ /^You regain control of your senses!$/ }; sleep 0.1 }
-						cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$/
+						cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$/
 					end
 					if @stance and checkstance !~ /^guarded$|^defensive$/
 						dothistimeout 'stance guarded', 5, /^You (?:are now in|move into) an? \w+ stance|^You are unable to change your stance\.$/
 					end
-					if cast_result =~ /^Cast at what\?$|^Be at peace my child, there is no need for spells of war in here\.$/
+					if cast_result =~ /^Cast at what\?$|^Be at peace my child, there is no need for spells of war in here\.$|^Provoking a GameMaster is not such a good idea\.$/
 						dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 					end
 					break unless (@circle.to_i == 10) and (cast_result =~ /^\[Spell Hindrance for/)
@@ -4171,7 +4170,7 @@ class GameObj
 		@noun
 	end
 	def full_name
-		"#{@before_name}#{' ' unless @before_name.nil?}#{name}#{' ' unless @after_name.nil?}#{@after_name}"
+		"#{@before_name}#{' ' unless @before_name.nil? or @before_name.empty?}#{name}#{' ' unless @after_name.nil? or @after_name.empty?}#{@after_name}"
 	end
 	def GameObj.new_npc(id, noun, name, status=nil)
 		obj = GameObj.new(id, noun, name)
@@ -4527,6 +4526,25 @@ class Map
 			UNTRUSTED_MAP_LOAD.call
 		end
 	end
+	def Map.on_load
+		@@list.each { |room|
+			room.tags.each { |tag|
+				if tag =~ /^on\-load\: (.*)$/
+					str = $1
+					if $SAFE == 0
+						str.untaint
+					else
+						UNTRUSTED_UNTAINT.call(str)
+					end
+					if $SAFE < 3
+						proc { $SAFE = 3; eval(str) }.call
+					else
+						eval(str)
+					end
+				end
+			}
+		}
+	end
 	def Map.load_dat(filename=nil)
 		if $SAFE == 0
 			if filename.nil?
@@ -4562,6 +4580,7 @@ class Map
 					@@tags.clear
 					@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
 					respond "--- loaded #{filename}" if error
+					Map.on_load
 					return true
 				rescue
 					error = true
@@ -4660,6 +4679,8 @@ class Map
 				end
 				@@tags.clear
 				@@list.each { |room| @@tags = @@tags | room.tags unless room.tags.nil? }
+				Map.on_load
+				true
 			rescue
 				respond "--- error: failed to load #{filename}: #{$!}"
 				return false
@@ -5855,14 +5876,14 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			Script.self.downstream_buffer.unshift(save_stream)
 			Script.self.downstream_buffer.flatten!
 			return false
-		elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down|^The clerk stops you from entering the partition and says, "I'll need to see your ticket!"$|^The guard stops you, saying, "Only members of registered groups may enter the Meeting Hall\.  If you'd like to visit, ask a group officer for a guest pass\."$|^An? .*? reaches over and grasps [A-Z][a-z]+ by the neck preventing (?:him|her) from being dragged anywhere\.$|^You'll have to wait, [A-Z][a-z]+ .* locker|^As you move toward the gate, you carelessly bump into the guard/
+		elsif line =~ /^An unseen force prevents you\.$|^Sorry, you aren't allowed to enter here\.|^That looks like someplace only performers should go\.|^As you climb, your grip gives way and you fall down|^The clerk stops you from entering the partition and says, "I'll need to see your ticket!"$|^The guard stops you, saying, "Only members of registered groups may enter the Meeting Hall\.  If you'd like to visit, ask a group officer for a guest pass\."$|^An? .*? reaches over and grasps [A-Z][a-z]+ by the neck preventing (?:him|her) from being dragged anywhere\.$|^You'll have to wait, [A-Z][a-z]+ .* locker|^As you move toward the gate, you carelessly bump into the guard|^You attempt to enter the back of the shop, but a clerk stops you.  "Your reputation precedes you!/
 			echo 'move: failed'
 			fill_hands if need_full_hands
 			Script.self.downstream_buffer.unshift(save_stream)
 			Script.self.downstream_buffer.flatten!
 			# return nil instead of false to show the direction shouldn't be removed from the map database
 			return nil
-		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he (?:is too heavy|doesn't budge)\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "Stop\.  You need to make sure you check in at Wyveryn Keep and get proper identification papers\.  We don't let just anyone wander around here\.  Now go on through the gate and get over there\."$|^You step into the root, but can see no way to climb the slippery tendrils inside\.  After a moment, you step back out\.$/
+		elsif line =~ /^You grab [A-Z][a-z]+ and try to drag h(?:im|er), but s?he (?:is too heavy|doesn't budge)\.$|^Tentatively, you attempt to swim through the nook\.  After only a few feet, you begin to sink!  Your lungs burn from lack of air, and you begin to panic!  You frantically paddle back to safety!$|^Guards(?:wo)?man [A-Z][a-z]+ stops you and says, "(?:Stop\.Halt!)  You need to make sure you check in at Wyveryn Keep and get proper identification papers\.  We don't let just anyone wander around here\.  Now go on through the gate and get over there\."$|^You step into the root, but can see no way to climb the slippery tendrils inside\.  After a moment, you step back out\.$|^As you start .*? back to safe ground\.$|^You stumble a bit as you try to enter the pool but feel that your persistence will pay off\.$/
 			sleep 1
 			waitrt?
 			put_dir.call
@@ -6754,13 +6775,13 @@ def fput(message, *waitingfor)
 			clear
 			put(message)
 			next
-		elsif string =~ /struggle.+stand/
+		elsif string =~ /^You.+struggle.+stand/
 			clear
-			fput("stand")
+			fput 'stand'
 			next
 		elsif string =~ /stunned|can't do that while|cannot seem|^(?!You rummage).*can't seem|don't seem|Sorry, you may only type ahead/
 			if dead?
-				echo("You're dead...! You can't do that!")
+				echo "You're dead...! You can't do that!"
 				sleep 1
 				script.downstream_buffer.unshift(string)
 				return false
@@ -6995,7 +7016,7 @@ def empty_hands
 	end
 	if left_hand.id
 		waitrt?
-		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
+		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
 			actions.unshift proc {
 				dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
@@ -7130,7 +7151,7 @@ def empty_hand
 			end
 		elsif left_hand.id and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
 			waitrt?
-			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
+			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
 				actions.unshift proc {
 					dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
 					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
@@ -7244,7 +7265,7 @@ def empty_left_hand
 	end
 	if left_hand.id
 		waitrt?
-		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
+		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
 			actions.unshift proc {
 				dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
