@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.27'
+$version = '4.1.28'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2918,7 +2918,7 @@ class Spell
 		if $SAFE < 3
 			proc { $SAFE = 3; eval(@bolt_as_formula) }.call
 		else
-			eval(@bolt_as_cost_formula)
+			eval(@bolt_as_formula)
 		end
 	end
 	def physical_as
@@ -2967,7 +2967,7 @@ class Spell
 		if $SAFE < 3
 			proc { $SAFE = 3; eval(@elemental_td_formula) }.call
 		else
-			eval(@elemental_ds_formula)
+			eval(@elemental_td_formula)
 		end
 	end
 	def spirit_td
@@ -8739,7 +8739,9 @@ main_thread = Thread.new {
 	end
 	
 	# fixme: bare bones
+
 	wait_while { $offline_mode }
+
 	server_thread = Thread.new {
 		begin
 			while $_SERVERSTRING_ = $_SERVER_.gets
