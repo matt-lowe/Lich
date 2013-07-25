@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.21'
+$version = '4.1.22'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -8643,9 +8643,9 @@ main_thread = Thread.new {
 				$_CLIENT_.gets
 			else
 				inv_off_proc = proc { |server_string|
-					if server_string =~ /^<container id=['"]-?[0-9]+['"]/
-						server_string.gsub!(/<(?:container|clearContainer)[^>]*>/, '')
-						server_string.gsub!(/<inv id=['"]-?[0-9]+['"].*\/inv>/, '')
+					if server_string =~ /^<container id=['"](?:-?[0-9]+|stow)['"]/
+						server_string.gsub!(/<(?:container|clearContainer|exposeContainer)[^>]*>/, '')
+						server_string.gsub!(/<inv id=['"](?:-?[0-9]+|stow)['"].*\/inv>/, '')
 						if server_string.empty?
 							nil
 						else
