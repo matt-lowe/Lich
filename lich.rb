@@ -37,16 +37,14 @@
 
 =end
 
-$version = '4.1.18'
+# I hate Windows...
+require 'stringio'
+$stderr.write(' ') rescue($stderr = StringIO.new(''))
+$stdout.write(' ') rescue($stdout = StringIO.new(''))
+STDERR = $stderr rescue()
+STDOUT = $stderr rescue()
 
-# rubyw.exe doesn't have $stdout or $stderr, warnings caused by stupid Windows bugs crash Lich
-begin
-	puts "Lich version #{$version}"
-rescue
-	require 'stringio'
-	$stderr = StringIO.new("")
-	$stdout = StringIO.new("")
-end
+$version = '4.1.19'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -281,6 +279,10 @@ begin
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
 						rescue ThreadError
+							$stdout.puts "error in Gtk.queue: #{$!}"
+							$stderr.puts "error in Gtk.queue: #{$!}"
+							$stderr.puts $!.backtrace
+						rescue SystemStackError
 							$stdout.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts "error in Gtk.queue: #{$!}"
 							$stderr.puts $!.backtrace
@@ -4197,6 +4199,12 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						$stderr.puts "--- ThreadError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
+					rescue SystemStackError
+						$stdout.puts "--- SystemStackError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- SystemStackError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
 					rescue Exception
 						if $! == JUMP
 							retry if Script.self.get_next_label != JUMP_ERROR
@@ -4264,6 +4272,12 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						$stdout.puts "--- ThreadError: #{$!}"
 						$stdout.puts $!.backtrace.first
 						$stderr.puts "--- ThreadError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue SystemStackError
+						$stdout.puts "--- SystemStackError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- SystemStackError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue Exception
@@ -4368,6 +4382,12 @@ def start_exec_script(cmd_data, flags=Hash.new)
 					$stdout.puts "--- ThreadError: #{$!}"
 					$stdout.puts $!.backtrace.first
 					$stderr.puts "--- ThreadError: #{$!}"
+					$stderr.puts $!.backtrace
+					Script.self.kill
+				rescue SystemStackError
+					$stdout.puts "--- SystemStackError: #{$!}"
+					$stdout.puts $!.backtrace.first
+					$stderr.puts "--- SystemStackError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue Exception
@@ -6462,12 +6482,12 @@ def install_to_registry(psinet_compatible = false)
 	launch_dir = registry_get('HKEY_LOCAL_MACHINE\\Software\\Simutronics\\Launcher\\Directory')
 	return false unless launch_cmd or launch_dir
 	if RUBY_PLATFORM =~ /win|mingw/i
-		if ruby_dir = ENV['RUBY_PATH'] and File.exists?(ruby_dir)
-			ruby_dir = "#{ruby_dir.tr('/', "\\")}\\"
-		elsif ruby_dir = registry_get('HKEY_LOCAL_MACHINE\\Software\\RubyInstaller\\DefaultPath')
-			ruby_dir = "#{ruby_dir.tr('/', "\\")}\\bin\\"
+		if ruby_dir = ($:).find { |path| File.exists?("#{path}/../../../bin/rubyw.exe") }
+			ruby_dir = "#{ruby_dir.scan(/[^\/]+/)[0..-4].join('\\')}\\bin\\"
+		elsif ruby_dir = ($:).find { |path| File.exists?("#{path}/../../../../bin/rubyw.exe") }
+			ruby_dir = "#{ruby_dir.scan(/[^\/]+/)[0..-5].join('\\')}\\bin\\"
 		else
-			ruby_dir = ''
+			ruby_dir = String.new
 		end
 		win_lich_dir = $lich_dir.tr('/', "\\")
 
@@ -6597,7 +6617,7 @@ def do_client(client_string)
 				respond('--- Lich: no scripts to unpause')
 			end
 			unpaused_scripts = nil
-		elsif cmd =~ /^(k|kill|stop|p|pause|u|unpause)\s(.+)/
+		elsif cmd =~ /^(?:k|kill|stop|p|pause|u|unpause)\s(.+)/
 			action = $1
 			target = $2
 			script = Script.running.find { |scr| scr.name == target }
@@ -6606,16 +6626,16 @@ def do_client(client_string)
 			script = Script.hidden.find { |scr| scr.name =~ /^#{target}/i } unless script
 			if script.nil?
 				respond("--- Lich: #{target}.lic does not appear to be running! Use ';list' or ';listall' to see what's active.")
-			elsif action =~ /^k|kill|stop$/
+			elsif action =~ /^(?:k|kill|stop)$/
 				script.kill
 				begin
 					GC.start
 				rescue
 					respond('--- Lich: Error starting garbage collector. (3)')
 				end
-			elsif action =~/^p|pause$/
+			elsif action =~/^(?:p|pause)$/
 				script.pause
-			elsif action =~/^u|unpause$/
+			elsif action =~/^(?:u|unpause)$/
 				script.unpause
 			end
 			action = target = script = nil
@@ -6899,7 +6919,7 @@ def do_client(client_string)
 			respond "   #{$clean_lich_char}setting list"
 			respond
 			respond 'If you liked this help message, you might also enjoy:'
-			respond "   #{$clean_lich_char}chat help      (lnet must be running)"
+			respond "   #{$clean_lich_char}lnet help"
 			respond "   #{$clean_lich_char}magic help     (infomon must be running)"
 			respond "   #{$clean_lich_char}go2 help"
 			respond "   #{$clean_lich_char}repository help"
