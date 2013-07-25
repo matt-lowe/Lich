@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.23'
+$version = '4.1.24'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -5921,7 +5921,11 @@ def empty_hands
 		'left' => GameObj.left_hand,
 		'close_lootsack' => false,
 	}
-	lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
+	if UserVars.lootsack.nil? or UserVars.lootsack.empty?
+		lootsack = nil
+	else
+		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
+	end
 	if $empty_hands['right'].id
 		waitrt?
 		if $empty_hands['right'].name =~ /sonic/
