@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.12'
+$version = '4.3.13'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3535,11 +3535,11 @@ class Spell
 	end
 	def Spell.upmsgs
 		Spell.load unless @@loaded
-		@@list.collect { |spell| spell.msgup }
+		@@list.collect { |spell| spell.msgup }.compact
 	end
 	def Spell.dnmsgs
 		Spell.load unless @@loaded
-		@@list.collect { |spell| spell.msgdn }
+		@@list.collect { |spell| spell.msgdn }.compact
 	end
 	def mana_cost
 		if $SAFE < 3
