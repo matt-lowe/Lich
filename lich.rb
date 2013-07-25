@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.2'
+$version = '4.4.3'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -600,8 +600,10 @@ class String
 end
 
 class XMLParser
-	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id, :active_spells
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id, :active_spells
 	attr_accessor :send_fake_tags
+
+	@@warned_depreciated_spellfront = false
 
 	include StreamListener
 
@@ -654,7 +656,6 @@ class XMLParser
 		@familiar_room_description = String.new
 		@familiar_room_exits = Array.new
 
-		@spellfront = Array.new
 		@bounty_task = String.new
 		@society_task = String.new
 
@@ -964,9 +965,7 @@ class XMLParser
 			elsif (name == 'container') and (attributes['id'] == 'stow')
 				@stow_container_id = attributes['target'].sub('#', '')
 			elsif (name == 'clearStream')
-				if attributes['id'] == 'spellfront'
-					@spellfront.clear
-				elsif attributes['id'] == 'bounty'
+				if attributes['id'] == 'bounty'
 					@bounty_task = String.new
 				end
 			elsif (name == 'playerID')
@@ -1133,8 +1132,6 @@ class XMLParser
 				else
 					@obj_after_name = text_string.strip
 				end
-			elsif @current_stream == 'spellfront'
-				@spellfront.push(text_string.strip)
 			elsif @current_stream == 'bounty'
 				@bounty_task += text_string
 			elsif @current_stream == 'society'
@@ -1229,6 +1226,17 @@ class XMLParser
 			sleep "0.1".to_f
 			reset
 		end
+	end
+	# here for backwards compatibility, but spellfront xml isn't sent by the game anymore
+	def spellfront
+		unless @@warned_depreciated_spellfront
+			@@warned_depreciated_spellfront = true
+			unless script_name = Script.self.name
+				script_name = 'unknown script'
+			end
+			respond "--- warning: #{script_name} is using depreciated method XMLData.spellfront"
+		end
+		@active_spells.keys
 	end
 end
 
@@ -3589,6 +3597,41 @@ class Spell
 		Spell.load unless @@loaded
 		@@list.collect { |spell| spell.msgdn }.compact
 	end
+	def time_per_formula(options={})
+		activator_modifier = { 'tap' => 0.5, 'rub' => 1, 'wave' => 1, 'raise' => 1.33, 'drink' => 0, 'bite' => 0, 'eat' => 0, 'gobble' => 0 }
+		skills = [ 'Spells.minorelemental', 'Spells.majorelemental', 'Spells.minorspiritual', 'Spells.majorspiritual', 'Spells.wizard', 'Spells.sorcerer', 'Spells.ranger', 'Spells.paladin', 'Spells.empath', 'Spells.cleric', 'Spells.bard', 'Spells.minormental' ]
+		if options[:caster] and (options[:caster] !~ /^(?:self|#{XMLData.name})$/i)
+			if options[:target] and (options[:target].downcase == options[:caster].downcase)
+				formula = @duration['self'][:duration].to_s.dup
+			else
+				formula = @duration['target'][:duration].dup || @duration['self'][:duration].to_s.dup
+			end
+			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
+				skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
+				formula = "(#{formula})/2"
+			elsif options[:activator] =~ /^(invoke|scroll)$/i
+				skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks['#{options[:caster]}'].arcanesymbols.to_i") }
+				formula = "(#{formula})/2"
+			else
+				skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks[#{options[:caster].to_s.inspect}].#{skill_name.sub(/^(?:Spells|Skills)\./, '')}.to_i") }
+			end
+		else
+			if options[:target] and (options[:target] !~ /^(?:self|#{XMLData.name})$/i)
+				formula = @duration['target'][:duration].dup || @duration['self'][:duration].to_s.dup
+			else
+				formula = @duration['self'][:duration].to_s.dup
+			end
+			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
+				skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
+				formula = "(#{formula})/2"
+			elsif options[:activator] =~ /^(invoke|scroll)$/i
+				skills.each { |skill_name| formula.gsub!(skill_name, "Skills.arcanesymbols.to_i") }
+				formula = "(#{formula})/2"
+			end
+		end
+		UNTRUSTED_UNTAINT.call(formula)
+		formula
+	end
 	def time_per(options={})
 		formula = self.time_per_formula(options)
 		if options[:line]
@@ -3600,43 +3643,12 @@ class Spell
 			eval(formula).to_f
 		end
 	end
-	def time_per_formula(options={})
-		activator_modifier = { 'tap' => 0.5, 'rub' => 1, 'wave' => 1, 'raise' => 1.33, 'drink' => 0, 'bite' => 0, 'eat' => 0, 'gobble' => 0 }
-		skills = [ 'Spells.minorelemental', 'Spells.majorelemental', 'Spells.minorspiritual', 'Spells.majorspiritual', 'Spells.wizard', 'Spells.sorcerer', 'Spells.ranger', 'Spells.paladin', 'Spells.empath', 'Spells.cleric', 'Spells.bard', 'Spells.minormental' ]
-		if options[:caster] and (options[:caster] !~ /^(?:self|#{XMLData.name})$/i)
-			if options[:target] and (options[:target].downcase == options[:caster].downcase)
-				formula = @duration['self'][:duration].to_s.dup
-			else
-				formula = @duration['target'][:duration].dup || @duration['self'][:duration].to_s.dup
-			end
-			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse / 2 * #{activator_modifier[options[:activator]]}).to_i") }
-			elsif options[:activator] =~ /^(invoke|scroll)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].arcanesymbols / 2).to_i") }
-			else
-				skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks[#{options[:caster].to_s.inspect}].#{skill_name.sub(/^(?:Spells|Skills)\./, '')}.to_i") }
-			end
-		else
-			if options[:target] and (options[:target] !~ /^(?:self|#{XMLData.name})$/i)
-				formula = @duration['target'][:duration].dup || @duration['self'][:duration].to_s.dup
-			else
-				formula = @duration['self'][:duration].to_s.dup
-			end
-			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse / 2 * #{activator_modifier[options[:activator]]}).to_i") }
-			elsif options[:activator] =~ /^(invoke|scroll)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.arcanesymbols / 2).to_i") }
-			end
-		end
-		UNTRUSTED_UNTAINT.call(formula)
-		formula
-	end
 	def timeleft=(val)
 		@timeleft = val
 		@timestamp = Time.now
 	end
 	def timeleft
-		if @time_per_formula.to_s == 'Spellsong.timeleft'
+		if self.time_per_formula.to_s == 'Spellsong.timeleft'
 			@timeleft = Spellsong.timeleft
 		else
 			@timeleft = @timeleft - ((Time.now - @timestamp) / 60.to_f)
@@ -7638,7 +7650,7 @@ def empty_hands
 	end
 	if right_hand.id
 		waitrt?
-		if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
+		if XMLData.active_spells.keys.include?('Sonic Weapon Song') or XMLData.active_spells.keys.include?('1012')
 			type = right_hand.noun
 			if (type == 'sword') and right_hand.name =~ /short/
 				type = 'short'
@@ -7697,9 +7709,9 @@ def empty_hand
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
 	unless (right_hand.id.nil? and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3)) or (left_hand.id.nil? and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3))
-		if right_hand.id and ((!XMLData.spellfront.include?('Sonic Weapon Song') and !XMLData.spellfront.include?('1012')) or ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max == 3)) and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3 or [ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max = 3)
+		if right_hand.id and ((!XMLData.active_spells.keys.include?('Sonic Weapon Song') and !XMLData.active_spells.keys.include?('1012')) or ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max == 3)) and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3 or [ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max = 3)
 			waitrt?
-			if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
+			if XMLData.active_spells.keys.include?('Sonic Weapon Song') or XMLData.active_spells.keys.include?('1012')
 				type = right_hand.noun
 				if (type == 'sword') and right_hand.name =~ /short/
 					type = 'short'
@@ -7793,7 +7805,7 @@ def empty_right_hand
 	end
 	if right_hand.id
 		waitrt?
-		if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
+		if XMLData.active_spells.keys.include?('Sonic Weapon Song') or XMLData.active_spells.keys.include?('1012')
 			type = right_hand.noun
 			if (type == 'sword') and right_hand.name =~ /short/
 				type = 'short'
