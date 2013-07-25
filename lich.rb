@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.8'
+$version = '4.1.9'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4110,6 +4110,7 @@ end
 
 def start_exec_script(cmd_data, flags=Hash.new)
 	flags = { :quiet => true } if flags == true
+	trusted = flags[:trusted]
 	if $SAFE == 0
 		unless new_script = ExecScript.new(cmd_data, flags)
 			respond '--- Lich: failed to start exec script'
@@ -4121,7 +4122,7 @@ def start_exec_script(cmd_data, flags=Hash.new)
 				Thread.current.priority = 1
 				respond("--- Lich: #{script.name} active.") unless script.quiet
 				begin
-					if script.trusted
+					if trusted
 						eval(cmd_data, nil, script.name.to_s)
 					else
 						proc { eval("$SAFE = 3 if $SAFE < 3\n#{cmd_data}", nil, script.name.to_s) }.call
