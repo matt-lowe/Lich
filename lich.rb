@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.65'
+$version = '4.1.66'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -378,6 +378,7 @@ UNTRUSTED_USERVARIABLES_SAVE = proc { UserVariables.save }
 UNTRUSTED_SPELL_RANKS_LOAD = proc { SpellRanks.load }
 UNTRUSTED_SPELL_RANKS_SAVE = proc { SpellRanks.save }
 UNTRUSTED_SCRIPT_LOG = proc { |data| Script.log(data) }
+UNTRUSTED_GAMEOBJ_LOAD_DATA = proc { GameObj.load_data }
 
 JUMP = Exception.exception('JUMP')
 JUMP_ERROR = Exception.exception('JUMP_ERROR')
@@ -3746,7 +3747,7 @@ class Spell
 					if @stance and checkstance != 'offensive'
 						dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
 					end
-					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$/
+					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^The power from your sign dissipates into the air\.$/
 					if @stance and checkstance !~ /^guarded$|^defensive$/
 						dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
 					end
@@ -4276,43 +4277,47 @@ class GameObj
 		@@contents.dup
 	end
 	def GameObj.load_data(filename="#{$script_dir}gameobj-data.xml")
-		if File.exists?(filename)
-			begin
-				@@type_data = Hash.new
-				@@sellable_data = Hash.new
-				File.open(filename) { |file|
-					doc = REXML::Document.new(file.read)
-					doc.elements.each('data/type') { |e|
-						if type = e.attributes['name']
-							@@type_data[type] = Hash.new
-							@@type_data[type][:name]    = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
-							@@type_data[type][:noun]    = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
-							@@type_data[type][:exclude] = Regexp.new(e.elements['exclude'].text) unless e.elements['exclude'].text.nil? or e.elements['exclude'].text.empty?
-						end
+		if $SAFE==0
+			if File.exists?(filename)
+				begin
+					@@type_data = Hash.new
+					@@sellable_data = Hash.new
+					File.open(filename) { |file|
+						doc = REXML::Document.new(file.read)
+						doc.elements.each('data/type') { |e|
+							if type = e.attributes['name']
+								@@type_data[type] = Hash.new
+								@@type_data[type][:name]    = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
+								@@type_data[type][:noun]    = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+								@@type_data[type][:exclude] = Regexp.new(e.elements['exclude'].text) unless e.elements['exclude'].text.nil? or e.elements['exclude'].text.empty?
+							end
+						}
+						doc.elements.each('data/sellable') { |e|
+							if sellable = e.attributes['name']
+								@@sellable_data[sellable] = Hash.new
+								@@sellable_data[sellable][:name]    = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
+								@@sellable_data[sellable][:noun]    = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+								@@sellable_data[sellable][:exclude] = Regexp.new(e.elements['exclude'].text) unless e.elements['exclude'].text.nil? or e.elements['exclude'].text.empty?
+							end
+						}
 					}
-					doc.elements.each('data/sellable') { |e|
-						if sellable = e.attributes['name']
-							@@sellable_data[sellable] = Hash.new
-							@@sellable_data[sellable][:name]    = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
-							@@sellable_data[sellable][:noun]    = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
-							@@sellable_data[sellable][:exclude] = Regexp.new(e.elements['exclude'].text) unless e.elements['exclude'].text.nil? or e.elements['exclude'].text.empty?
-						end
-					}
-				}
-				true
-			rescue
+					true
+				rescue
+					@@type_data = nil
+					@@sellable_data = nil
+					echo "error: GameObj.load_data: #{$!}"
+					respond $!.backtrace[0..1]
+					false
+				end
+			else
 				@@type_data = nil
 				@@sellable_data = nil
-				echo "error: GameObj.load_data: #{$!}"
-				respond $!.backtrace[0..1]
+				echo "error: GameObj.load_data: file does not exist: #{filename}"
 				false
 			end
-		else
-			@@type_data = nil
-			@@sellable_data = nil
-			echo "error: GameObj.load_data: file does not exist: #{filename}"
-			false
 		end
+	else
+		UNTRUSTED_GAMEOBJ_LOAD_DATA.call
 	end
 end
 
