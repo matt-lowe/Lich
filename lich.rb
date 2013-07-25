@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.8'
+$version = '4.4.9'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3366,7 +3366,7 @@ class SpellRanks
 	@@timestamp ||= 0
 	@@loaded    ||= false
 	attr_reader :name
-	attr_accessor :minorspiritual, :majorspiritual, :cleric, :minorelemental, :majorelemental, :minormental, :ranger, :sorcerer, :wizard, :bard, :empath, :paladin, :arcanesymbols, :magicitemuse
+	attr_accessor :minorspiritual, :majorspiritual, :cleric, :minorelemental, :majorelemental, :minormental, :ranger, :sorcerer, :wizard, :bard, :empath, :paladin, :arcanesymbols, :magicitemuse, :monk
 	def SpellRanks.load
 		if $SAFE == 0
 			if File.exists?("#{$data_dir}#{XMLData.game}/spell-ranks.dat")
@@ -3376,6 +3376,8 @@ class SpellRanks
 					}
 					# minor mental circle added 2012-07-18; old data files will have @minormental as nil
 					@@list.each { |rank_info| rank_info.minormental ||= 0 }
+					# monk circle added 2013-01-15; old data files will have @minormental as nil
+					@@list.each { |rank_info| rank_info.monk ||= 0 }
 					@@loaded = true
 				rescue
 					respond "--- error: SpellRanks.load: #{$!}"
@@ -9136,6 +9138,63 @@ get_process_list = proc {
 	end
 }
 
+is_win8 = proc {
+	if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+		begin
+			kernel32 = DL.dlopen('kernel32.dll')
+			get_version_ex = kernel32['GetVersionEx', 'LP']
+
+			os_version_info = DL.malloc(DL.sizeof('LLLLLC128'))
+			os_version_info.struct!('LLLLLC128', :dwOSVersionInfoSize, :dwMajorVersion, :dwMinorVersion, :dwBuildNumber, :dwPlatformId, :szCSDVersion)
+			os_version_info[:dwOSVersionInfoSize] = DL.sizeof('LLLLLC128')
+			get_version_ex.call(os_version_info)
+
+			if (os_version_info[:dwMajorVersion] == 6) and (os_version_info[:dwMinorVersion] >= 2)
+				true
+			else
+				false
+			end
+		rescue
+			false
+		end
+	else
+		false
+	end
+}
+
+system_win8fix = proc { |launcher_cmd|
+	# fixme: launcher_cmd may not have quotes
+	if is_win8.call and launcher_cmd =~ /^"(.*?)"\s*(.*)$/
+		dir_file = $1
+		param = $2
+		
+		shell32 = DL.dlopen('shell32.dll')
+		shell_execute_ex = shell32['ShellExecuteEx', 'LP']
+
+		shell_execute_info = DL.malloc(DL.sizeof('LLLSSSSLLLSLLLL'))
+		shell_execute_info.struct!('LLLSSSSLLLSLLLL', :cbSize, :fMask, :hwnd, :lpVerb, :lpFile, :lpParameters, :lpDirectory, :nShow, :hInstApp, :lpIDList, :lpClass, :hkeyClass, :dwHotKey, :hIcon, :hProcess)
+		shell_execute_info[:cbSize] = DL.sizeof('LLLSSSSLLLSLLLL')
+		shell_execute_info[:fMask] = 0
+		shell_execute_info[:hwnd] = 0
+		shell_execute_info[:lpVerb] = "open"
+		shell_execute_info[:lpParameters] = param
+		shell_execute_info[:lpDirectory] = dir_file.slice(/^.*[\/\\]/)
+		shell_execute_info[:lpFile] = dir_file.sub(/^.*[\/\\]/, '')
+		shell_execute_info[:nShow] = 1
+		shell_execute_info[:hInstApp] = 0
+		shell_execute_info[:lpIDList] = 0
+		shell_execute_info[:lpClass] = ""
+		shell_execute_info[:hkeyClass] = 0
+		shell_execute_info[:dwHotKey] = 0 
+		shell_execute_info[:hIcon] =  0
+		shell_execute_info[:hProcess] = 0
+
+		shell_execute_ex.call(shell_execute_info)
+	else
+		system(launcher_cmd)
+	end
+}
+
 reconnect_if_wanted = proc {
 	if ARGV.include?('--reconnect') and ARGV.include?('--login') and not $_CLIENTBUFFER_.any? { |cmd| cmd =~ /^(?:\[.*?\])?(?:<c>)?(?:quit|exit)/i }
 		$stderr.puts 'info: waiting 60 seconds to reconnect...'
@@ -9300,7 +9359,7 @@ if launch_file = ARGV.find { |arg| arg =~ /\.sal$|Gse\.~xt$/i }
 		launcher_cmd = "#{wine_bin} #{launcher_cmd}" if wine_bin
 		launcher_cmd.sub!('%1', launch_file)
 		$stderr.puts "info: launcher_cmd: #{launcher_cmd}"
-		system(launcher_cmd)
+		system_win8fix.call(launcher_cmd)
 		exit
 	end
 else
@@ -10547,8 +10606,7 @@ main_thread = Thread.new {
 			if custom_launch
 				sal_filename = nil
 				launcher_cmd = custom_launch.sub(/\%port\%/, localport.to_s).sub(/\%key\%/, game_key.to_s)
-				# fixme: ok to log the one use key?
-				# $stderr.puts "info: launcher_cmd: #{launcher_cmd}"
+				$stderr.puts "info: launcher_cmd: #{launcher_cmd}"
 			else
 				launch_data.collect! { |line| line.sub(/GAMEPORT=.+/, "GAMEPORT=#{localport}").sub(/GAMEHOST=.+/, "GAMEHOST=localhost") }
 				sal_filename = "#{$temp_dir}lich#{rand(10000)}.sal"
@@ -10573,7 +10631,7 @@ main_thread = Thread.new {
 					if custom_launch_dir
 						Dir.chdir(custom_launch_dir)
 					end
-					system(launcher_cmd)
+					system_win8fix.call(launcher_cmd)
 				rescue
 					$stderr.puts $!
 				end
