@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.3'
+$version = '4.4.4'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3599,7 +3599,7 @@ class Spell
 	end
 	def time_per_formula(options={})
 		activator_modifier = { 'tap' => 0.5, 'rub' => 1, 'wave' => 1, 'raise' => 1.33, 'drink' => 0, 'bite' => 0, 'eat' => 0, 'gobble' => 0 }
-		skills = [ 'Spells.minorelemental', 'Spells.majorelemental', 'Spells.minorspiritual', 'Spells.majorspiritual', 'Spells.wizard', 'Spells.sorcerer', 'Spells.ranger', 'Spells.paladin', 'Spells.empath', 'Spells.cleric', 'Spells.bard', 'Spells.minormental' ]
+		skills = [ 'Spells.minorelemental', 'Spells.majorelemental', 'Spells.minorspiritual', 'Spells.majorspiritual', 'Spells.wizard', 'Spells.sorcerer', 'Spells.ranger', 'Spells.paladin', 'Spells.empath', 'Spells.cleric', 'Spells.bard', 'Spells.minormental', 'Skills.magicitemuse', 'Skills.arancesymbols' ]
 		if options[:caster] and (options[:caster] !~ /^(?:self|#{XMLData.name})$/i)
 			if options[:target] and (options[:target].downcase == options[:caster].downcase)
 				formula = @duration['self'][:duration].to_s.dup
@@ -3608,10 +3608,10 @@ class Spell
 			end
 			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
 				skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
-				formula = "(#{formula})/2"
+				formula = "(#{formula})/2.0"
 			elsif options[:activator] =~ /^(invoke|scroll)$/i
 				skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks['#{options[:caster]}'].arcanesymbols.to_i") }
-				formula = "(#{formula})/2"
+				formula = "(#{formula})/2.0"
 			else
 				skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks[#{options[:caster].to_s.inspect}].#{skill_name.sub(/^(?:Spells|Skills)\./, '')}.to_i") }
 			end
@@ -3623,10 +3623,10 @@ class Spell
 			end
 			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
 				skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
-				formula = "(#{formula})/2"
+				formula = "(#{formula})/2.0"
 			elsif options[:activator] =~ /^(invoke|scroll)$/i
 				skills.each { |skill_name| formula.gsub!(skill_name, "Skills.arcanesymbols.to_i") }
-				formula = "(#{formula})/2"
+				formula = "(#{formula})/2.0"
 			end
 		end
 		UNTRUSTED_UNTAINT.call(formula)
