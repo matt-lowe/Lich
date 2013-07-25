@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.11'
+$version = '4.4.12'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -783,6 +783,9 @@ class XMLParser
 				elsif attributes['id'] == 'room desc'
 					@room_description = String.new
 					GameObj.clear_room_desc
+				elsif attributes['id'] == 'room extra' # DragonRealms
+					@room_count += 1
+					$room_count += 1
 				# elsif attributes['id'] == 'sprite'
 				end
 			elsif name == 'clearContainer'
@@ -4922,17 +4925,20 @@ class Map
 	end
 	def Map.get_location
 		unless XMLData.room_count == @@current_location_count
-			script = Script.self
-			save_want_downstream = script.want_downstream
-			script.want_downstream = true
-			waitrt?
-			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$|^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$|^You carefully survey your surroundings but are unable to guess your current location\.$|^Not in pitch darkness you don't\.$/
-			script.want_downstream = save_want_downstream
-			@@current_location_count = XMLData.room_count
-			if location_result =~ /^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$|^You carefully survey your surroundings but are unable to guess your current location\.$|^Not in pitch darkness you don't\.$/
-				@@current_location = false
+			if script = Script.self
+				save_want_downstream = script.want_downstream
+				script.want_downstream = true
+				waitrt?
+				location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$|^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$|^You carefully survey your surroundings but are unable to guess your current location\.$|^Not in pitch darkness you don't\.$/
+				script.want_downstream = save_want_downstream
+				@@current_location_count = XMLData.room_count
+				if location_result =~ /^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$|^You carefully survey your surroundings but are unable to guess your current location\.$|^Not in pitch darkness you don't\.$/
+					@@current_location = false
+				else
+					@@current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+				end
 			else
-				@@current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+				nil
 			end
 		end
 		@@current_location
@@ -4950,11 +4956,14 @@ class Map
 					room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex }  and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
 				end
 				if room.check_location
-					current_location = Map.get_location
-					room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
-					unless room
-						desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-						room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+					if current_location = Map.get_location
+						room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+						unless room
+							desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+							room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+						end
+					else
+						room = nil
 					end
 				end
 				if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
@@ -4994,11 +5003,19 @@ class Map
 								end
 							}
 							unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
-								room = @@list[(room.id+1)..-1].find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
-								if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
-									need_desc, peer_direction, peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
-									unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
-										room = nil
+								while room = @@list[(room.id+1)..-1].find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+									if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
+										new_need_desc, new_peer_direction, new_peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
+										if new_peer_direction == peer_direction
+											# fixme: check new_need_desc
+											if peer_results.any? { |line| line =~ /#{new_peer_requirement}/ }
+												break
+											end
+										else
+											# fixme: peer again..
+										end
+									else
+										break
 									end
 								end
 							end
