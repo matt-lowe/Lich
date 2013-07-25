@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.13'
+$version = '4.1.14'
 
 # rubyw.exe doesn't have $stdout or $stderr, warnings caused by stupid Windows bugs crash Lich
 begin
@@ -1663,22 +1663,24 @@ class Script
 		end
 	end
 	def Script.new_downstream(line)
-		for script in @@running
+		@@running.each { |script|
 			script.downstream_buffer.push(line.chomp) if script.want_downstream
 			unless script.watchfor.empty?
 				script.watchfor.each_pair { |trigger,action|
 					if line =~ trigger
-						Thread.new {
+						new_thread = Thread.new {
+							sleep 0.011 until Script.self
 							begin
 								action.call
 							rescue
 								echo "watchfor error: #{$!}"
 							end
 						}
+						script.thread_group.add(new_thread)
 					end
 				}
 			end
-		end
+		}
 	end
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
