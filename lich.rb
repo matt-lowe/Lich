@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# encoding: US-ASCII
 #####
 # Copyright (C) 2005-2006 Murray Miron
 # All rights reserved.
@@ -37,7 +38,7 @@
 
 =end
 
-# I hate Windows...
+# rubyw.exe has no $stderr or $stdout
 begin
 	$stderr.write(' ')
 rescue
@@ -48,7 +49,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.13'
+$version = '4.4.14'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -200,6 +201,13 @@ if arg = ARGV.find { |a| a == '--hosts-dir' }
 	end
 else
 	hosts_dir = nil
+end
+
+detachable_client_port = nil
+if arg = ARGV.find { |a| a =~ /^\-\-detachable\-client=[0-9]+$/ }
+#	i = ARGV.index(arg)
+#	ARGV.delete_at(i)
+	detachable_client_port = /^\-\-detachable\-client=([0-9]+)$/.match(arg).captures.first
 end
 
 num = Time.now.to_i
@@ -600,7 +608,7 @@ class String
 end
 
 class XMLParser
-	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id, :active_spells
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id, :active_spells, :prompt
 	attr_accessor :send_fake_tags
 
 	@@warned_depreciated_spellfront = false
@@ -633,7 +641,7 @@ class XMLParser
 		@wound_gsl = String.new
 		@scar_gsl = String.new
 		@send_fake_tags = false
-		#@prompt = String.new
+		@prompt = String.new
 		@nerve_tracker_num = 0
 		@nerve_tracker_active = 'no'
 		@server_time = Time.now.to_i
@@ -1044,8 +1052,7 @@ class XMLParser
 					@obj_after_name = text_string.strip
 				end
 			elsif @active_tags.last == 'prompt'
-				#@prompt = text_string
-				nil
+				@prompt = text_string
 			elsif @active_tags.include?('right')
 				GameObj.new_right_hand(@obj_exist, @obj_noun, text_string)
 				$_CLIENT_.puts "\034GSm#{sprintf('%-45s', text_string)}\r\n" if @send_fake_tags
@@ -5782,6 +5789,25 @@ def echo(*messages)
 	nil
 end
 
+def _echo(*messages)
+	if script = Script.self 
+		unless script.no_echo
+			if messages.class == Array
+				messages = messages.flatten.compact
+			else
+				messages = [ messages.to_s ]
+			end
+			_respond if messages.empty?
+			messages.each { |message| _respond("[#{script.name}: #{message.to_s.chomp}]") }
+		end
+	else
+		messages = messages.flatten.compact
+		_respond if messages.empty?
+		messages.each { |message| _respond("[(unknown script): #{message.to_s.chomp}]") }
+	end
+	nil
+end
+
 def goto(label)
 	Script.self.jump_label = label.to_s
 	raise JUMP
@@ -7628,9 +7654,37 @@ def respond(first = "", *messages)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str.split(/\r?\n/).each { |line| Script.new_script_output(line) }
-		str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"\"/>\r\n" if $frontend == 'stormfront'
+		if $frontend == 'stormfront'
+			str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"\"/>\r\n"
+		elsif $frontend == 'profanity'
+			str = str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+		end
 		wait_while { XMLData.in_stream }
 		$_CLIENT_.puts(str)
+		if $_DETACHABLE_CLIENT_
+			$_DETACHABLE_CLIENT_.puts(str) rescue()
+		end
+	rescue
+		puts $!
+		puts $!.backtrace.first
+	end
+end
+
+def _respond(first = "", *messages)
+	str = ''
+	begin
+		if first.class == Array
+			first.flatten.each { |ln| str += sprintf("%s\r\n", ln.to_s.chomp) }
+		else
+			str += sprintf("%s\r\n", first.to_s.chomp)
+		end
+		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
+		str.split(/\r?\n/).each { |line| Script.new_script_output(line) }
+		wait_while { XMLData.in_stream }
+		$_CLIENT_.puts(str)
+		if $_DETACHABLE_CLIENT_
+			$_DETACHABLE_CLIENT_.puts(str) rescue()
+		end
 	rescue
 		puts $!
 		puts $!.backtrace.first
@@ -8549,6 +8603,8 @@ def monsterbold_start
 		"\034GSL\r\n"
 	elsif $frontend == 'stormfront'
 		'<pushBold/>'
+	elsif $frontend == 'profanity'
+		'<b>'
 	else
 		''
 	end
@@ -8559,6 +8615,8 @@ def monsterbold_end
 		"\034GSM\r\n"
 	elsif $frontend == 'stormfront'
 		'<popBold/>'
+	elsif $frontend == 'profanity'
+		'</b>'
 	else
 		''
 	end
@@ -11034,6 +11092,161 @@ main_thread = Thread.new {
 	undef :exit!
 	$_SERVER_.sync = true
 
+	if arg = ARGV.find { |a| a =~ /^\-\-profanity\-port=[0-9]+$/ }
+		profanity = true
+		arg =~ /^\-\-profanity\-port=([0-9]+)$/
+		profanity_port = $1.to_i
+		profanity_client = nil
+		last_mana = nil
+		last_spirit = nil
+		last_stamina = nil
+		last_mind = nil
+		last_encumbrance = nil
+		last_health = nil
+		last_stance = nil
+		multi_line_xml = nil
+		profanity_send = proc { |line|
+			if multi_line_xml
+				line = multi_line_xml + line
+			end
+			if (line.scan(/<pushStream[^>]*\/>/).length > line.scan(/<popStream[^>]*\/>/).length)
+				multi_line_xml = line
+				line = nil
+			else
+				multi_line_xml = nil
+				unless line == "\r\n"
+					line = line.gsub("<pushBold/>", "<color fg='#{$color_code['monsterbold']}'>")
+					line = line.gsub("<popBold/>", "</color>")
+					line = line.sub(/<style id="roomName" \/>(\[.*?\])/) { "<color fg='#{$color_code['roomname']}'>#{$1}</color>" }
+					line = line.sub(/<pushStream id="thoughts"\/>(.*)/) { "<thought>#{$1}</thought>" }
+				
+					if line =~ /<progressBar id='mana' value='.*?' text='mana (\-?[0-9]+)\/([0-9]+)'.*?\/>/
+						unless last_mana == [$1, $2] 
+							profanity_client.puts "<bar id='mana' value='#{$1}' max='#{$2}' \/>"
+							last_mana = [$1, $2]
+						end
+					end
+					if line =~ /<progressBar id='health' value='.*?' text='health (\-?[0-9]+)\/([0-9]+)'.*?\/>/
+						unless last_health == [$1, $2]
+							profanity_client.puts "<bar id='health' value='#{$1}' max='#{$2}' \/>"
+							last_health = [$1, $2]
+						end
+					end
+					if line =~ /<progressBar id='encumlevel' value='(.*?)'.*?\/>/
+						unless last_encumbrance == $1
+							profanity_client.puts "<bar id='encumbrance' value='#{$1}' max='100' \/>"
+							last_encumbrance = $1
+						end
+					end
+					if line =~ /<progressBar id='pbarStance' value='(.*?)'.*?\/>/
+						unless last_stance == $1
+							profanity_client.puts "<bar id='stance' value='#{$1}' max='100' \/>"
+							last_stance = $1
+						end
+					end
+					if line =~ /<progressBar id='mindState' value='(.*?)' text='(.*?)'.*?>/
+						value = $1
+						value = '110' if $2 == 'saturated'
+						unless last_mind = $1
+							profanity_client.puts "<bar id='mind' value='#{value}' max='110' \/>"
+							last_mind = $1
+						end
+					end
+					if line =~ /<progressBar id='spirit' value='.*?' text='spirit (\-?[0-9]+)\/([0-9]+)'.*?\/>/
+						unless last_spirit == [$1, $2]
+							profanity_client.puts "<bar id='spirit' value='#{$1}' max='#{$2}' \>"
+							last_spirit = [$1, $2]
+						end
+					end
+					if line =~ /<progressBar id='stamina' value='.*?' text='stamina (\-?[0-9]+)\/([0-9]+)'.*?\/>/
+						unless last_stamina == [$1, $2]
+							profanity_client.puts "<stamina current='#{$1}' max='#{$2}' \>"
+							last_stamina = [$1, $2]
+						end
+					end
+					if line =~ /<roundTime value='([0-9]+)'/
+						profanity_client.puts "<roundTime value='#{$1}' />"
+					end
+					if line =~ /<castTime value='([0-9]+)'/
+						profanity_client.puts "<castTime value='#{$1}' />"
+					end
+				
+					line = line.gsub(/<pushStream id=["'](?:spellfront|inv|bounty|society)["'][^>]*\/>.*?<popStream[^>]*>/m, '')
+					line = line.gsub(/<stream id="Spells">.*?<\/stream>/m, '')
+					line = line.gsub(/<(compDef|inv|component|right|left|spell)[^>]*>.*?<\/\1>/m, '')
+					line = line.gsub(/<(?!\/?color|\/?prompt|\/?thought).*?>/, '')
+					line = line.gsub(/<color fg='#{$color_code['monsterbold']}'>([Hh]e|[Ss]he|[Hh]is|[Hh]er|[Ii]t)<\/color>/) { $1 }
+				
+					if line.gsub("\n", '').gsub("\r", '').gsub(' ', '').length < 1
+						line = nil
+					end
+				end
+			end
+			unless line.nil?  or line =~ /\[server\]\: "(?:kill|connect)/
+				teh_xml = Array.new
+				while (start_pos = (line =~ /(<.*?>)/))
+					str = $1
+					line.slice!(start_pos, str.length)
+					teh_xml.push [ start_pos, str ]
+				end
+			
+				$profanity_highlights.each_pair { |regex,colors|
+					pos = 0
+					while (match_data = line.match(regex, pos))
+						fg, bg = colors.split(',')
+						str = '<color'
+						str.concat " fg='#{fg}'" if fg and not fg.empty?
+						str.concat " bg='#{bg}'" if bg and not fg.empty?
+						str.concat '>'
+						teh_xml.push [ match_data.begin(0), str ]
+						teh_xml.push [ match_data.end(0), '</color>' ]
+						pos = match_data.end(0)
+					end
+				}
+
+				# fixme: highlights that start at the same position may be in the wrong order, check length and start longer highlight first
+				# fixme: highlights that start and end at the same position may be in the wrong order, causing and empty highlight
+
+				teh_xml.reverse! # may fix half the ordering problem
+				teh_xml.sort! { |a,b| b[0] <=> a[0] }
+				teh_xml.each { |pos,str| line.insert(pos, str) }
+
+				profanity_client.puts(line)
+			end
+		}
+
+
+		Thread.new {
+			loop {
+				begin
+					begin
+						profanity_server = TCPServer.new('0.0.0.0', profanity_port)
+						profanity_client = profanity_server.accept
+					ensure
+						server.close rescue()
+					end
+					profanity_client.puts "<bar id='mana' value='#{XMLData.mana}' max='#{XMLData.max_mana}' />"
+					profanity_client.puts "<bar id='health' value='#{XMLData.health}' max='#{XMLData.max_health}' />"
+					profanity_client.puts "<bar id='encumbrance' value='#{XMLData.encumbrance_value}' max='100' />"
+					profanity_client.puts "<bar id='stance' value='#{XMLData.stance_value}' max='100' />"
+					if saturated?
+						profanity_client.puts "<bar id='mind' value='110' max='110' />"
+					else
+						profanity_client.puts "<bar id='mind' value='#{XMLData.mind_value}' max='110' />"
+					end
+					profanity_client.puts "<bar id='spirit' value='#{XMLData.spirit}' max='#{XMLData.max_spirit}' />"
+					profanity_client.puts "<bar id='stamina' value='#{XMLData.stamina}' max='#{XMLData.max_stamina}' />"
+				rescue
+					$stderr.puts $!
+					$stderr.puts $!.backtrace[0..1]
+					sleep 3
+				end
+			}
+		}
+	else
+		profanity = false
+	end
+
 	if ARGV.include?('--without-frontend')
 		Thread.new {
 			client_thread = nil
@@ -11205,6 +11418,89 @@ main_thread = Thread.new {
 		}
 	end
 
+	if detachable_client_port
+		# fixme: script output is sometimes inserted in inappropriate places: <style id="roomName"/>[teh room]\n<stream id='thoughts'>teh thought\n</stream>\n<style id=""/>
+		detachable_client_thread = Thread.new {
+			loop {
+				begin
+					server = TCPServer.new('0.0.0.0', detachable_client_port)
+					$_DETACHABLE_CLIENT_ = server.accept
+				rescue
+					$stderr.puts $!
+					$stderr.puts $!.backtrace[0..2]
+					server.close rescue()
+					$_DETACHABLE_CLIENT_.close rescue()
+					$_DETACHABLE_CLIENT_ = nil
+					sleep 5
+					next
+				ensure
+					server.close rescue()
+				end
+				if $_DETACHABLE_CLIENT_
+					begin
+						$frontend = 'profanity'
+						init_str = "<progressBar id='mana' value='0' text='mana #{XMLData.mana}/#{XMLData.max_mana}'/>"
+						init_str.concat "<progressBar id='health' value='0' text='health #{XMLData.health}/#{XMLData.max_health}'/>"
+						init_str.concat "<progressBar id='spirit' value='0' text='spirit #{XMLData.spirit}/#{XMLData.max_spirit}'/>"
+						init_str.concat "<progressBar id='stamina' value='0' text='stamina #{XMLData.stamina}/#{XMLData.max_stamina}'/>"
+						init_str.concat "<progressBar id='encumlevel' value='#{XMLData.encumbrance_value}' text='#{XMLData.encumbrance_text}'/>"
+						init_str.concat "<progressBar id='pbarStance' value='#{XMLData.stance_value}'/>"
+						init_str.concat "<progressBar id='mindState' value='#{XMLData.mind_value}' text='#{XMLData.mind_text}'/>"
+						for indicator in [ 'IconBLEEDING', 'IconPOISONED', 'IconDISEASED' ]
+							init_str.concat "<indicator id='#{indicator}' visible='#{XMLData.indicator[indicator]}'/>"
+						end
+						for area in [ 'back', 'leftHand', 'rightHand', 'head', 'rightArm', 'abdomen', 'leftEye', 'leftArm', 'chest', 'rightLeg', 'neck', 'leftLeg', 'nsys', 'rightEye' ]
+							if Wounds.send(area) > 0
+								init_str.concat "<image id=\"#{area}\" name=\"Injury#{Wounds.send(area)}\"/>"
+							elsif Scars.send(area) > 0
+								init_str.concat "<image id=\"#{area}\" name=\"Scar#{Scars.send(area)}\"/>"
+							end
+						end
+						init_str.concat '<compass>'
+						shorten_dir = { 'north' => 'n', 'northeast' => 'ne', 'east' => 'e', 'southeast' => 'se', 'south' => 's', 'southwest' => 'sw', 'west' => 'w', 'northwest' => 'nw', 'up' => 'up', 'down' => 'down', 'out' => 'out' }
+						for dir in XMLData.room_exits
+							if short_dir = shorten_dir[dir]
+								init_str.concat "<dir value='#{short_dir}'/>"
+							end
+						end
+						init_str.concat '</compass>'
+						$_DETACHABLE_CLIENT_.puts init_str
+						init_str = nil
+						while client_string = $_DETACHABLE_CLIENT_.gets
+							client_string = "#{$cmd_prefix}#{client_string}" # if $frontend =~ /^(?:wizard|avalon)$/
+							begin
+								$_IDLETIMESTAMP_ = Time.now
+								if Alias.find(client_string)
+									Alias.run(client_string)
+								else
+									do_client(client_string)
+								end
+							rescue
+								respond "--- error: client_thread: #{$!}"
+								respond $!.backtrace.first
+								$stderr.puts "error: client_thread: #{$!}"
+								$stderr.puts $!.backtrace
+							end
+						end
+					rescue
+						respond "--- error: client_thread: #{$!}"
+						respond $!.backtrace.first
+						$stderr.puts "error: client_thread: #{$!}"
+						$stderr.puts $!.backtrace
+						$_DETACHABLE_CLIENT_.close rescue()
+						$_DETACHABLE_CLIENT_ = nil
+					ensure 
+						$_DETACHABLE_CLIENT_.close rescue()
+						$_DETACHABLE_CLIENT_ = nil
+					end
+				end
+				sleep "0.1".to_f
+			}
+		}
+	else
+		detachable_client_thread = nil
+	end
+
 	# fixme: bare bones
 
 	wait_while { $offline_mode }
@@ -11246,6 +11542,18 @@ main_thread = Thread.new {
 					end
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
+						if $_DETACHABLE_CLIENT_
+							begin
+								$_DETACHABLE_CLIENT_.write(alt_string)
+							rescue
+								$_DETACHABLE_CLIENT_.close rescue()
+								$_DETACHABLE_CLIENT_ = nil
+								respond "--- error: client_thread: #{$!}"
+								respond $!.backtrace.first
+								$stderr.puts "error: client_thread: #{$!}"
+								$stderr.puts $!.backtrace
+							end
+						end
 						if $frontend =~ /^(?:wizard|avalon)$/
 							alt_string = sf_to_wiz(alt_string)
 						end
@@ -11317,6 +11625,7 @@ main_thread = Thread.new {
 
 	server_thread.join
 	client_thread.kill rescue()
+	detachable_client_thread.kill rescue()
 
 	$stderr.puts 'info: stopping scripts...'
 	Script.running.each { |script| script.kill }
