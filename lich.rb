@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.9'
+$version = '4.2.10'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3818,7 +3818,7 @@ class Spell
 					end
 					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$/
 					if cast_result == "You don't seem to be able to move to do that."
-						100.times { break if clear.any? { |line| line =~ /^You regain control of your senses!$/ }; sleep 0.1 }
+						100.times { break if clear.any? { |line| line =~ /^You regain control of your senses!$/ }; sleep "0.1".to_f }
 						cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$/
 					end
 					if @stance and checkstance !~ /^guarded$|^defensive$/
@@ -7044,7 +7044,7 @@ def empty_hands
 		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
 			actions.unshift proc {
 				dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7052,7 +7052,7 @@ def empty_hands
 		elsif lootsack
 			actions.unshift proc {
 				dothistimeout "get ##{left_hand.id}", 3, /^You remove|^Get what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7066,7 +7066,7 @@ def empty_hands
 		else
 			actions.unshift proc {
 				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7092,7 +7092,7 @@ def empty_hands
 		elsif lootsack
 			actions.unshift proc {
 				dothistimeout "get ##{right_hand.id}", 3, /^You remove|^Get what\?/
-				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7106,7 +7106,7 @@ def empty_hands
 		else
 			actions.unshift proc {
 				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7153,7 +7153,7 @@ def empty_hand
 			elsif lootsack
 				actions.unshift proc {
 					dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
-					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 					if GameObj.left_hand.id == right_hand.id
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
@@ -7167,7 +7167,7 @@ def empty_hand
 			else
 				actions.unshift proc {
 					dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
-					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 					if GameObj.left_hand.id == right_hand.id
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
@@ -7179,7 +7179,7 @@ def empty_hand
 			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
 				actions.unshift proc {
 					dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
-					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 					if GameObj.right_hand.id == left_hand.id
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
@@ -7187,7 +7187,7 @@ def empty_hand
 			elsif lootsack
 				actions.unshift proc {
 					dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 					if GameObj.right_hand.id == left_hand.id
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
@@ -7201,7 +7201,7 @@ def empty_hand
 			else
 				actions.unshift proc {
 					dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 					if GameObj.right_hand.id == left_hand.id
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
@@ -7247,7 +7247,7 @@ def empty_right_hand
 		elsif lootsack
 			actions.unshift proc {
 				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7261,7 +7261,7 @@ def empty_right_hand
 		else
 			actions.unshift proc {
 				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7293,7 +7293,7 @@ def empty_left_hand
 		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
 			actions.unshift proc {
 				dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7301,7 +7301,7 @@ def empty_left_hand
 		elsif lootsack
 			actions.unshift proc {
 				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -7315,7 +7315,7 @@ def empty_left_hand
 		else
 			actions.unshift proc {
 				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
+				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
@@ -9744,7 +9744,7 @@ main_thread = Thread.new {
 					if `tasklist.exe` =~ /Launcher\.exe/i
 						$stderr.puts "info: waiting for launcher to exit..."
 						20.times {
-							sleep 0.5
+							sleep "0.5".to_f
 							break unless `tasklist.exe` =~ /Launcher\.exe/i
 						}
 					end
@@ -9752,7 +9752,7 @@ main_thread = Thread.new {
 					if `ps ax` =~ /Launcher\.exe/i
 						$stderr.puts "info: waiting for launcher to exit..."
 						20.times {
-							sleep 0.5
+							sleep "0.5".to_f
 							break unless `ps ax` =~ /Launcher\.exe/i
 						}
 					end
