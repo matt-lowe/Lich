@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.38'
+$version = '4.1.39'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -369,6 +369,11 @@ UNTRUSTED_SCRIPT_EXISTS = proc { |scriptname|
 	Script.exists?(scriptname)
 }
 UNTRUSTED_UNTAINT = proc { |str| str.untaint }
+UNTRUSTED_USERVARIABLES_METHOD_MISSING = proc { |arg1, arg2| UserVariables.method_missing(arg1, arg2) }
+UNTRUSTED_USERVARIABLES_DELETE = proc { |var_name, value, type| UserVariables.delete(var_name, value, type) }
+UNTRUSTED_USERVARIABLES_ADD = proc { |var_name, value, type| UserVariables.add(var_name, value, type) }
+UNTRUSTED_USERVARIABLES_CHANGE = proc { |var_name, value, type| UserVariables.change(var_name, value, type) }
+UNTRUSTED_USERVARIABLES_SAVE = proc { UserVariables.save }
 
 JUMP = Exception.exception('JUMP')
 JUMP_ERROR = Exception.exception('JUMP_ERROR')
@@ -1886,68 +1891,84 @@ class UserVariables
 		end
 	end
 	def UserVariables.save
-		File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
-		@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
-		File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
+		if $SAFE == 0
+			File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+			@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
+		else
+			UNTRUSTED_USERVARIABLES_SAVE.call
+		end
 	end
 	def UserVariables.change(var_name, value, type = :char)
-		if type == :char
-			@@char_settings[var_name] = value
-			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
-			true
-			elsif type == :global
-			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
-			end
-			@@settings[var_name] = value
-			File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
-			@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
-			true
-		else
-			echo 'UserVariables.change: invalid type given, use :char or :global.'
-			false
-		end
-	end
-	def UserVariables.add(var_name, value, type = :char)
-		if type == :char
-			@@char_settings[var_name] = @@char_settings[var_name].split(', ').push(value.strip).join(', ')
-			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
-			true
-		elsif type == :global
-			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
-			end
-			@@settings[var_name] = @@settings[var_name].split(', ').push(value.strip).join(', ')
-			File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
-			@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
-			true
-		else
-			echo 'UserVariables.add: invalid type given, use :char or :global.'
-			nil
-		end
-	end
-	def UserVariables.delete(var_name, type = :char)
-		if type == :char
-			if @@char_settings.delete(var_name)
+		if $SAFE == 0
+			if type == :char
+				@@char_settings[var_name] = value
 				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
 				true
-			else
-				false
-			end
-		elsif type == :global
-			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
-				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
-			end
-			if @@settings.delete(var_name)
+				elsif type == :global
+				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+					File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+				end
+				@@settings[var_name] = value
 				File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
 				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 				true
 			else
+				echo 'UserVariables.change: invalid type given, use :char or :global.'
 				false
 			end
 		else
-			false
+			UNTRUSTED_USERVARIABLES_CHANGE.call(var_name, value, type)
+		end
+	end
+	def UserVariables.add(var_name, value, type = :char)
+		if $SAFE == 0
+			if type == :char
+				@@char_settings[var_name] = @@char_settings[var_name].split(', ').push(value.strip).join(', ')
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
+				true
+			elsif type == :global
+				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+					File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+				end
+				@@settings[var_name] = @@settings[var_name].split(', ').push(value.strip).join(', ')
+				File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+				true
+			else
+				echo 'UserVariables.add: invalid type given, use :char or :global.'
+				nil
+			end
+		else
+			UNTRUSTED_USERVARIABLES_ADD.call(var_name, value, type)
+		end
+	end
+	def UserVariables.delete(var_name, type = :char)
+		if $SAFE == 0
+			if type == :char
+				if @@char_settings.delete(var_name)
+					File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
+					true
+				else
+					false
+				end
+			elsif type == :global
+				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+					File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+					@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+				end
+				if @@settings.delete(var_name)
+					File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@settings)) }
+					@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+					true
+				else
+					false
+				end
+			else
+				false
+			end
+		else
+			UNTRUSTED_USERVARIABLES_DELETE.call(var_name, value, type)
 		end
 	end
 	def UserVariables.list_global
@@ -1957,17 +1978,21 @@ class UserVariables
 		@@char_settings.dup
 	end
 	def UserVariables.method_missing(arg1, arg2='')
-		if arg1.to_s.split('')[-1] == '='
-			@@char_settings[arg1.to_s.chop] = arg2
-			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
-		elsif @@char_settings[arg1.to_s]
-			@@char_settings[arg1.to_s]
-		else
-			if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-				File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
-				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+		if $SAFE == 0
+			if arg1.to_s.split('')[-1] == '='
+				@@char_settings[arg1.to_s.chop] = arg2
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.write(Marshal.dump(@@char_settings)) }
+			elsif @@char_settings[arg1.to_s]
+				@@char_settings[arg1.to_s]
+			else
+				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
+					File.open("#{$data_dir}uservars.dat", 'rb') { |f| @@settings = Marshal.load(f.read) }
+					@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
+				end
+				@@settings[arg1.to_s]
 			end
-			@@settings[arg1.to_s]
+		else
+			UNTRUSTED_USERVARIABLES_METHOD_MISSING.call(arg1, arg2)
 		end
 	end
 end
