@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.10'
+$version = '4.4.11'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -650,7 +650,6 @@ class XMLParser
 		@room_description = String.new
 		@room_exits = Array.new
 		@room_exits_string = String.new
-		@room_changing = true
 
 		@familiar_room_title = String.new
 		@familiar_room_description = String.new
@@ -726,7 +725,21 @@ class XMLParser
 		begin
 			@active_tags.push(name)
 			@active_ids.push(attributes['id'].to_s)
-			if name == 'dialogData' and attributes['id'] == 'ActiveSpells' and attributes['clear'] == 't'
+			if name =~ /^(?:a|right|left)$/
+				@obj_exist = attributes['exist']
+				@obj_noun = attributes['noun']
+			elsif name == 'inv'
+				if attributes['id'] == 'stow'
+					@obj_location = @stow_container_id
+				else
+					@obj_location = attributes['id']
+				end
+				@obj_exist = nil
+				@obj_noun = nil
+				@obj_name = nil
+				@obj_before_name = nil
+				@obj_after_name = nil
+			elsif name == 'dialogData' and attributes['id'] == 'ActiveSpells' and attributes['clear'] == 't'
 				@active_spells.clear
 			elsif name == 'resource' or name == 'nav'
 				nil
@@ -735,6 +748,10 @@ class XMLParser
 				@current_stream = attributes['id'].to_s
 				GameObj.clear_inv if attributes['id'].to_s == 'inv'
 			elsif name == 'popStream'
+				if attributes['id'] == 'room'
+					@room_count += 1
+					$room_count += 1
+				end
 				@in_stream = false
 				if attributes['id'] == 'bounty'
 					@bounty_task.strip!
@@ -745,18 +762,11 @@ class XMLParser
 			elsif name == 'popBold'
 				@bold = false
 			elsif (name == 'streamWindow')
-				if attributes['id'] == 'room'
-					@room_changing = true
-				elsif (attributes['id'] == 'main') and attributes['subtitle']
+				if (attributes['id'] == 'main') and attributes['subtitle']
 					@room_title = '[' + attributes['subtitle'][3..-1] + ']'
 				end
 			elsif name == 'style'
 				@current_style = attributes['id']
-				if @room_changing and attributes['id'] == 'roomName'
-					@room_count += 1
-					$room_count += 1
-					@room_changing = false
-				end
 			elsif name == 'prompt'
 				@server_time = attributes['time'].to_i
 				@server_time_offset = (Time.now.to_i - @server_time)
@@ -775,9 +785,6 @@ class XMLParser
 					GameObj.clear_room_desc
 				# elsif attributes['id'] == 'sprite'
 				end
-			elsif name =~ /^(?:a|right|left)$/
-				@obj_exist = attributes['exist']
-				@obj_noun = attributes['noun']
 			elsif name == 'clearContainer'
 				if attributes['id'] == 'stow'
 					GameObj.clear_container(@stow_container_id)
@@ -786,17 +793,6 @@ class XMLParser
 				end
 			elsif name == 'deleteContainer'
 				GameObj.delete_container(attributes['id'])
-			elsif name == 'inv'
-				if attributes['id'] == 'stow'
-					@obj_location = @stow_container_id
-				else
-					@obj_location = attributes['id']
-				end
-				@obj_exist = nil
-				@obj_noun = nil
-				@obj_name = nil
-				@obj_before_name = nil
-				@obj_after_name = nil
 			elsif name == 'progressBar'
 				if attributes['id'] == 'pbarStance'
 					@stance_text = attributes['text'].split.first
@@ -1036,7 +1032,15 @@ class XMLParser
 		begin
 			# fixme: /<stream id="Spells">.*?<\/stream>/m
 			# $_CLIENT_.write(text_string) unless ($frontend != 'suks') or (@current_stream =~ /^(?:spellfront|inv|bounty|society)$/) or @active_tags.any? { |tag| tag =~ /^(?:compDef|inv|component|right|left|spell)$/ } or (@active_tags.include?('stream') and @active_ids.include?('Spells')) or (text_string == "\n" and (@last_tag =~ /^(?:popStream|prompt|compDef|dialogData|openDialog|switchQuickBar|component)$/))
-			if @active_tags.last == 'prompt'
+			if @active_tags.include?('inv')
+				if @active_tags[-1] == 'a'
+					@obj_name = text_string
+				elsif @obj_name.nil?
+					@obj_before_name = text_string.strip
+				else
+					@obj_after_name = text_string.strip
+				end
+			elsif @active_tags.last == 'prompt'
 				#@prompt = text_string
 				nil
 			elsif @active_tags.include?('right')
@@ -1123,14 +1127,6 @@ class XMLParser
 				elsif @active_ids.include?('room exits')
 					@room_exits_string.concat(text_string)
 					@room_exits.push(text_string) if @active_tags.include?('d')
-				end
-			elsif @active_tags.include?('inv')
-				if @active_tags[-1] == 'a'
-					@obj_name = text_string
-				elsif @obj_name.nil?
-					@obj_before_name = text_string.strip
-				else
-					@obj_after_name = text_string.strip
 				end
 			elsif @current_stream == 'bounty'
 				@bounty_task += text_string
@@ -4963,51 +4959,54 @@ class Map
 				end
 				if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
 					need_desc, peer_direction, peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
-					if need_desc
-						unless last_roomdesc = $_SERVERBUFFER_.reverse.find { |line| line =~ /<style id="roomDesc"\/>/ } and (last_roomdesc =~ /<style id="roomDesc"\/>[^<]/)
-							put 'set description on'
-						end
-					end
-					script = Script.self
-					save_want_downstream = script.want_downstream
-					script.want_downstream = true
-					squelch_started = false
-					squelch_proc = proc { |server_string|
-						if squelch_started
-							if server_string =~ /<prompt/
-								DownstreamHook.remove('squelch-peer')
+					if script = Script.self
+						if need_desc
+							unless last_roomdesc = $_SERVERBUFFER_.reverse.find { |line| line =~ /<style id="roomDesc"\/>/ } and (last_roomdesc =~ /<style id="roomDesc"\/>[^<]/)
+								put 'set description on'
 							end
-							nil
-						elsif server_string =~ /^You peer/
-							squelch_started = true
-							nil
-						else
-							server_string
 						end
-					}
-					DownstreamHook.add('squelch-peer', squelch_proc)
-					redo unless count == XMLData.room_count
-					result = dothistimeout "peer #{peer_direction}", 3, /^You peer|^\[Usage: PEER/
-					redo unless count == XMLData.room_count
-					if result =~ /^You peer/
-						peer_results = Array.new
-						5.times {
-							if line = get?
-								peer_results.push line
-								break if line =~ /^Obvious/
+						save_want_downstream = script.want_downstream
+						script.want_downstream = true
+						squelch_started = false
+						squelch_proc = proc { |server_string|
+							if squelch_started
+								if server_string =~ /<prompt/
+									DownstreamHook.remove('squelch-peer')
+								end
+								nil
+							elsif server_string =~ /^You peer/
+								squelch_started = true
+								nil
+							else
+								server_string
 							end
 						}
-						unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
-							room = @@list[(room.id+1)..-1].find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
-							if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
-								need_desc, peer_direction, peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
-								unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
-									room = nil
+						DownstreamHook.add('squelch-peer', squelch_proc)
+						redo unless count == XMLData.room_count
+						result = dothistimeout "peer #{peer_direction}", 3, /^You peer|^\[Usage: PEER/
+						redo unless count == XMLData.room_count
+						if result =~ /^You peer/
+							peer_results = Array.new
+							5.times {
+								if line = get?
+									peer_results.push line
+									break if line =~ /^Obvious/
+								end
+							}
+							unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
+								room = @@list[(room.id+1)..-1].find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) and (r.unique_loot.nil? or (r.unique_loot.to_a - GameObj.loot.to_a.collect { |obj| obj.name }).empty?) }
+								if peer_tag = room.tags.find { |tag| tag =~ /^(set desc on; )?peer [a-z]+ =~ \/.+\/$/ }
+									need_desc, peer_direction, peer_requirement = /^(set desc on; )?peer ([a-z]+) =~ \/(.+)\/$/.match(peer_tag).captures
+									unless peer_results.any? { |line| line =~ /#{peer_requirement}/ }
+										room = nil
+									end
 								end
 							end
 						end
+						script.want_downstream = save_want_downstream
+					else
+						room = nil
 					end
-					script.want_downstream = save_want_downstream
 				end
 				if room
 					@@current_room_count = count
@@ -8891,6 +8890,11 @@ def do_client(client_string)
 			respond "   #{$clean_lich_char}list all                  show all running scripts"
 			respond "   #{$clean_lich_char}la                        ''"
 			respond
+			respond "   #{$clean_lich_char}exec <code>               executes the code as if it was in a script"
+			respond "   #{$clean_lich_char}e <code>                  ''"
+			respond "   #{$clean_lich_char}execq <code>              same as #{$clean_lich_char}exec but without the script active and exited messages"
+			respond "   #{$clean_lich_char}eq <code>                 ''"
+			respond
 			respond "   #{$clean_lich_char}trust <script name>       let the script do whatever it wants"
 			respond "   #{$clean_lich_char}distrust <script name>    restrict the script from doing things that might harm your computer"
 			respond "   #{$clean_lich_char}list trusted              show what scripts are trusted"
@@ -9138,6 +9142,40 @@ get_process_list = proc {
 	end
 }
 
+is_windows = proc {
+	(RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+}
+
+windows_version = proc {
+	if is_windows.call
+		kernel32 = DL.dlopen('kernel32.dll')
+		get_version_ex = kernel32['GetVersionEx', 'LP']
+
+		os_version_info = DL.malloc(DL.sizeof('LLLLLC128'))
+		os_version_info.struct!('LLLLLC128', :dwOSVersionInfoSize, :dwMajorVersion, :dwMinorVersion, :dwBuildNumber, :dwPlatformId, :szCSDVersion)
+		os_version_info[:dwOSVersionInfoSize] = DL.sizeof('LLLLLC128')
+		get_version_ex.call(os_version_info)
+		[os_version_info[:dwMajorVersion], os_version_info[:dwMinorVersion]]
+	else
+		[0,0]
+	end
+}
+
+is_win_vista = proc {
+	ver = windows_version.call
+	(ver[0] == 6) and (ver[1] == 0)
+}
+
+is_win7 = proc {
+	ver = windows_version.call
+	(ver[0] == 6) and (ver[1] == 1)
+}
+
+is_win8 = proc {
+	ver = windows_version.call
+	(ver[0] == 6) and (ver[1] == 2)
+}
+
 is_win8 = proc {
 	if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 		begin
@@ -9164,25 +9202,14 @@ is_win8 = proc {
 	end
 }
 
-system_win8fix = proc { |launcher_cmd|
-	# fixme: launcher_cmd may not have quotes
-	if is_win8.call and launcher_cmd =~ /^"(.*?)"\s*(.*)$/
-		dir_file = $1
-		param = $2
-		dir = dir_file.slice(/^.*[\/\\]/)
-		file = dir_file.sub(/^.*[\/\\]/, '')
-		$stderr.puts "info: using Win8 workaround"
-		$stderr.puts "info: dir = #{dir}, file = #{file}, parameters = #{param}"
-
-		shell32 = DL.dlopen('shell32.dll')
-		shell_execute_ex = shell32['ShellExecuteEx', 'LP']
-
+shell_execute_ex = proc { |verb,dir,file,param|
+	if is_windows.call
 		shell_execute_info = DL.malloc(DL.sizeof('LLLSSSSLLLSLLLL'))
 		shell_execute_info.struct!('LLLSSSSLLLSLLLL', :cbSize, :fMask, :hwnd, :lpVerb, :lpFile, :lpParameters, :lpDirectory, :nShow, :hInstApp, :lpIDList, :lpClass, :hkeyClass, :dwHotKey, :hIcon, :hProcess)
 		shell_execute_info[:cbSize] = DL.sizeof('LLLSSSSLLLSLLLL')
 		shell_execute_info[:fMask] = 0
 		shell_execute_info[:hwnd] = 0
-		shell_execute_info[:lpVerb] = "open"
+		shell_execute_info[:lpVerb] = verb
 		shell_execute_info[:lpParameters] = param
 		shell_execute_info[:lpDirectory] = dir
 		shell_execute_info[:lpFile] = file
@@ -9195,7 +9222,25 @@ system_win8fix = proc { |launcher_cmd|
 		shell_execute_info[:hIcon] =  0
 		shell_execute_info[:hProcess] = 0
 
-		shell_execute_ex.call(shell_execute_info)
+		shell32 = DL.dlopen('shell32.dll')
+		api = shell32['ShellExecuteEx', 'LP']
+		api.call(shell_execute_info)
+	else
+		false
+	end
+}
+
+system_win8fix = proc { |launcher_cmd|
+	# fixme: launcher_cmd may not have quotes
+	if is_win8.call and launcher_cmd =~ /^"(.*?)"\s*(.*)$/
+		dir_file = $1
+		param = $2
+		dir = dir_file.slice(/^.*[\/\\]/)
+		file = dir_file.sub(/^.*[\/\\]/, '')
+		$stderr.puts "info: using Win8 workaround"
+		$stderr.puts "info: dir = #{dir}, file = #{file}, parameters = #{param}"
+
+		shell_execute_ex.call('open', dir, file, param)
 	else
 		system(launcher_cmd)
 	end
