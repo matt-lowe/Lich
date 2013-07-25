@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.3'
+$version = '4.2.4'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4942,6 +4942,9 @@ class Map
 			image_coords[2] - image_coords[0]
 		end
 	end
+	def geo
+		nil
+	end
 end
 
 class Room < Map
@@ -6965,29 +6968,35 @@ def empty_hands
 		waitrt?
 		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
 			actions.unshift proc {
-				fput "remove ##{left_hand.id}"
+				dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
-				fput "swap" if GameObj.right_hand.id == left_hand.id
+				if GameObj.right_hand.id == left_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
 			}
 		elsif lootsack
 			actions.unshift proc {
-				fput "get ##{left_hand.id}"
+				dothistimeout "get ##{left_hand.id}", 3, /^You remove|^Get what\?/
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
-				fput "swap" if GameObj.right_hand.id == left_hand.id
+				if GameObj.right_hand.id == left_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
 			}
-			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 			if result =~ /^You can't .+ It's closed!$/
 				actions.push proc { fput "close ##{lootsack.id}" }
-				fput "open ##{lootsack.id}"
-				fput "put ##{left_hand.id} in ##{lootsack.id}"
+				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
 			end
 		else
 			actions.unshift proc {
-				fput "get ##{left_hand.id}"
+				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
-				fput "swap" if GameObj.right_hand.id == left_hand.id
+				if GameObj.right_hand.id == left_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
 			}
-			fput 'stow left'
+			dothistimeout 'stow left', 3, /^You put|^You are not holding anything/
 		end
 	end
 	if right_hand.id
@@ -7007,23 +7016,27 @@ def empty_hands
 			fput 'stop 1012'
 		elsif lootsack
 			actions.unshift proc {
-				fput "get ##{right_hand.id}"
+				dothistimeout "get ##{right_hand.id}", 3, /^You remove|^Get what\?/
 				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
-				fput "swap" if GameObj.left_hand.id == right_hand.id
+				if GameObj.left_hand.id == right_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
 			}
-			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 			if result =~ /^You can't .+ It's closed!$/
 				actions.push proc { fput "close ##{lootsack.id}" }
-				fput "open ##{lootsack.id}"
-				fput "put ##{right_hand.id} in ##{lootsack.id}"
+				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
 			end
 		else
 			actions.unshift proc {
-				fput "get ##{right_hand.id}"
+				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
 				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
-				fput "swap" if GameObj.left_hand.id == right_hand.id
+				if GameObj.left_hand.id == right_hand.id
+					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+				end
 			}
-			fput 'stow right'
+			dothistimeout 'stow right', 3, /^You put|^You are not holding anything/
 		end
 	end
 	$fill_hands_actions.push(actions)
@@ -7064,51 +7077,61 @@ def empty_hand
 				fput 'stop 1012'
 			elsif lootsack
 				actions.unshift proc {
-					fput "get ##{right_hand.id}"
+					dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
 					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
-					fput "swap" if GameObj.left_hand.id == right_hand.id
+					if GameObj.left_hand.id == right_hand.id
+						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+					end
 				}
-				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
-					fput "open ##{lootsack.id}"
-					fput "put ##{right_hand.id} in ##{lootsack.id}"
+					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+					dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
 				end
 			else
 				actions.unshift proc {
-					fput "get ##{right_hand.id}"
+					dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
 					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
-					fput "swap" if GameObj.left_hand.id == right_hand.id
+					if GameObj.left_hand.id == right_hand.id
+						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+					end
 				}
-				fput 'stow right'
+				dothistimeout 'stow right', 3, /^You put|^You are not holding anything/
 			end
 		elsif left_hand.id and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
 			waitrt?
 			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$|^You can't wear that\.$/)
 				actions.unshift proc {
-					fput "remove ##{left_hand.id}"
+					dothistimeout "remove ##{left_hand.id}", 3, /^You|^Remove what\?/
 					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
-					fput "swap" if GameObj.right_hand.id == left_hand.id
+					if GameObj.right_hand.id == left_hand.id
+						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+					end
 				}
 			elsif lootsack
 				actions.unshift proc {
-					fput "get ##{left_hand.id}"
+					dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
 					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
-					fput "swap" if GameObj.right_hand.id == left_hand.id
+					if GameObj.right_hand.id == left_hand.id
+						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+					end
 				}
-				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
-					fput "open ##{lootsack.id}"
-					fput "put ##{left_hand.id} in ##{lootsack.id}"
+					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+					dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
 				end
 			else
 				actions.unshift proc {
-					fput "get ##{left_hand.id}"
+					dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
 					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
-					fput "swap" if GameObj.right_hand.id == left_hand.id
+					if GameObj.right_hand.id == left_hand.id
+						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
+					end
 				}
-				fput 'stow left'
+				dothistimeout 'stow left', 3, /^You put|^You are not holding anything/
 			end
 		end
 	end
