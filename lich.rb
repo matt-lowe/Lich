@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.55'
+$version = '4.1.56'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -946,7 +946,7 @@ class XMLParser
 	def text(text)
 		begin
 			# fixme: /<stream id="Spells">.*?<\/stream>/m
-			$_CLIENT_.write(text) unless ($frontend != 'suks') or (@current_stream =~ /^(?:spellfront|inv|bounty|society)$/) or @active_tags.any? { |tag| tag =~ /^(?:compDef|inv|component|right|left|spell)$/ } or (@active_tags.include?('stream') and @active_ids.include?('Spells')) or (text == "\n" and (@last_tag =~ /^(?:popStream|prompt|compDef|dialogData|openDialog|switchQuickBar|component)$/))
+			# $_CLIENT_.write(text) unless ($frontend != 'suks') or (@current_stream =~ /^(?:spellfront|inv|bounty|society)$/) or @active_tags.any? { |tag| tag =~ /^(?:compDef|inv|component|right|left|spell)$/ } or (@active_tags.include?('stream') and @active_ids.include?('Spells')) or (text == "\n" and (@last_tag =~ /^(?:popStream|prompt|compDef|dialogData|openDialog|switchQuickBar|component)$/))
 			if @active_tags.last == 'prompt'
 				#@prompt = text
 				nil
@@ -3767,7 +3767,6 @@ class Stats
 	@@prof ||= 'unknown'
 	@@gender ||= 'unknown'
 	@@age ||= 0
-	@@exp ||= 0
 	@@level ||= 0
 	@@str ||= [0,0]
 	@@con ||= [0,0]
@@ -3787,8 +3786,6 @@ class Stats
 	def Stats.gender=(val); @@gender=val; end
 	def Stats.age;          @@age;        end
 	def Stats.age=(val);    @@age=val;    end
-	def Stats.exp;          @@exp;        end
-	def Stats.exp=(val);    @@exp=val;    end
 	def Stats.level;        @@level;      end
 	def Stats.level=(val);  @@level=val;  end
 	def Stats.str;          @@str;        end
@@ -3811,11 +3808,21 @@ class Stats
 	def Stats.wis=(val);    @@wis=val;    end
 	def Stats.inf;          @@inf;        end
 	def Stats.inf=(val);    @@inf=val;    end
+	def Stats.exp
+		if XMLData.next_level_text =~ /until next level/
+			exp_threshold = [ 2500, 5000, 10000, 17500, 27500, 40000, 55000, 72500, 92500, 115000, 140000, 167000, 197500, 230000, 265000, 302000, 341000, 382000, 425000, 470000, 517000, 566000, 617000, 670000, 725000, 781500, 839500, 899000, 960000, 1022500, 1086500, 1152000, 1219000, 1287500, 1357500, 1429000, 1502000, 1576500, 1652500, 1730000, 1808500, 1888000, 1968500, 2050000, 2132500, 2216000, 2300500, 2386000, 2472500, 2560000, 2648000, 2736500, 2825500, 2915000, 3005000, 3095500, 3186500, 3278000, 3370000, 3462500, 3555500, 3649000, 3743000, 3837500, 3932500, 4028000, 4124000, 4220500, 4317500, 4415000, 4513000, 4611500, 4710500, 4810000, 4910000, 5010500, 5111500, 5213000, 5315000, 5417500, 5520500, 5624000, 5728000, 5832500, 5937500, 6043000, 6149000, 6255500, 6362500, 6470000, 6578000, 6686500, 6795500, 6905000, 7015000, 7125500, 7236500, 7348000, 7460000, 7572500 ]
+			exp_threshold[XMLData.level] - XMLData.next_level_text.slice(/[0-9]+/).to_i
+		else
+			XMLData.next_level_text.slice(/[0-9]+/).to_i
+		end
+	end
+	def Stats.exp=(val);    nil;    end
 	def Stats.serialize
-		[@@race,@@prof,@@gender,@@age,@@exp,@@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf]
+		[@@race,@@prof,@@gender,@@age,Stats.exp,@@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf]
 	end
 	def Stats.load_serialized=(array)
-		@@race,@@prof,@@gender,@@age,@@exp,@@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf = array
+		@@race,@@prof,@@gender,@@age = array[0..3]
+		@@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf = array[5..15]
 	end
 end
 
@@ -4242,8 +4249,15 @@ class Map
 		Map.load
 		GC.start
 	end
-	def Map.load(filename="#{$script_dir}map.dat")
+	def Map.load(filename=nil)
 		if $SAFE == 0
+			unless filename
+				if File.exists?("#{$data_dir}#{XMLData.game}/map.dat")
+					filename = "#{$data_dir}#{XMLData.game}/map.dat"
+				else
+					filename = "#{$script_dir}map.dat"
+				end
+			end
 			if File.exists?(filename)
 				File.open(filename, 'rb') { |file| @@list = Marshal.load(file.read) }
 				GC.start
@@ -4260,7 +4274,14 @@ class Map
 			UNTRUSTED_MAP_LOAD.call
 		end
 	end
-	def Map.load_xml(filename="#{$script_dir}map.xml")
+	def Map.load_xml(filename=nil)
+		unless filename
+			if File.exists?("#{$data_dir}#{XMLData.game}/map.xml")
+				filename = "#{$data_dir}#{XMLData.game}/map.xml"
+			else
+				filename = "#{$script_dir}map.xml"
+			end
+		end
 		unless File.exists?(filename)
 			raise Exception.exception("MapDatabaseError"), "Fatal error: file `#{filename}' does not exist!"
 		end
@@ -4303,7 +4324,7 @@ class Map
 		Map.load if @@list.empty?
 		nil
 	end
-	def Map.save(filename="#{$script_dir}map.dat")
+	def Map.save(filename="#{$data_dir}#{XMLData.game}/map.dat")
 		if $SAFE == 0
 			if File.exists?(filename)
 				respond "--- Backing up map database"
@@ -4330,7 +4351,7 @@ class Map
 			UNTRUSTED_MAP_SAVE.call
 		end
 	end
-	def Map.save_xml(filename="#{$script_dir}map.xml")
+	def Map.save_xml(filename="#{$data_dir}#{XMLData.game}/map.xml")
 		if File.exists?(filename)
 			respond "File exists!  Backing it up before proceeding..."
 			begin
@@ -5449,7 +5470,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 		elsif line == "You don't seem to be able to move to do that."
 			30.times { 
 				break if clear.include?('You regain control of your senses!')
-				sleep 0.1
+				sleep "0.1".to_f
 			}
 			put_dir.call
 		end
@@ -6481,80 +6502,127 @@ def unnoded_pulse
 end
 
 def empty_hands
-	$empty_hands = {
-		'right' => GameObj.right_hand,
-		'left' => GameObj.left_hand,
-		'close_lootsack' => false,
-		'sonic' => false,
-	}
+	$fill_hands_actions ||= Array.new
+	actions = Array.new
+	right_hand = GameObj.right_hand
+	left_hand = GameObj.left_hand
 	if UserVars.lootsack.nil? or UserVars.lootsack.empty?
 		lootsack = nil
 	else
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
-	if $empty_hands['right'].id
+	if right_hand.id
 		waitrt?
 		if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
-			$empty_hands['sonic'] = true
+			type = right_hand.noun
+			type = 'short' if type == 'sword' and right_hand.name =~ /short/
+			actions.unshift proc {
+				if sonic_weapon_song = Spell[1012]
+					sonic_weapon_song.cast(type) if sonic_weapon_song.known? and sonic_weapon_song.affordable?
+				end
+			}
 			fput 'stop 1012'
 		elsif lootsack
-			result = dothistimeout "put ##{$empty_hands['right'].id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+			actions.unshift proc { fput "get ##{right_hand.id}" }
+			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
 			if result =~ /^You can't .+ It's closed!$/
+				actions.push proc { fput "close ##{lootsack.id}" }
 				fput "open ##{lootsack.id}"
-				fput "put ##{$empty_hands['right'].id} in ##{lootsack.id}"
-				$empty_hands['close_lootsack'] = true
+				fput "put ##{right_hand.id} in ##{lootsack.id}"
 			end
 		else
+			actions.unshift proc { fput "get ##{right_hand.id}" }
 			fput 'stow right'
 		end
 	end
-	if $empty_hands['left'].id
+	if left_hand.id
 		waitrt?
-		if $empty_hands['left'].noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/
-			fput "wear ##{$empty_hands['left'].id}"
+		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$/)
+			actions.unshift proc { fput "remove ##{left_hand.id}" }
 		elsif lootsack
-			result = dothistimeout "put ##{$empty_hands['left'].id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+			actions.unshift proc { fput "get ##{left_hand.id}" }
+			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
 			if result =~ /^You can't .+ It's closed!$/
+				actions.push proc { fput "close ##{lootsack.id}" }
 				fput "open ##{lootsack.id}"
-				fput "put ##{$empty_hands['left'].id} in ##{lootsack.id}"
-				$empty_hands['close_lootsack'] = true
+				fput "put ##{left_hand.id} in ##{lootsack.id}"
 			end
 		else
+			actions.unshift proc { fput "get ##{left_hand.id}" }
 			fput 'stow left'
 		end
 	end
+	$fill_hands_actions.push(actions)
 end
 
 def fill_hands
-	$empty_hands ||= Hash.new
-	if $empty_hands['right'].id
-		waitrt?
-		if $empty_hands['sonic']
-			type = $empty_hands['right'].noun
-			type = 'short' if type == 'sword' and $empty_hands['right'].name =~ /short/
-			if sonic_weapon_song = Spell[1012]
-				sonic_weapon_song.cast(type) if sonic_weapon_song.known? and sonic_weapon_song.affordable?
+	$fill_hands_actions ||= Array.new
+	for action in $fill_hands_actions.pop
+		action.call
+	end
+end
+
+def empty_hand
+	$fill_hand_actions ||= Array.new
+	actions = Array.new
+	right_hand = GameObj.right_hand
+	left_hand = GameObj.left_hand
+	if UserVars.lootsack.nil? or UserVars.lootsack.empty?
+		lootsack = nil
+	else
+		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
+	end
+	unless (right_hand.id.nil? and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3)) or (left_hand.id.nil? and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3))
+		if right_hand.id and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3)
+			waitrt?
+			if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
+				type = right_hand.noun
+				type = 'short' if type == 'sword' and right_hand.name =~ /short/
+				actions.unshift proc {
+					if sonic_weapon_song = Spell[1012]
+						sonic_weapon_song.cast(type) if sonic_weapon_song.known? and sonic_weapon_song.affordable?
+					end
+				}
+				fput 'stop 1012'
+			elsif lootsack
+				actions.unshift proc { fput "get ##{right_hand.id}" }
+				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+				if result =~ /^You can't .+ It's closed!$/
+					actions.push proc { fput "close ##{lootsack.id}" }
+					fput "open ##{lootsack.id}"
+					fput "put ##{right_hand.id} in ##{lootsack.id}"
+				end
+			else
+				actions.unshift proc { fput "get ##{right_hand.id}" }
+				fput 'stow right'
 			end
-		else
-			fput "get ##{$empty_hands['right'].id}"
+		elsif left_hand.id and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
+			waitrt?
+			if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 2, /^You .*#{left_hand.noun}|^You can only wear \s+ items in that location\.$/)) and (wear_result !~ /^You can only wear \s+ items in that location\.$/)
+				actions.unshift proc { fput "remove ##{left_hand.id}" }
+			elsif lootsack
+				actions.unshift proc { fput "get ##{left_hand.id}" }
+				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+				if result =~ /^You can't .+ It's closed!$/
+					actions.push proc { fput "close ##{lootsack.id}" }
+					fput "open ##{lootsack.id}"
+					fput "put ##{left_hand.id} in ##{lootsack.id}"
+				end
+			else
+				actions.unshift proc { fput "get ##{left_hand.id}" }
+				fput 'stow left'
+			end
 		end
-		$empty_hands['right'] = nil
 	end
-	if $empty_hands['left'].id
-		waitrt?
-		if $empty_hands['left'].noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis/
-			fput "remove ##{$empty_hands['left'].id}"
-		else
-			fput "get ##{$empty_hands['left'].id}"
-		end
-		fput 'swap' if GameObj.right_hand.id == $empty_hands['left'].id
-		$empty_hands['left'] = nil
+
+	$fill_hand_actions.push(actions)
+end
+
+def fill_hand
+	$fill_hand_actions ||= Array.new
+	for action in $fill_hand_actions.pop
+		action.call
 	end
-	if $empty_hands['close_lootsack'] and (lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i })
-		fput "close ##{lootsack.id}"
-	end
-	$empty_hands['close_lootsack'] = false
-	$empty_hands['sonic'] = false
 end
 
 def dothis (action, success_line)
@@ -6950,12 +7018,12 @@ def heal_hosts(hosts_dir)
 	end
 end
 
-if $frontend == 'avalon'
-	$link_highlight_start = ''
-	$link_highlight_end = ''
-else
+if $frontend == 'wizard'
 	$link_highlight_start = "\207"
 	$link_highlight_end = "\240"
+else
+	$link_highlight_start = ''
+	$link_highlight_end = ''
 end
 
 def sf_to_wiz(line)
@@ -8221,7 +8289,7 @@ main_thread = Thread.new {
 			frontend_box = Gtk::HBox.new(false, 10)
 			frontend_box.pack_start(wizard_option, false, false, 0)
 			frontend_box.pack_start(stormfront_option, false, false, 0)
-			# frontend_box.pack_start(suks_option, false, false, 0)
+			#frontend_box.pack_start(suks_option, false, false, 0)
 
 			make_quick_option = Gtk::CheckButton.new('Save this info for quick game entry')
 
@@ -9130,133 +9198,31 @@ main_thread = Thread.new {
 			$_SERVER_.write("<c>\r\n")
 		}
 	elsif $frontend == 'suks'
-		client_io_string = String.new
-		$_CLIENT_ = StringIO.new(client_io_string)
-		$_CLIENT_READER_ = StringIO.new(client_io_string)
+=begin
+		io_string = String.new
+		$_CLIENT_ = StringIO.new(io_string)
+		$_CLIENT_READER_ = StringIO.new(io_string)
 		$stdout = $_CLIENT_
 		$_CLIENT_.sync = true
-		game_window = game_textview = game_textview_sw = script_exit = nil
-		game_textview_add_line = proc { |text|
-			Gtk.queue {
-				mark = game_textview.buffer.get_mark('insert_position')
-				iter = game_textview.buffer.get_iter_at_mark(mark)
-				scroll = (game_textview_sw.vadjustment.value >= (game_textview_sw.vadjustment.upper - game_textview_sw.vadjustment.page_size - "1e-12".to_f))
-				if text =~ /\btest\b/
-					game_textview.buffer.insert(iter, text, "monsterbold")
-				else
-					game_textview.buffer.insert(iter, text)
-				end
-				iter = game_textview.buffer.get_iter_at_mark(mark)
-				match_start, match_end = iter.forward_search('testies', Gtk::TextIter::SEARCH_TEXT_ONLY)
-				if match_start and match_end
-					game_textview.buffer.apply_tag('test_tag', match_start, match_end)
-				end
-				if scroll
-					mark = game_textview.buffer.create_mark('end', game_textview.buffer.end_iter, false)
-					game_textview.scroll_to_mark(mark, 0.to_f, false, 0, 0)
-				end
-				game_textview.buffer.move_mark('insert_position', game_textview.buffer.end_iter)
-			}
-		}
-		Gtk.queue {
-			input_box = Gtk::ComboBoxEntry.new()
-			input_box.child.modify_font(Pango::FontDescription.new('Courier New 12'))
-
-			game_textview = Gtk::TextView.new
-			game_textview.wrap_mode = Gtk::TextTag::WRAP_WORD
-			game_textview.editable = false
-			game_textview.cursor_visible = false
-			game_textview.buffer.text = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-			mark = game_textview.buffer.create_mark('end', game_textview.buffer.end_iter, false)
-			game_textview.scroll_to_mark(mark, 0.to_f, false, 0, 0)
-			game_textview.buffer.create_tag('monsterbold', { 'foreground' => 'yellow' })
-			game_textview.buffer.create_tag('test_tag', { 'foreground' => 'white' })
-			game_textview.modify_font(Pango::FontDescription.new('Courier New 12'))
-			game_textview.modify_text(Gtk::STATE_NORMAL, Gdk::Color.parse('gray'))
-			game_textview.modify_base(Gtk::STATE_NORMAL, Gdk::Color.parse('black'))
-			game_textview.buffer.create_mark('insert_position', game_textview.buffer.end_iter, true)
-
-			game_textview_sw = Gtk::ScrolledWindow.new
-			game_textview_sw.border_width = 0
-			game_textview_sw.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
-			game_textview_sw.add(game_textview)
-
-			box1 = Gtk::VBox.new(false, 5)
-			box1.pack_start(game_textview_sw, true, true, 0)
-			box1.pack_end(input_box, false, false, 0)
-
-			game_window = Gtk::Window.new
-			game_window.resizable = true
-			game_window.title = "Super Ultra Kobold Smasher 3000"
-			game_window.border_width = 5
-			game_window.set_size_request(1000, 600)
-			game_window.add(box1)
-
-			game_window.signal_connect('delete_event') {
-				# fixme: popup confirm box, send quit to game
-				Gtk.main_quit
-			}
-			input_box_length = 0
-			input_box.child.signal_connect('activate') {
-				Gtk.queue {
-					cmd = input_box.child.text.dup
-					game_textview_add_line.call(cmd)
-					input_box.child.text = String.new
-					if cmd.length > 3
-						# fixme: don't append duplicate
-						input_box.append_text(cmd)
-						if input_box_length > 49
-							input_box.remove_text(0)
-						else
-							input_box_length += 1
-						end
-					end
-					begin
-						$_IDLETIMESTAMP_ = Time.now
-						if Alias.find(cmd)
-							Alias.run(cmd)
-						else
-							do_client(cmd)
-						end
-					rescue
-						respond "--- error: client_thread: #{$!}"
-						respond $!.backtrace.first
-						$stderr.puts "error: client_thread: #{$!}"
-						$stderr.puts $!.backtrace
-					end
-				}
-			}
-			input_box.child.signal_connect('key-press-event') { |me,event|
-				key = Gdk::Keyval.to_name(event.keyval)
-				#respond key
-				if key == 'Tab'
-					true
-				end
-				#if key == "Home"
-				#	true
-				#elsif key == "End"
-				#	true
-				#elsif key == "Page_Down"
-				#	true
-				#elsif key == "Page_Up"
-				#	true
-				#elsif key == "Shift_L"
-				#	false
-				#elsif key == "Alt_L"
-				#	false
-				#else
-				#	false
-				#end
-			}
-			game_window.show_all
-		}
+		SUKS = SuperUltraKoboldSmasher.new
 		$login_time = Time.now
-
 		client_thread = Thread.new {
 			begin
 				loop {
 					if client_string = $_CLIENT_READER_.gets
-						game_textview_add_line.call("\n#{client_string.chomp}")
+						begin
+							REXML::Document.parse_stream(client_string, SUKS)
+						rescue
+							if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
+								# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
+								$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
+								retry
+							end
+							$stdout.puts "--- error: server_thread: #{$!}"
+							$stderr.puts "error: server_thread: #{$!}"
+							$stderr.puts $!.backtrace
+							SUKS.reset
+						end
 					else
 						sleep "0.011".to_f
 					end
@@ -9288,6 +9254,7 @@ main_thread = Thread.new {
 				$_SERVER_.write("<c>\r\n")
 			}
 		end
+=end
 	else
 		#
 		# shutdown listening socket
@@ -9452,8 +9419,27 @@ main_thread = Thread.new {
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
-						alt_string = sf_to_wiz(alt_string) if $frontend =~ /^(?:wizard|avalon)$/
-						$_CLIENT_.write(alt_string) unless $frontend == 'suks'
+=begin
+						if defined?(SUKS) and SUKS.active
+							begin
+								REXML::Document.parse_stream(alt_string, SUKS)
+							rescue
+								if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
+									# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
+									$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
+									retry
+								end
+								$stdout.puts "--- error: server_thread: #{$!}"
+								$stderr.puts "error: server_thread: #{$!}"
+								$stderr.puts $!.backtrace
+								SUKS.reset
+							end
+						end
+=end
+						if $frontend =~ /^(?:wizard|avalon)$/
+							alt_string = sf_to_wiz(alt_string)
+						end
+						$_CLIENT_.write(alt_string)
 					end
 					unless $_SERVERSTRING_ =~ /^<settings/
 						begin
