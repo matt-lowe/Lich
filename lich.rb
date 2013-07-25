@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.7'
+$version = '4.3.8'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -235,7 +235,8 @@ Dir.entries($temp_dir).delete_if { |fn| (fn == '.') or (fn == '..') }.each { |fi
 	end
 }
 
-
+=begin
+# fixme: Somehow this makes gtk2 fail to load?
 begin
 	require 'rubygems'
 rescue LoadError
@@ -245,6 +246,8 @@ rescue
 	$stdout.puts "warning: failed to load rubygems: #{$!}"
 	$stderr.puts "warning: failed to load rubygems: #{$!}"
 end
+=end
+
 require 'time'
 require 'socket'
 include Socket::Constants
