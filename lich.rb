@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.7'
+$version = '4.4.8'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3604,6 +3604,7 @@ class Spell
 	end
 	def time_per_formula(options={})
 		activator_modifier = { 'tap' => 0.5, 'rub' => 1, 'wave' => 1, 'raise' => 1.33, 'drink' => 0, 'bite' => 0, 'eat' => 0, 'gobble' => 0 }
+		can_haz_spell_ranks = /Spells\.(?:minorelemental|majorelemental|minorspiritual|majorspiritual|wizard|sorcerer|ranger|paladin|empath|cleric|bard|minormental)/
 		skills = [ 'Spells.minorelemental', 'Spells.majorelemental', 'Spells.minorspiritual', 'Spells.majorspiritual', 'Spells.wizard', 'Spells.sorcerer', 'Spells.ranger', 'Spells.paladin', 'Spells.empath', 'Spells.cleric', 'Spells.bard', 'Spells.minormental', 'Skills.magicitemuse', 'Skills.arancesymbols' ]
 		if options[:caster] and (options[:caster] !~ /^(?:self|#{XMLData.name})$/i)
 			if options[:target] and (options[:target].downcase == options[:caster].downcase)
@@ -3611,12 +3612,20 @@ class Spell
 			else
 				formula = @duration['target'][:duration].dup || @duration['self'][:duration].to_s.dup
 			end
-			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
-				formula = "(#{formula})/2.0"
+			if options[:activator] =~ /^(#{activator_modifier.keys.join('|')})$/i
+				if formula =~ can_haz_spell_ranks
+					skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
+					formula = "(#{formula})/2.0"
+				elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+					skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
+				end
 			elsif options[:activator] =~ /^(invoke|scroll)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks['#{options[:caster]}'].arcanesymbols.to_i") }
-				formula = "(#{formula})/2.0"
+				if formula =~ can_haz_spell_ranks
+					skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks['#{options[:caster]}'].arcanesymbols.to_i") }
+					formula = "(#{formula})/2.0"
+				elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+					skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks['#{options[:caster]}'].arcanesymbols.to_i") }
+				end
 			else
 				skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks[#{options[:caster].to_s.inspect}].#{skill_name.sub(/^(?:Spells|Skills)\./, '')}.to_i") }
 			end
@@ -3626,12 +3635,20 @@ class Spell
 			else
 				formula = @duration['self'][:duration].to_s.dup
 			end
-			if options[:activator] =~ /^(rub|wave|tap|raise|drink|bite|eat|gobble)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
-				formula = "(#{formula})/2.0"
+			if options[:activator] =~ /^(#{activator_modifier.keys.join('|')})$/i
+				if formula =~ can_haz_spell_ranks
+					skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
+					formula = "(#{formula})/2.0"
+				elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+					skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
+				end
 			elsif options[:activator] =~ /^(invoke|scroll)$/i
-				skills.each { |skill_name| formula.gsub!(skill_name, "Skills.arcanesymbols.to_i") }
-				formula = "(#{formula})/2.0"
+				if formula =~ can_haz_spell_ranks
+					skills.each { |skill_name| formula.gsub!(skill_name, "Skills.arcanesymbols.to_i") }
+					formula = "(#{formula})/2.0"
+				elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+					skills.each { |skill_name| formula.gsub!(skill_name, "Skills.arcanesymbols.to_i") }
+				end
 			end
 		end
 		UNTRUSTED_UNTAINT.call(formula)
