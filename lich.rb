@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.17'
+$version = '4.2.18'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3637,7 +3637,7 @@ class Spell
 		elsif (circle_num == 99) and (Society.status == 'Council of Light')
 			ranks = Society.rank
 		elsif (circle_num == 96)
-			if CMan[@name]
+			if CMan[@name].to_i > 0
 				return true
 			else
 				return false
