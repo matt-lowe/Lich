@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.6'
+$version = '4.2.7'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3630,7 +3630,7 @@ class Spell
 				self.timeleft = [ self.timeleft + self.time_per(mod_skills), 250.to_f].min
 			end
 		else
-			self.timeleft = self.time_per(mod_skills)
+			self.timeleft = [ self.time_per(mod_skills), 250 ].min
 		end
 		@active = true
 	end
@@ -4446,19 +4446,22 @@ class Map
 	end
 	def Map.current
 		Map.load if @@list.empty?
-		if @check_location
+		room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+		unless room
+			desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
+		end
+		if room.check_location
+			script = Script.self
+			save_want_downstream = script.want_downstream
+			script.want_downstream = true
 			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$/
+			script.want_downstream = save_want_downstream
 			current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
 			room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
 			unless room
 				desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
 				room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
-			end
-		else
-			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
-			unless room
-				desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-				room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
 			end
 		end
 		room
@@ -4478,14 +4481,13 @@ class Map
 				title = [ XMLData.room_title ]
 				description = [ XMLData.room_description.strip ]
 				paths = [ XMLData.room_exits_string.strip ]
-				if @@list.any? { |r| !r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
-					check_location = true
-				else
-					check_location = false
-				end
 				room = Map.new(Map.get_free_id, title, description, paths, current_location)
 				room.location = current_location
-				room.check_location = check_location
+				identical_rooms = @@list.find_all { |r| (r.location != current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+				if identical_rooms.length > 0
+					room.check_location = true
+					identical_rooms.each { |r| r.check_location = true }
+				end
 				return room
 			end
 		end
@@ -4893,8 +4895,7 @@ class Map
 			@id
 		else
 			target_list.delete_if { |room_num| shortest_distances[room_num].nil? }
-			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
-			target_list.first
+			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }.first
 		end
 	end
 	def find_all_nearest_by_tag(tag_name)
@@ -4905,13 +4906,13 @@ class Map
 		target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
 	end
 	def find_nearest(target_list)
+		target_list.collect! { |num| num.to_i }
 		previous, shortest_distances = Map.dijkstra(@id, target_list)
 		if target_list.include?(@id)
 			@id
 		else
 			target_list.delete_if { |room_num| shortest_distances[room_num].nil? }
-			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
-			target_list.first
+			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }.first
 		end
 	end
 	# depreciated
@@ -5840,6 +5841,14 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 		elsif line =~ /^You can't enter .+ and remain hidden or invisible\.|if he can't see you!$|^You can't enter .+ when you can't be seen\.$|^You can't do that without being seen\.$|^How do you intend to get .*? attention\?  After all, no one can see you right now\.$/
 			fput 'unhide'
 			put_dir.call
+		elsif (line == 'You take a few steps towards a rusty doorknob.') and (dir =~ /door/)
+			which = [ 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eight', 'ninth', 'tenth', 'eleventh', 'twelfth' ]
+			if dir =~ /\b#{which.join('|')}\b/
+				dir.sub!(/\b(#{which.join('|')})\b/) { "#{which[which.index($1)+1]}" }
+			else
+				dir.sub!('door', 'second door')
+			end
+			put_dir.call
 		elsif line =~ /^You can't go there|^You can't swim in that direction\.|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails|^There doesn't seem to be any way to do that at the moment\.$/
 			echo 'move: failed'
 			fill_hands if need_full_hands
@@ -5893,7 +5902,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				dir.sub!('climb', 'go')
 				put_dir.call
 			end
-		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$|^It's a bit too difficult to swim holding/
+		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$|^It's a bit too difficult to swim holding|^You will need both hands free for such a difficult task\./
 			need_full_hands = true
 			empty_hands
 			put_dir.call
@@ -7277,10 +7286,6 @@ def fill_left_hand
 		action.call
 	end
 end
-
-
-
-
 
 def dothis (action, success_line)
 	loop {
