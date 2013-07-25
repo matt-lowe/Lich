@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.57'
+$version = '4.1.58'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -580,6 +580,7 @@ class XMLParser
 		@obj_before_name = nil
 		@obj_name = nil
 		@obj_after_name = nil
+		@pc = nil
 		@last_obj = nil
 		@in_stream = false
 		@player_status = nil
@@ -936,7 +937,7 @@ class XMLParser
 				Alias.init
 				Favorites.init
 				if arg = ARGV.find { |a| a=~ /^\-\-start\-scripts=[A-z,]+$/ }
-					for script_name in arg.sub('--start-scritps=', '').split(',')
+					for script_name in arg.sub('--start-scripts=', '').split(',')
 						start_script(script_name)
 					end
 				end
@@ -978,20 +979,17 @@ class XMLParser
 					end
 				elsif @active_ids.include?('room players')
 					if @active_tags.include?('a')
-						GameObj.new_pc(@obj_exist, @obj_noun, @player_title.to_s + text)
-						GameObj.pcs[-1].status = @player_status unless @player_status.empty?
-						@player_status = String.new
+						@pc = GameObj.new_pc(@obj_exist, @obj_noun, "#{@player_title}#{text}", @player_status)
+						@player_status = nil
 					else
 						if (text =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text =~ / \(([\w\s]+)\)/)
-							if $1
-								if GameObj.pcs[-1].status.nil?
-									GameObj.pcs[-1].status = $1
-								else
-									GameObj.pcs[-1].status.concat(" #{$1}")
-								end
+							if @pc.status
+								@pc.status.concat " #{$1}"
+							else
+								@pc.status = $1
 							end
 						end
-						if text =~ /(?:^Also here: |, )([a-z\s]+)?([\w\s]+)?$/
+						if text =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s]+)?$/
 							@player_status = ($1.strip.gsub('the body of', 'dead')) if $1
 							@player_title = $2
 						end
@@ -3982,6 +3980,7 @@ class GameObj
 	@@npcs ||= Array.new
 	@@npc_status ||= Hash.new
 	@@pcs ||= Array.new
+	@@pc_status ||= Hash.new
 	@@inv ||= Array.new
 	@@contents ||= Hash.new
 	@@right_hand ||= nil
@@ -3992,30 +3991,40 @@ class GameObj
 	@@fam_pcs ||= Array.new
 	@@fam_room_desc ||= Array.new
 
+	def GameObj.pc_status
+		@@pc_status
+	end
 	attr_reader :id
 	attr_accessor :noun, :name, :before_name, :after_name
-	def initialize(id, noun, name, status=nil, before=nil, after=nil)
+	def initialize(id, noun, name, before=nil, after=nil)
 		@id = id
 		@noun = noun
 		@noun = 'lapis' if @noun == 'lapis lazuli'
 		@noun = 'hammer' if @noun == "Hammer of Kai"
 		@noun = 'mother-of-pearl' if (@noun == 'pearl') and (@name =~ /mother\-of\-pearl/)
 		@name = name
-		@@npc_status[@id] = status
 		@before_name = before
 		@after_name = after
 	end
 	def status
 		if @@npc_status.keys.include?(@id)
 			@@npc_status[@id]
-		elsif @@loot.find { |obj| obj.id == @id } or @@pcs.find { |obj| obj.id == @id } or @@inv.find { |obj| obj.id == @id } or @@room_desc.find { |obj| obj.id == @id } or @@fam_loot.find { |obj| obj.id == @id } or @@fam_npcs.find { |obj| obj.id == @id } or @@fam_pcs.find { |obj| obj.id == @id } or @@fam_room_desc.find { |obj| obj.id == @id } or (@@right_hand.id == @id) or (@@left_hand.id == @id) or @@contents.values.find { |list| list.find { |obj| obj.id == @id  } }
+		elsif @@pc_status.keys.include?(@id)
+			@@pc_status[@id]
+		elsif @@loot.find { |obj| obj.id == @id } or @@inv.find { |obj| obj.id == @id } or @@room_desc.find { |obj| obj.id == @id } or @@fam_loot.find { |obj| obj.id == @id } or @@fam_npcs.find { |obj| obj.id == @id } or @@fam_pcs.find { |obj| obj.id == @id } or @@fam_room_desc.find { |obj| obj.id == @id } or (@@right_hand.id == @id) or (@@left_hand.id == @id) or @@contents.values.find { |list| list.find { |obj| obj.id == @id  } }
 			nil
 		else
 			'gone'
 		end
 	end
 	def status=(val)
-		@@npc_status[@id] = val
+		if @@npcs.any? { |npc| npc.id == @id }
+			@@npc_status[@id] = val
+		elsif @@pcs.any? { |pc| pc.id == @id }
+			@@pc_status[@id] = val
+		else
+			nil
+		end
 	end
 	def to_s
 		@noun
@@ -4030,44 +4039,55 @@ class GameObj
 		"#{@before_name}#{' ' unless @before_name.nil?}#{name}#{' ' unless @after_name.nil?}#{@after_name}"
 	end
 	def GameObj.new_npc(id, noun, name, status=nil)
-		obj = GameObj.new(id, noun, name, status)
+		obj = GameObj.new(id, noun, name)
 		@@npcs.push(obj)
+		@@npc_status[id] = status
+		obj
 	end
 	def GameObj.new_loot(id, noun, name)
-		obj = GameObj.new(id, noun, name, nil)
+		obj = GameObj.new(id, noun, name)
 		@@loot.push(obj)
+		obj
 	end
 	def GameObj.new_pc(id, noun, name, status=nil)
-		obj = GameObj.new(id, noun, name, status)
+		obj = GameObj.new(id, noun, name)
 		@@pcs.push(obj)
+		@@pc_status[id] = status
+		obj
 	end
 	def GameObj.new_inv(id, noun, name, container=nil, before=nil, after=nil)
-		obj = GameObj.new(id, noun, name, nil, before, after)
+		obj = GameObj.new(id, noun, name, before, after)
 		if container
 			@@contents[container].push(obj)
 		else
 			@@inv.push(obj)
 		end
+		obj
 	end
 	def GameObj.new_room_desc(id, noun, name)
 		obj = GameObj.new(id, noun, name)
 		@@room_desc.push(obj)
+		obj
 	end
 	def GameObj.new_fam_room_desc(id, noun, name)
 		obj = GameObj.new(id, noun, name)
 		@@fam_room_desc.push(obj)
+		obj
 	end
 	def GameObj.new_fam_loot(id, noun, name)
 		obj = GameObj.new(id, noun, name)
 		@@fam_loot.push(obj)
+		obj
 	end
 	def GameObj.new_fam_npc(id, noun, name)
 		obj = GameObj.new(id, noun, name)
 		@@fam_npcs.push(obj)
+		obj
 	end
 	def GameObj.new_fam_pc(id, noun, name)
 		obj = GameObj.new(id, noun, name)
 		@@fam_pcs.push(obj)
+		obj
 	end
 	def GameObj.new_right_hand(id, noun, name)
 		@@right_hand = GameObj.new(id, noun, name)
@@ -4090,6 +4110,7 @@ class GameObj
 	end
 	def GameObj.clear_pcs
 		@@pcs.clear
+		@@pc_status.clear
 	end
 	def GameObj.clear_inv
 		@@inv.clear
@@ -4257,26 +4278,37 @@ class Map
 	end
 	def Map.load(filename=nil)
 		if $SAFE == 0
-			unless filename
-				if version = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.dat$/ }.collect { |filename| filename.slice(/[0-9]+/) }.sort.last
-					filename = "#{$data_dir}#{XMLData.game}/map-#{version}.dat"
-				elsif File.exists?("#{$data_dir}#{XMLData.game}/map.dat")
-					filename = "#{$data_dir}#{XMLData.game}/map.dat"
-				else
-					filename = "#{$script_dir}map.dat"
+			file_list = Array.new
+			if filename.nil?
+				file_list.concat Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.dat$/ }.collect { |filename| "#{$data_dir}#{XMLData.game}/#{filename}" }.sort.reverse
+				if File.exists?("#{$data_dir}#{XMLData.game}/map.dat")
+					file_list.push "#{$data_dir}#{XMLData.game}/map.dat"
 				end
-			end
-			if File.exists?(filename)
-				File.open(filename, 'rb') { |file| @@list = Marshal.load(file.read) }
-				GC.start
-				# try not to freak out if we load an old style map database
-				if (Map.list[0].desc.class == String) or (Map.list[0].title.class == String) or (Map.list[0].paths.class == String)
-					Map.list.each { |room| room.desc = [ room.desc ] if room.desc.class == String; room.title = [ room.title ] if room.title.class == String; room.paths = [ room.paths ] if room.paths.class == String }
+				if File.exists?("#{$script_dir}map.dat")
+					file_list.push "#{$script_dir}map.dat"
 				end
-				true
 			else
-				respond "--- error: File does not exist: #{filename}"
-				false
+				file_list.push(filename)
+			end
+			if file_list.empty?
+				respond "--- error: no map database found"
+				return false
+			end
+			error = false
+			while filename = file_list.shift
+				begin
+					File.open(filename, 'rb') { |file| @@list = Marshal.load(file.read) }
+					GC.start
+					respond "--- loaded #{filename}" if error
+					return true
+				rescue
+					error = true
+					if file_list.empty?
+						respond "--- error: failed to load #{filename}: #{$!}"
+					else
+						respond "--- warning: failed to load #{filename}: #{$!}"
+					end
+				end
 			end
 		else
 			UNTRUSTED_MAP_LOAD.call
@@ -9058,7 +9090,6 @@ main_thread = Thread.new {
 			end
 		end
 		gamehost, gameport = fix_game_host_port.call(gamehost, gameport)
-#		gamehost, gameport = break_game_host_port.call(gamehost, gameport)
 		$stderr.puts "info: connecting to game server (#{gamehost}:#{gameport})"
 		begin
 			$_SERVER_ = TCPSocket.open(gamehost, gameport)
