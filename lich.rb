@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.11'
+$version = '4.3.12'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3792,7 +3792,7 @@ class Spell
 			false 
 		elsif (self.stamina_cost > 0) and (Spell[9699].active? or not checkstamina(self.stamina_cost))
 			false
-		elsif (self.spirit_cost > 0) and not checkspirit(self.spirit_cost + 1 + [ 9912, 9913, 9914, 9916, 9916, 9916, 9916, 9916 ].delete_if { |num| !Spell[num].active? }.length)
+		elsif (self.spirit_cost > 0) and not checkspirit(self.spirit_cost + 1 + [ 9912, 9913, 9914, 9916, 9916, 9916 ].delete_if { |num| !Spell[num].active? }.length)
 			false
 		else
 			true
@@ -4059,6 +4059,9 @@ class CMan
 	@@twin_hammerfists   ||= 0
 	@@weapon_bonding     ||= 0
 	@@vanish             ||= 0
+	@@duck_and_weave     ||= 0
+	@@slipery_mind       ||= 0
+	@@predators_eye      ||= 0
 
 	def CMan.bearhug;            @@bearhug;            end
 	def CMan.berserk;            @@berserk;            end
@@ -4114,6 +4117,9 @@ class CMan
 	def CMan.twin_hammerfists;   @@twin_hammerfists;   end
 	def CMan.weapon_bonding;     @@weapon_bonding;     end
 	def CMan.vanish;             @@vanish;             end
+	def CMan.duck_and_weave;     @@duck_and_weave;     end
+	def CMan.slipery_mind;       @@slipery_mind;       end
+	def CMan.predators_eye;      @@predators_eye;      end
 
 	def CMan.bearhug=(val);            @@bearhug=val;            end
 	def CMan.berserk=(val);            @@berserk=val;            end
@@ -4169,15 +4175,18 @@ class CMan
 	def CMan.twin_hammerfists=(val);   @@twin_hammerfists=val;   end
 	def CMan.weapon_bonding=(val);     @@weapon_bonding=val;     end
 	def CMan.vanish=(val);             @@vanish=val;             end
+	def CMan.duck_and_weave=(val);     @@duck_and_weave=val;     end
+	def CMan.slipery_mind=(val);       @@slipery_mind=val;       end
+	def CMan.predators_eye=(val);      @@predators_eye=val;      end
 
 	def CMan.method_missing(arg1, arg2=nil)
 		nil
 	end
 	def CMan.[](name)
-		CMan.send(name.gsub(/[\s\-]/, '_').downcase)
+		CMan.send(name.gsub(/[\s\-]/, '_').gsub("'", "").downcase)
 	end
 	def CMan.[]=(name,val)
-		CMan.send("#{name.gsub(/[\s\-]/, '_').downcase}=", val.to_i)
+		CMan.send("#{name.gsub(/[\s\-]/, '_').gsub("'", "").downcase}=", val.to_i)
 	end
 end
 
