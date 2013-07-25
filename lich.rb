@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.32'
+$version = '4.1.33'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -545,7 +545,7 @@ class String
 end
 
 class XMLParser
-	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :spellfront, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id
 	include StreamListener
 
 	def initialize
@@ -557,8 +557,13 @@ class XMLParser
 		@current_stream = String.new
 		@current_style = String.new
 		@stow_container_id = nil
+		@obj_location = nil
 		@obj_exist = nil
 		@obj_noun = nil
+		@obj_before_name = nil
+		@obj_name = nil
+		@obj_after_name = nil
+		@last_obj = nil
 		@in_stream = false
 		@player_status = nil
 		@fam_mode = String.new
@@ -594,6 +599,7 @@ class XMLParser
 
 		@name = String.new
 		@game = String.new
+		@player_id = String.new
 		@mana = 0
 		@max_mana = 0
 		@health = 0
@@ -613,6 +619,7 @@ class XMLParser
 		@indicator = Hash.new
 		@injuries = {'back' => {'scar' => 0, 'wound' => 0}, 'leftHand' => {'scar' => 0, 'wound' => 0}, 'rightHand' => {'scar' => 0, 'wound' => 0}, 'head' => {'scar' => 0, 'wound' => 0}, 'rightArm' => {'scar' => 0, 'wound' => 0}, 'abdomen' => {'scar' => 0, 'wound' => 0}, 'leftEye' => {'scar' => 0, 'wound' => 0}, 'leftArm' => {'scar' => 0, 'wound' => 0}, 'chest' => {'scar' => 0, 'wound' => 0}, 'leftFoot' => {'scar' => 0, 'wound' => 0}, 'rightFoot' => {'scar' => 0, 'wound' => 0}, 'rightLeg' => {'scar' => 0, 'wound' => 0}, 'neck' => {'scar' => 0, 'wound' => 0}, 'leftLeg' => {'scar' => 0, 'wound' => 0}, 'nsys' => {'scar' => 0, 'wound' => 0}, 'rightEye' => {'scar' => 0, 'wound' => 0}}
 		@injury_mode = 0
+
 	end
 
 	def reset
@@ -671,7 +678,7 @@ class XMLParser
 					GameObj.clear_room_desc
 				# elsif attributes['id'] == 'sprite'
 				end
-			elsif (name == 'a') or (name == 'right') or (name == 'left')
+			elsif name =~ /^(?:a|right|left)$/
 				@obj_exist = attributes['exist']
 				@obj_noun = attributes['noun']
 			elsif name == 'clearContainer'
@@ -682,6 +689,15 @@ class XMLParser
 				end
 			elsif name == 'deleteContainer'
 				GameObj.delete_container(attributes['id'])
+			elsif name == 'inv'
+				if attributes['id'] == 'stow'
+					@obj_location = @stow_container_id
+				else
+					@obj_location = attributes['id']
+				end
+				@obj_before_name = nil
+				@obj_name = nil
+				@obj_after_name = nil
 			elsif name == 'progressBar'
 				if attributes['id'] == 'pbarStance'
 					@stance_text = attributes['text'].split.first
@@ -849,6 +865,14 @@ class XMLParser
 				elsif attributes['id'] == 'bounty'
 					@bounty_task = String.new
 				end
+			elsif (name == 'playerID')
+				@player_id = attributes['id']
+				unless $frontend == 'wizard'
+					LichSettings[@player_id] ||= Hash.new
+					if LichSettings[@player_id]['enable_inventory_boxes']
+						DownstreamHook.remove('inventory_boxes_off')
+					end
+				end
 			elsif (name == 'app') and (@name = attributes['char'])
 				@game = attributes['game']
 				if $frontend == 'wizard'
@@ -877,11 +901,6 @@ class XMLParser
 					$_CLIENT_.puts "\034GSl#{sprintf('%-45s', GameObj.left_hand.name)}\r\n"
 					$_CLIENT_.puts "\034GSq#{sprintf('%010d', @server_time)}\r\n"
 					$_CLIENT_.puts "\034GSQ#{sprintf('%010d', @roundtime_end)}\r\n" if @roundtime_end > 0
-				else
-					LichSettings[@name] ||= Hash.new
-					if LichSettings[@name]['enable_inventory_boxes']
-						DownstreamHook.remove('inventory_boxes_off')
-					end
 				end
 				$_SERVER_.puts("<c>_flag Display Inventory Boxes 1")
 				UserVariables.init
@@ -959,17 +978,14 @@ class XMLParser
 				end
 			elsif @active_tags.include?('inv')
 				if @active_tags.include?('a')
-					container_id = @active_ids.find { |id| !id.nil? }
-					if container_id.to_s == 'stow'
-						container_id = @stow_container_id
-					end
-					unless container_id.nil? or (container_id == @obj_exist)
-						obj = GameObj.new_inv(@obj_exist, @obj_noun, text, container_id)
-					end
+					@obj_name = text
+				elsif @active_ids.include('stow') and text == ' is closed.'
+					GameObj.delete_container(@stow_container_id)
+					@obj_location = nil
+				elsif @obj_name.nil?
+					@obj_before_name = text.strip
 				else
-					if @active_ids.include('stow') and text == ' is closed.'
-						GameObj.delete_container(@stow_container_id)
-					end
+					@obj_after_name = text.strip
 				end
 			elsif @current_stream == 'spellfront'
 				@spellfront.push(text.strip)
@@ -1036,7 +1052,9 @@ class XMLParser
 	end
 	def tag_end(name)
 		begin
-			if @send_fake_tags and (@active_ids.last == 'room exits')
+			if (name == 'inv') and (@obj_exist != @obj_location)
+				GameObj.new_inv(@obj_exist, @obj_noun, @obj_name, @obj_location, @obj_before_name, @obj_after_name)
+			elsif @send_fake_tags and (@active_ids.last == 'room exits')
 				gsl_exits = String.new
 				@room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
 				$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
@@ -3463,14 +3481,16 @@ class GameObj
 	@@fam_pcs ||= Array.new
 	@@fam_room_desc ||= Array.new
 	attr_reader :id
-	attr_accessor :noun, :name, :status
-	def initialize(id, noun, name, status=nil)
+	attr_accessor :noun, :name, :status, :before_name, :after_name
+	def initialize(id, noun, name, status=nil, before=nil, after=nil)
 		@id = id
 		@noun = noun
 		@noun = 'lapis' if @noun == 'lapis lazuli'
 		# fixme: 'mother-of-pearl' gives 'pearl' as the noun?
 		@noun = 'mother-of-pearl' if (@noun == 'pearl') and (@name =~ /mother\-of\-pearl/)
 		@name = name
+		@before_name = before
+		@after_name = after
 		@status = status
 	end
 	def GameObj
@@ -3481,6 +3501,9 @@ class GameObj
 	end
 	def empty?
 		false
+	end
+	def full_name
+		"#{@before_name}#{' ' unless @before_name.nil?}#{name}#{' ' unless @after_name.nil?}#{@after_name}"
 	end
 	def GameObj.new_npc(id, noun, name, status=nil)
 		obj = GameObj.new(id, noun, name, status)
@@ -3494,8 +3517,8 @@ class GameObj
 		obj = GameObj.new(id, noun, name, status)
 		@@pcs.push(obj)
 	end
-	def GameObj.new_inv(id, noun, name, container=nil)
-		obj = GameObj.new(id, noun, name)
+	def GameObj.new_inv(id, noun, name, container=nil, before=nil, after=nil)
+		obj = GameObj.new(id, noun, name, nil, before, after)
 		if container
 			@@contents[container].push(obj)
 		else
@@ -4846,7 +4869,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			sleep 1
 			waitrt?
 			put_dir.call
-		elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$|^You search for a way to make the climb .*? but without success\.$|^You start to climb .* you fall to the ground|^You attempt to climb .* wrong approach/
+		elsif line =~ /^Climbing.*(?:plunge|fall)|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$|^You search for a way to make the climb .*? but without success\.$|^You start to climb .* you fall to the ground|^You attempt to climb .* wrong approach/
 			sleep 1
 			waitrt?
 			fput 'stand' unless standing?
@@ -5119,7 +5142,7 @@ def percentmind(num=nil)
 end
 
 def checkfried
-	if XMLData.mind_text =~ /fried|saturated/
+	if XMLData.mind_text =~ /must rest|saturated/
 		true
 	else
 		false
@@ -8681,11 +8704,11 @@ main_thread = Thread.new {
 					if client_string =~ /^(?:<c>)?_flag Display Inventory Boxes ([01])/
 						if $1 == '1'
 							DownstreamHook.remove('inventory_boxes_off')
-							LichSettings[XMLData.name]['enable_inventory_boxes'] = true
+							LichSettings[XMLData.player_id]['enable_inventory_boxes'] = true
 							LichSettings.save
 						else
 							DownstreamHook.add('inventory_boxes_off', inv_off_proc)
-							LichSettings[XMLData.name]['enable_inventory_boxes'] = false
+							LichSettings[XMLData.player_id]['enable_inventory_boxes'] = false
 							LichSettings.save
 						end
 						nil
@@ -8693,12 +8716,12 @@ main_thread = Thread.new {
 						if $1.downcase == 'on'
 							DownstreamHook.remove('inventory_boxes_off')
 							respond 'You have enabled viewing of inventory and container windows.'
-							LichSettings[XMLData.name]['enable_inventory_boxes'] = true
+							LichSettings[XMLData.player_id]['enable_inventory_boxes'] = true
 							LichSettings.save
 						else
 							DownstreamHook.add('inventory_boxes_off', inv_off_proc)
 							respond 'You have disabled viewing of inventory and container windows.'
-							LichSettings[XMLData.name]['enable_inventory_boxes'] = false
+							LichSettings[XMLData.player_id]['enable_inventory_boxes'] = false
 							LichSettings.save
 						end
 						nil
