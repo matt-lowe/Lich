@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.56'
+$version = '4.1.57'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -216,6 +216,7 @@ $stderr.sync = true
 
 $stderr.puts "info: #{Time.now}"
 $stderr.puts "info: Lich #{$version}"
+$stderr.puts "info: Ruby #{RUBY_VERSION}"
 $stderr.puts "info: #{RUBY_PLATFORM}"
 $stderr.puts "info: $lich_dir: #{$lich_dir}"
 $stderr.puts "info: $script_dir: #{$script_dir}"
@@ -843,7 +844,7 @@ class XMLParser
 								}
 								@nerve_tracker_num += 1
 								DownstreamHook.add('nerve_tracker', action)
-								$_SERVER_.puts "<c>health\n"
+								$_SERVER_.puts "#{$cmd_prefix}health\n"
 							}
 						end
 					else
@@ -904,9 +905,9 @@ class XMLParser
 					Dir.mkdir("#{$data_dir}#{@game}/#{@name}")
 				end
 				if $frontend =~ /^(?:wizard|avalon)$/
-					$_SERVER_.puts "<c>_flag Display Dialog Boxes 0"
+					$_SERVER_.puts "#{$cmd_prefix}_flag Display Dialog Boxes 0"
 					sleep "0.05".to_f
-					$_SERVER_.puts "<c>_injury 2"
+					$_SERVER_.puts "#{$cmd_prefix}_injury 2"
 					sleep "0.05".to_f
 					# fixme: game name hardcoded as Gemstone IV; maybe doesn't make any difference to the client
 					$_CLIENT_.puts "\034GSB0000000000#{attributes['char']}\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
@@ -930,10 +931,15 @@ class XMLParser
 					$_CLIENT_.puts "\034GSq#{sprintf('%010d', @server_time)}\r\n"
 					$_CLIENT_.puts "\034GSQ#{sprintf('%010d', @roundtime_end)}\r\n" if @roundtime_end > 0
 				end
-				$_SERVER_.puts("<c>_flag Display Inventory Boxes 1")
+				$_SERVER_.puts("#{$cmd_prefix}_flag Display Inventory Boxes 1")
 				UserVariables.init
 				Alias.init
 				Favorites.init
+				if arg = ARGV.find { |a| a=~ /^\-\-start\-scripts=[A-z,]+$/ }
+					for script_name in arg.sub('--start-scritps=', '').split(',')
+						start_script(script_name)
+					end
+				end
 			end
 		rescue
 			$stdout.puts "--- error: XMLParser.tag_start: #{$!}"
@@ -3656,7 +3662,7 @@ class Spell
 				else
 					cast_cmd = 'cast'
 				end
-				if (target.nil? or target.to_s.empty?) and (@type =~ /attack/i)
+				if (target.nil? or target.to_s.empty?) and (@type =~ /attack/i) and not [410,912,909].include?(@num)
 					cast_cmd += ' target'
 				elsif target.class == GameObj
 					cast_cmd += " ##{target.id}"
@@ -4252,7 +4258,9 @@ class Map
 	def Map.load(filename=nil)
 		if $SAFE == 0
 			unless filename
-				if File.exists?("#{$data_dir}#{XMLData.game}/map.dat")
+				if version = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.dat$/ }.collect { |filename| filename.slice(/[0-9]+/) }.sort.last
+					filename = "#{$data_dir}#{XMLData.game}/map-#{version}.dat"
+				elsif File.exists?("#{$data_dir}#{XMLData.game}/map.dat")
 					filename = "#{$data_dir}#{XMLData.game}/map.dat"
 				else
 					filename = "#{$script_dir}map.dat"
@@ -4324,7 +4332,7 @@ class Map
 		Map.load if @@list.empty?
 		nil
 	end
-	def Map.save(filename="#{$data_dir}#{XMLData.game}/map.dat")
+	def Map.save(filename="#{$data_dir}#{XMLData.game}/map-#{Time.now.to_i}.dat")
 		if $SAFE == 0
 			if File.exists?(filename)
 				respond "--- Backing up map database"
@@ -5358,6 +5366,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 
 	need_full_hands = false
 	tried_open = false
+	tried_fix_drag = false
 	line_count = 0
 	room_count = XMLData.room_count
 	giveup_time = Time.now.to_i + giveup_seconds.to_i
@@ -5428,6 +5437,17 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 		elsif line =~ /^You can't climb that\./
 			dir.gsub!('climb', 'go')
 			put_dir.call
+		elsif line =~ /^You can't drag/
+			if tried_fix_drag
+				fill_hands if need_full_hands
+				Script.self.downstream_buffer.unshift(save_stream)
+				Script.self.downstream_buffer.flatten!
+				return false
+			else
+				tried_fix_drag = true
+				dir.sub!('climb', 'go')
+				put_dir.call
+			end
 		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$|^It's a bit too difficult to swim holding/
 			need_full_hands = true
 			empty_hands
@@ -6325,9 +6345,9 @@ def put(*messages)
 	messages.each { |message|
 		message.chomp!
 		unless scr = Script.self then scr = "(script unknown)" end
-		$_CLIENTBUFFER_.push("[#{scr}]#{$SEND_CHARACTER}<c>#{message}\r\n")
+		$_CLIENTBUFFER_.push("[#{scr}]#{$SEND_CHARACTER}#{$cmd_prefix}#{message}\r\n")
 		respond("[#{scr}]#{$SEND_CHARACTER}#{message}\r\n") unless scr.silent
-		$_SERVER_.write("<c>#{message}\n")
+		$_SERVER_.write("#{$cmd_prefix}#{message}\n")
 		$_LASTUPSTREAM_ = "[#{scr}]#{$SEND_CHARACTER}#{message}"
 	}
 end
@@ -6614,7 +6634,6 @@ def empty_hand
 			end
 		end
 	end
-
 	$fill_hand_actions.push(actions)
 end
 
@@ -7018,13 +7037,8 @@ def heal_hosts(hosts_dir)
 	end
 end
 
-if $frontend == 'wizard'
-	$link_highlight_start = "\207"
-	$link_highlight_end = "\240"
-else
-	$link_highlight_start = ''
-	$link_highlight_end = ''
-end
+$link_highlight_start = ''
+$link_highlight_end = ''
 
 def sf_to_wiz(line)
 	# fixme: voln thoughts
@@ -7587,7 +7601,7 @@ def do_client(client_string)
 		if $offline_mode
 			respond "--- Lich: offline mode: ignoring #{client_string}"
 		else
-			client_string = "<c>bbs\n" if ($frontend =~ /^(?:wizard|avalon)$/) and (client_string == "<c>\egbbk\n") # launch forum
+			client_string = "#{$cmd_prefix}bbs\n" if ($frontend =~ /^(?:wizard|avalon)$/) and (client_string == "#{$cmd_prefix}\egbbk\n") # launch forum
 			$_SERVER_.puts client_string
 		end
 		$_CLIENTBUFFER_.push client_string
@@ -7676,6 +7690,26 @@ fix_game_host_port = proc { |gamehost,gameport|
 	elsif (gamehost == 'prime.dr.game.play.net') and (gameport.to_i == 4901)
 		gamehost = 'dr.simutronics.net'
 		gameport = 11024
+	end
+	[ gamehost, gameport ]
+}
+
+break_game_host_port = proc { |gamehost,gameport|
+	if (gamehost == 'storm.gs4.game.play.net') and (gameport.to_i == 10324)
+		gamehost = 'gs4.simutronics.net'
+		gameport = 10321
+	elsif (gamehost == 'storm.gs4.game.play.net') and (gameport.to_i == 10124)
+		gamehost = 'gs-plat.simutronics.net'
+		gameport = 10121
+	elsif (gamehost == 'storm.gs4.game.play.net') and (gameport.to_i == 10024)
+		gamehost = 'gs3.simutronics.net'
+		gameport = 4900
+	elsif (gamehost == 'storm.gs4.game.play.net') and (gameport.to_i == 10324)
+		game_host = 'gs4.simutronics.net'
+		game_port = 10321
+	elsif (gamehost == 'dr.simutronics.net') and (gameport.to_i == 11024)
+		gamehost = 'prime.dr.game.play.net'
+		gameport = 4901
 	end
 	[ gamehost, gameport ]
 }
@@ -7936,6 +7970,7 @@ main_thread = Thread.new {
 	             sge = nil
 	    $ZLIB_STREAM = false
 	 $SEND_CHARACTER = '>'
+	     $cmd_prefix = '<c>'
 
 	LichSettings.load
 	LichSettings['lich_char'] ||= ';'
@@ -9023,8 +9058,23 @@ main_thread = Thread.new {
 			end
 		end
 		gamehost, gameport = fix_game_host_port.call(gamehost, gameport)
+#		gamehost, gameport = break_game_host_port.call(gamehost, gameport)
 		$stderr.puts "info: connecting to game server (#{gamehost}:#{gameport})"
-		$_SERVER_ = TCPSocket.open(gamehost, gameport)
+		begin
+			$_SERVER_ = TCPSocket.open(gamehost, gameport)
+		rescue
+			$stderr.puts "error: #{$!}"
+			gamehost, gameport = break_game_host_port.call(gamehost, gameport)
+			$stderr.puts "info: connecting to game server (#{gamehost}:#{gameport})"
+			begin
+				$_SERVER_ = TCPSocket.open(gamehost, gameport)
+			rescue
+				$stderr.puts "error: #{$!}"
+				$stderr.puts "info: exiting..."
+				$_CLIENT_.close rescue()
+				exit
+			end
+		end
 		$stderr.puts 'info: connected'
 	elsif game_host and game_port
 		hosts_dir ||= find_hosts_dir
@@ -9080,7 +9130,12 @@ main_thread = Thread.new {
 		else
 			$stderr.puts 'info: connecting to the real game host...'
 			game_host, game_port = fix_game_host_port.call(game_host, game_port)
-			$_SERVER_ = TCPSocket.open(game_host, game_port)
+			begin
+				$_SERVER_ = TCPSocket.open(game_host, game_port)
+			rescue
+				puts $!
+				exit
+			end
 			$stderr.puts 'info: connection with the game host is open'
 		end
 	else
@@ -9250,8 +9305,8 @@ main_thread = Thread.new {
 			#
 			2.times {
 				sleep "0.3".to_f
-				$_CLIENTBUFFER_.push("<c>\r\n")
-				$_SERVER_.write("<c>\r\n")
+				$_CLIENTBUFFER_.push("#{$cmd_prefix}\r\n")
+				$_SERVER_.write("#{$cmd_prefix}\r\n")
 			}
 		end
 =end
@@ -9300,13 +9355,13 @@ main_thread = Thread.new {
 				#
 				2.times {
 					sleep "0.3".to_f
-					$_CLIENTBUFFER_.push("<c>\r\n")
-					$_SERVER_.write("<c>\r\n")
+					$_CLIENTBUFFER_.push("#{$cmd_prefix}\r\n")
+					$_SERVER_.write("#{$cmd_prefix}\r\n")
 				}
 				#
 				# set up some stuff
 				#
-				for client_string in [ "<c>_injury 2\r\n", "<c>_flag Display Inventory Boxes 1\r\n", "<c>_flag Display Dialog Boxes 0\r\n" ]
+				for client_string in [ "#{$cmd_prefix}_injury 2\r\n", "#{$cmd_prefix}_flag Display Inventory Boxes 1\r\n", "#{$cmd_prefix}_flag Display Dialog Boxes 0\r\n" ]
 					$_CLIENTBUFFER_.push(client_string)
 					$_SERVER_.write(client_string)
 				end
@@ -9375,7 +9430,7 @@ main_thread = Thread.new {
 
 			begin
 				while client_string = $_CLIENT_.gets
-					client_string = '<c>' + client_string if $frontend =~ /^(?:wizard|avalon)$/
+					client_string = "#{$cmd_prefix}#{client_string}" if $frontend =~ /^(?:wizard|avalon)$/
 					begin
 						$_IDLETIMESTAMP_ = Time.now
 						if Alias.find(client_string)
@@ -9406,10 +9461,64 @@ main_thread = Thread.new {
 
 	wait_while { $offline_mode }
 
+	if $frontend == 'wizard'
+		$link_highlight_start = "\207"
+		$link_highlight_end = "\240"
+	end
+
 	server_thread = Thread.new {
 		begin
+=begin
+			50.times {
+				server_thread.kill unless $_SERVERSTRING_ = $_SERVER_.gets
+				$stderr.puts $_SERVERSTRING_
+				$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
+				begin
+					# The Rift, Scatter is broken...
+					$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
+					# Cry For Help spell is broken...
+					if $_SERVERSTRING_ =~ /<pushStream id="familiar" \/><prompt time="[0-9]+">&gt;<\/prompt>/
+						$_SERVERSTRING_.sub!('<pushStream id="familiar" />', '')
+					end
+					$_SERVERBUFFER_.push($_SERVERSTRING_)
+					if alt_string = DownstreamHook.run($_SERVERSTRING_)
+						if $frontend =~ /^(?:wizard|avalon)$/
+							alt_string = sf_to_wiz(alt_string)
+						end
+						$_CLIENT_.write(alt_string)
+					end
+					unless $_SERVERSTRING_ =~ /^<setting/
+						begin
+							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+						rescue
+							if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
+								# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
+								$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
+								retry
+							end
+							$stdout.puts "--- error: server_thread: #{$!}"
+							$stderr.puts "error: server_thread: #{$!}"
+							$stderr.puts $!.backtrace
+							XMLData.reset
+						end
+						Script.new_downstream_xml($_SERVERSTRING_)
+						stripped_server = strip_xml($_SERVERSTRING_)
+						stripped_server.split("\r\n").each { |line|
+							unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring\.|joins the adventure\.|(?:is off to a rough start!  (?:H|She) )?just bit the dust!|was just incinerated!|was just vaporized!|has been vaporized!|has disconnected\.)$|^ \* The death cry of [A-Z][a-z]+ echoes in your mind!$|^\r*\n*$/
+								Script.new_downstream(line) unless line.empty?
+							end
+						}
+					end
+				rescue
+					$stdout.puts "--- error: server_thread: #{$!}"
+					$stderr.puts "error: server_thread: #{$!}"
+					$stderr.puts $!.backtrace
+				end
+			}
+=end
 			while $_SERVERSTRING_ = $_SERVER_.gets
 				begin
+					$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
 					# The Rift, Scatter is broken...
 					$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
 					# Cry For Help spell is broken...
@@ -9419,7 +9528,6 @@ main_thread = Thread.new {
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
-=begin
 						if defined?(SUKS) and SUKS.active
 							begin
 								REXML::Document.parse_stream(alt_string, SUKS)
@@ -9435,13 +9543,13 @@ main_thread = Thread.new {
 								SUKS.reset
 							end
 						end
-=end
 						if $frontend =~ /^(?:wizard|avalon)$/
 							alt_string = sf_to_wiz(alt_string)
 						end
 						$_CLIENT_.write(alt_string)
 					end
-					unless $_SERVERSTRING_ =~ /^<settings/
+					unless $_SERVERSTRING_ =~ /^<setting/
+
 						begin
 							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
 						rescue
@@ -9507,16 +9615,20 @@ main_thread = Thread.new {
 	server_thread.join
 	client_thread.kill rescue()
 
+	$stderr.puts 'info: stopping scripts...'
 	Script.running.each { |script| script.kill }
 	Script.hidden.each { |script| script.kill }
 	100.times { sleep "0.1".to_f; break if Script.running.empty? and Script.hidden.empty? }
+	$stderr.puts 'info: saving script data...'
 	Settings.save_all
 	GameSettings.save_all
 	CharSettings.save_all
 	# sending quit seems to cause Lich to hang.  $_SERVER_.closed? is false even though it appears to be closed.
 	# $_SERVER_.puts('quit') unless $_SERVER_.closed?
+	$stderr.puts 'info: closing connections...'
 	$_SERVER_.close rescue()
 	$_CLIENT_.close rescue()
+	$stderr.puts 'info: exiting'
 	Gtk.queue { Gtk.main_quit } if HAVE_GTK
 	exit
 }
