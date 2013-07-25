@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.45'
+$version = '4.1.46'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3516,21 +3516,27 @@ class Spell
 		script = Script.self
 		if @type.nil?
 			echo "cast: spell missing type (#{@name})"
+			sleep 0.1
 			return false
 		end
 		unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 			echo 'cast: not enough mana'
+			sleep 0.1
 			return false
 		end
 		unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 			echo 'cast: not enough spirit'
+			sleep 0.1
 			return false
 		end
 		unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 			echo 'cast: not enough stamina'
+			sleep 0.1
 			return false
 		end
 		begin
+			save_xml_state = script.want_downstream_xml
+			script.want_downstream_xml = false
 			@@cast_lock.push(script)
 			until (@@cast_lock.first == script) or @@cast_lock.empty?
 				sleep "0.1".to_f
@@ -3539,14 +3545,17 @@ class Spell
 			end
 			unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 				echo 'cast: not enough mana'
+				sleep 0.1
 				return false
 			end
 			unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 				echo 'cast: not enough spirit'
+				sleep 0.1
 				return false
 			end
 			unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 				echo 'cast: not enough stamina'
+				sleep 0.1
 				return false
 			end
 			if @castProc
@@ -3591,14 +3600,17 @@ class Spell
 							dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 							unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 								echo 'cast: not enough mana'
+								sleep 0.1
 								return false
 							end
 							unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 								echo 'cast: not enough spirit'
+								sleep 0.1
 								return false
 							end
 							unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 								echo 'cast: not enough stamina'
+								sleep 0.1
 								return false
 							end
 						end
@@ -3612,9 +3624,11 @@ class Spell
 								dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 								unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 									echo 'cast: not enough mana'
+									sleep 0.1
 									return false
 								end
 							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$/
+								sleep 0.1
 								return false
 							end
 						}
@@ -3635,6 +3649,7 @@ class Spell
 			end
 		ensure
 			@@cast_lock.delete(script)
+			script.want_downstream_xml = save_xml_state
 		end
 	end
 	# for backwards compatiblity
@@ -6494,7 +6509,7 @@ def dothis (action, success_line)
 end
 
 def dothistimeout (action, timeout, success_line)
-	end_time = Time.now.to_i + timeout
+	end_time = Time.now.to_f + timeout
 	line = nil
 	loop {
 		clear
@@ -6509,15 +6524,15 @@ def dothistimeout (action, timeout, success_line)
 				else
 					sleep "0.3".to_f
 				end
-				end_time = Time.now.to_i + timeout
+				end_time = Time.now.to_f + timeout
 				break
 			elsif line == 'Sorry, you may only type ahead 1 command.'
 				sleep 1
-				end_time = Time.now.to_i + timeout
+				end_time = Time.now.to_f + timeout
 				break
 			elsif line == 'You are still stunned.'
 				wait_while { stunned? }
-				end_time = Time.now.to_i + timeout
+				end_time = Time.now.to_f + timeout
 				break
 			elsif line == 'That is impossible to do while unconscious!'
 				100.times {
@@ -6553,7 +6568,7 @@ def dothistimeout (action, timeout, success_line)
 			elsif line =~ success_line
 				return line
 			end
-			if Time.now.to_i >= end_time
+			if Time.now.to_f >= end_time
 				return nil
 			end
 		}
@@ -7787,6 +7802,7 @@ main_thread = Thread.new {
 		}
 		temp_array = nil
 		LichSettings['quick_game_entry'] = nil
+		LichSettings.save
 	end
 
 	$clean_lich_char = LichSettings['lich_char']
@@ -7913,7 +7929,7 @@ main_thread = Thread.new {
 		if File.exists?("#{$data_dir}entry.dat")
 			entry_data = File.open("#{$data_dir}entry.dat", 'r') { |file|
 				begin
-					Marshal.load(file.read.unpack('m').first)
+					Marshal.load(file.read.unpack('m').first).sort { |a,b| a[:char_name] <=> b[:char_name] }
 				rescue
 					Array.new
 				end
@@ -8160,12 +8176,14 @@ main_thread = Thread.new {
 								liststore.clear
 								for game in response.sub(/^M\t/, '').scan(/[^\t]+\t[^\t^\n]+/)
 									game_code, game_name = game.split("\t")
-									login_server.puts "G\t#{game_code}\n"
-									login_server.gets
 									login_server.puts "N\t#{game_code}\n"
 									if login_server.gets =~ /STORM/
 										login_server.puts "F\t#{game_code}\n"
 										if login_server.gets =~ /NORMAL|PREMIUM|TRIAL/
+											login_server.puts "G\t#{game_code}\n"
+											login_server.gets
+											login_server.puts "P\t#{game_code}\n"
+											login_server.gets
 											login_server.puts "C\n"
 											for code_name in login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/)
 												char_code, char_name = code_name.split("\t")
