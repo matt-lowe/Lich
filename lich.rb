@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.59'
+$version = '4.1.60'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -666,10 +666,7 @@ class XMLParser
 				GameObj.clear_inv if attributes['id'].to_s == 'inv'
 			elsif name == 'popStream'
 				@in_stream = false
-				if attributes['id'] == 'room'
-					@room_count += 1
-					$room_count += 1 
-				elsif attributes['id'] == 'bounty'
+				if attributes['id'] == 'bounty'
 					@bounty_task.strip!
 				end
 				@current_stream = String.new
@@ -854,8 +851,13 @@ class XMLParser
 					end
 				end
 				$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, make_wound_gsl, make_scar_gsl)}\r\n" if @send_fake_tags
-			elsif (name == 'streamWindow') and (attributes['id'] == 'main') and attributes['subtitle']
-				@room_title = '[' + attributes['subtitle'][3..-1] + ']'
+			elsif (name == 'streamWindow')
+				if attributes['id'] == 'room'
+					@room_count += 1
+					$room_count += 1 
+				elsif (attributes['id'] == 'main') and attributes['subtitle']
+					@room_title = '[' + attributes['subtitle'][3..-1] + ']'
+				end
 			elsif name == 'compass'
 				if @current_stream == 'familiar'
 					@fam_mode = String.new
@@ -4224,7 +4226,7 @@ end
 class Map
 	@@list ||= Array.new
 	attr_reader :id
-	attr_accessor :title, :desc, :paths, :wayto, :timeto, :pause, :geo, :realcost, :searched, :nadj, :adj, :parent, :atlas_id, :map_name, :map_x, :map_y, :map_roomsize
+	attr_accessor :title, :desc, :paths, :wayto, :timeto, :pause, :geo, :searched, :nadj, :adj, :parent, :atlas_id, :map_name, :map_x, :map_y, :map_roomsize
 	def initialize(id, title, desc, paths, wayto={}, timeto={}, geo=nil, pause = nil)
 		@id, @title, @desc, @paths, @wayto, @timeto, @geo, @pause = id, title, desc, paths, wayto, timeto, geo, pause
 		@@list[@id] = self
@@ -9654,6 +9656,7 @@ main_thread = Thread.new {
 	Script.hidden.each { |script| script.kill }
 	100.times { sleep "0.1".to_f; break if Script.running.empty? and Script.hidden.empty? }
 	$stderr.puts 'info: saving script data...'
+	UserVariables.save
 	Settings.save_all
 	GameSettings.save_all
 	CharSettings.save_all
