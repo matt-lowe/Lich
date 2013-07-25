@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.6'
+$version = '4.3.7'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -235,6 +235,16 @@ Dir.entries($temp_dir).delete_if { |fn| (fn == '.') or (fn == '..') }.each { |fi
 	end
 }
 
+
+begin
+	require 'rubygems'
+rescue LoadError
+	$stdout.puts "warning: failed to load rubygems: #{$!}"
+	$stderr.puts "warning: failed to load rubygems: #{$!}"
+rescue
+	$stdout.puts "warning: failed to load rubygems: #{$!}"
+	$stderr.puts "warning: failed to load rubygems: #{$!}"
+end
 require 'time'
 require 'socket'
 include Socket::Constants
@@ -1075,14 +1085,15 @@ class XMLParser
 								GameObj.new_pc(nil, noun, player, status)
 							}
 						else
-							if (text_string =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text_string =~ / \(([\w\s]+)\)/)
+							if (text_string =~ /^ who (?:is|appears) ([\w\s]+)(?:,| and|\.|$)/) or (text_string =~ / \(([\w\s]+)\)(?: \(([\w\s]+)\))?/)
 								if @pc.status
 									@pc.status.concat " #{$1}"
 								else
 									@pc.status = $1
 								end
+								@pc.status.concat " #{$2}" if $2
 							end
-							if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s\-!\?']+)?$/
+							if text_string =~ /(?:^Also here: |, )(?:a )?([a-z\s]+)?([\w\s\-!\?',]+)?$/
 								@player_status = ($1.strip.gsub('the body of', 'dead')) if $1
 								@player_title = $2
 							end
@@ -3769,7 +3780,7 @@ class Spell
 	def Spell.unlock_cast
 		@@cast_lock.delete(Script.self)
 	end
-	def cast(target=nil)
+	def cast(target=nil, results_of_interest=nil)
 		script = Script.self
 		if @type.nil?
 			echo "cast: spell missing type (#{@name})"
@@ -3792,7 +3803,9 @@ class Spell
 			return false
 		end
 		begin
-			save_xml_state = script.want_downstream_xml
+			save_want_downstream = script.want_downstream
+			save_want_downstream_xml = script.want_downstream_xml
+			script.want_downstream = true
 			script.want_downstream_xml = false
 			@@cast_lock.push(script)
 			until (@@cast_lock.first == script) or @@cast_lock.empty?
@@ -3907,7 +3920,7 @@ class Spell
 								end
 							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$/
 								sleep "0.1".to_f
-								return false
+								return prepare_result
 							end
 						}
 					end
@@ -3915,7 +3928,12 @@ class Spell
 						put 'stance offensive'
 						# dothistimeout 'stance offensive', 5, /^You (?:are now in|move into) an? offensive stance|^You are unable to change your stance\.$/
 					end
-					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$/
+					if results_of_interest.class == Regexp
+						results_regex = /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$|^You can't think clearly enough to prepare a spell!$|#{results_of_interest.to_s}/
+					else
+						results_regex = /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$|^You can't think clearly enough to prepare a spell!$/
+					end
+					cast_result = dothistimeout cast_cmd, 5, results_regex
 					if cast_result == "You don't seem to be able to move to do that."
 						100.times { break if clear.any? { |line| line =~ /^You regain control of your senses!$/ }; sleep "0.1".to_f }
 						cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$|^You feel a sudden rush of power as you absorb [0-9]+ mana!$|^You are unable to drain it!$|leaving you casting at nothing but thin air!$|^You don't seem to be able to move to do that\.$|^Provoking a GameMaster is not such a good idea\.$|^You do not know that spell!$/
@@ -3931,8 +3949,9 @@ class Spell
 				cast_result
 			end
 		ensure
+			script.want_downstream = save_want_downstream
+			script.want_downstream_xml = save_want_downstream_xml
 			@@cast_lock.delete(script)
-			script.want_downstream_xml = save_xml_state
 		end
 	end
 	# for backwards compatiblity
@@ -4719,6 +4738,7 @@ class Map
 			script = Script.self
 			save_want_downstream = script.want_downstream
 			script.want_downstream = true
+			waitrt?
 			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$|^You can't do that while submerged under water\.$|^You can't do that\.$|^It would be rude not to give your full attention to the performance\.$|^You can't do that while hanging around up here!$|^You are too distracted by the difficulty of staying alive in these treacherous waters to do that\.$|^You carefully survey your surroundings but are unable to guess your current location\.$/
 			script.want_downstream = save_want_downstream
 			@@current_location_count = XMLData.room_count
@@ -4903,8 +4923,10 @@ class Map
 				end
 			}
 			text = proc { |text_string|
-				if current_tag =~ /^(?:title|description|paths|tag|unique_loot)$/
-					room[$1].push(text_string)
+				if current_tag == 'tag'
+					room['tags'].push(text_string)
+				elsif current_tag =~ /^(?:title|description|paths|tag|unique_loot)$/
+					room[current_tag].push(text_string)
 				elsif current_tag == 'exit' and current_attributes['target']
 					if current_attributes['type'].downcase == 'string'
 						room['wayto'][current_attributes['target']] = text_string
@@ -4927,25 +4949,34 @@ class Map
 				elsif element == 'map'
 					missing_end = false
 				end
+				current_tag = nil
 			}
 			begin
 				File.open(filename) { |file|
 					while line = file.gets
 						buffer.concat(line)
-						while str = buffer.slice!(/^[^<]+(?=<)|^<[^<]+>/)
-							if str[0] == '<'
-								if str[1] == '/'
+						# fixme: remove   (?=<)   ?
+						while str = buffer.slice!(/^<([^>]+)><\/\1>|^[^<]+(?=<)|^<[^<]+>/)
+							if str[0,1] == '<'
+								if str[1,1] == '/'
 									element = /^<\/([^\s>\/]+)/.match(str).captures.first
 									tag_end.call(element)
 								else
-									element = /^<([^\s>\/]+)/.match(str).captures.first
-									attributes = Hash.new
-									str.scan(/([A-z][A-z0-9_\-]*)=(["'])(.*?)\2/).each { |attr| attributes[attr[0]] = attr[2].gsub(/&(lt|gt|quot|apos|amp)/) { unescape[$1] } }
-									tag_start.call(element, attributes)
-									tag_end.call(element) if str[-2] == '/'
+									if str =~ /^<([^>]+)><\/\1>/
+										element = $1
+										tag_start.call(element)
+										text.call('')
+										tag_end.call(element)
+									else
+										element = /^<([^\s>\/]+)/.match(str).captures.first
+										attributes = Hash.new
+										str.scan(/([A-z][A-z0-9_\-]*)=(["'])(.*?)\2/).each { |attr| attributes[attr[0]] = attr[2].gsub(/&(#{unescape.keys.join('|')});/) { unescape[$1] } }
+										tag_start.call(element, attributes)
+										tag_end.call(element) if str[-2,1] == '/'
+									end
 								end
 							else
-								text.call(str.gsub(/&(lt|gt|quot|apos|amp)/) { unescape[$1] })
+								text.call(str.gsub(/&(#{unescape.keys.join('|')});/) { unescape[$1] })
 							end
 						end
 					end
@@ -6903,13 +6934,13 @@ def pause(num=1)
 	end
 end
 
-def cast(spell, target=nil)
+def cast(spell, target=nil, results_of_interest=nil)
 	if spell.class == Spell
-		spell.cast(target)
+		spell.cast(target, results_of_interest)
 	elsif ( (spell.class == Fixnum) or (spell.to_s =~ /^[0-9]+$/) ) and (find_spell = Spell[spell.to_i])
-		find_spell.cast(target)
+		find_spell.cast(target, results_of_interest)
 	elsif (spell.class == String) and (find_spell = Spell[spell])
-		find_spell.cast(target)
+		find_spell.cast(target, results_of_interest)
 	else
 		echo "cast: invalid spell (#{spell})"
 		false
@@ -7359,17 +7390,17 @@ def empty_hands
 			}
 		elsif lootsack
 			actions.unshift proc {
-				dothistimeout "get ##{left_hand.id}", 3, /^You remove|^Get what\?/
+				dothistimeout "get ##{left_hand.id}", 3, /^You remove|^You reach into|^Get what\?/
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 			if result =~ /^You can't .+ It's closed!$/
 				actions.push proc { fput "close ##{lootsack.id}" }
 				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
 			end
 		else
 			actions.unshift proc {
@@ -7379,7 +7410,7 @@ def empty_hands
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow left', 3, /^You put|^You are not holding anything/
+			dothistimeout 'stow left', 3, /^You put|^You slip .*? into|^You are not holding anything/
 		end
 	end
 	if right_hand.id
@@ -7399,17 +7430,17 @@ def empty_hands
 			fput 'stop 1012'
 		elsif lootsack
 			actions.unshift proc {
-				dothistimeout "get ##{right_hand.id}", 3, /^You remove|^Get what\?/
+				dothistimeout "get ##{right_hand.id}", 3, /^You remove|^You reach into|^Get what\?/
 				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 			if result =~ /^You can't .+ It's closed!$/
 				actions.push proc { fput "close ##{lootsack.id}" }
 				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
 			end
 		else
 			actions.unshift proc {
@@ -7419,7 +7450,7 @@ def empty_hands
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow right', 3, /^You put|^You are not holding anything/
+			dothistimeout 'stow right', 3, /^You put|^You slip .*? into|^You are not holding anything/
 		end
 	end
 	$fill_hands_actions.push(actions)
@@ -7466,11 +7497,11 @@ def empty_hand
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
 				}
-				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
 					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+					dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
 				end
 			else
 				actions.unshift proc {
@@ -7480,7 +7511,7 @@ def empty_hand
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
 				}
-				dothistimeout 'stow right', 3, /^You put|^You are not holding anything/
+				dothistimeout 'stow right', 3, /^You put|^You slip .*? into|^You are not holding anything/
 			end
 		elsif left_hand.id and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3)
 			waitrt?
@@ -7500,11 +7531,11 @@ def empty_hand
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
 				}
-				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
 					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+					dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
 				end
 			else
 				actions.unshift proc {
@@ -7514,7 +7545,7 @@ def empty_hand
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
 				}
-				dothistimeout 'stow left', 3, /^You put|^You are not holding anything/
+				dothistimeout 'stow left', 3, /^You put|^You slip .*? into|^You are not holding anything/
 			end
 		end
 	end
@@ -7560,11 +7591,11 @@ def empty_right_hand
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 			if result =~ /^You can't .+ It's closed!$/
 				actions.push proc { fput "close ##{lootsack.id}" }
 				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
 			end
 		else
 			actions.unshift proc {
@@ -7574,7 +7605,7 @@ def empty_right_hand
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow right', 3, /^You put|^You are not holding anything/
+			dothistimeout 'stow right', 3, /^You put|^You slip .*? into|^You are not holding anything/
 		end
 	end
 	$fill_right_hand_actions.push(actions)
@@ -7614,11 +7645,11 @@ def empty_left_hand
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$|^I could not find what you were referring to\./
+			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
 			if result =~ /^You can't .+ It's closed!$/
 				actions.push proc { fput "close ##{lootsack.id}" }
 				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^I could not find what you were referring to\./
+				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
 			end
 		else
 			actions.unshift proc {
@@ -7628,7 +7659,7 @@ def empty_left_hand
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow left', 3, /^You put|^You are not holding anything/
+			dothistimeout 'stow left', 3, /^You put|^You slip .*? into|^You are not holding anything/
 		end
 	end
 	$fill_left_hand_actions.push(actions)
@@ -8057,6 +8088,10 @@ def sf_to_wiz(line)
 		$sftowiz_multiline = nil
 		if line =~ /<LaunchURL src="(.*?)" \/>/
 			$_CLIENT_.puts "\034GSw00005\r\nhttps://www.play.net#{$1}\r\n"
+		end
+		if line =~ /<preset id='speech'>(.*?)<\/preset>/m
+			# hard-coded highlight string?
+			line = line.sub(/<preset id='speech'>.*?<\/preset>/m, "\212#{$1}\240")
 		end
 		if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?:(.*?)<popStream\/>/m
 			line = line.sub(/<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*[\s\[\]\(\)A-z]+:.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}#{$3}")
@@ -9231,6 +9266,7 @@ main_thread = Thread.new {
 					login_server.close unless login_server.closed?
 					$stdout.puts "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
 					$stderr.puts "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
+					reconnect_if_wanted.call
 				end
 			else
 				$stdout.puts "error: failed to connect to server"
