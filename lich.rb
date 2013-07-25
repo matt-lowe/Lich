@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.0'
+$version = '4.4.1'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4082,7 +4082,7 @@ class Spell
 	def stacks;        self.stackable?              end
 	def command;       nil;                         end
 	def circlename;    self.circle_name;            end
-	def selfonly;     @availability == 'self-cast'; end
+	def selfonly;      @availability != 'all';      end
 end
 
 class CMan
