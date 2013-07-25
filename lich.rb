@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.7'
+$version = '4.1.8'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -370,6 +370,7 @@ UNTRUSTED_START_EXEC_SCRIPT = proc { |cmd_data,flags|
 UNTRUSTED_SCRIPT_EXISTS = proc { |scriptname|
 	Script.exists?(scriptname)
 }
+UNTRUSTED_UNTAINT = proc { |str| str.untaint }
 
 JUMP = Exception.exception('JUMP')
 JUMP_ERROR = Exception.exception('JUMP_ERROR')
@@ -1603,7 +1604,7 @@ end
 
 class Script
 	@@running ||= Array.new
-	attr_reader :name, :vars, :safe, :labels, :file_name, :label_order, :thread_group, :trusted
+	attr_reader :name, :vars, :safe, :labels, :file_name, :label_order, :thread_group
 	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings
 	def Script.self
 		if script = @@running.find { |scr| scr.thread_group == Thread.current.group }
@@ -1660,7 +1661,6 @@ class Script
 	end
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
-		@trusted = LichSettings['trusted_scripts'].include?(@name)
 		@file_name = file_name
 		@vars = Array.new
 		unless cli_vars.empty?
@@ -1865,11 +1865,6 @@ class ExecScript<Script
 			num.succ!
 		end
 		@name = "exec#{num}"
-		if flags[:trusted].nil?
-			@trusted = true
-		else
-			@trusted = flags[:trusted]
-		end
 		@cmd_data = cmd_data
 		@vars = Array.new
 		@downstream_buffer = LimitedArray.new
@@ -1907,7 +1902,6 @@ end
 class WizardScript<Script
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
-		@trusted = false
 		@file_name = file_name
 		@vars = Array.new
 		unless cli_vars.empty?
@@ -3771,6 +3765,11 @@ end
 class StringProc
 	def initialize(string)
 		@string = string
+		if $SAFE == 0
+			@string.untaint
+		else
+			UNTRUSTED_UNTAINT.call(@string)
+		end
 	end
 	def kind_of?(type)
 		Proc.new {}.kind_of? type
@@ -3780,10 +3779,8 @@ class StringProc
 	end
 	def call(*args)
 		if $SAFE < 3
-			@string.untaint
 			proc { $SAFE = 3; eval(@string) }.call
 		else
-			@string.untaint
 			eval(@string)
 		end
 	end
@@ -3922,11 +3919,13 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 		end
 		begin
 			if file_name =~ /cmd$|wiz$/i
+				trusted = false
 				new_script = WizardScript.new("#{$script_dir}#{file_name}", cli_vars)
 			else
+				trusted = LichSettings['trusted_scripts'].include?(file_name.sub(/\.lic$/,''))
 				new_script = Script.new("#{$script_dir}#{file_name}", cli_vars)
 			end
-			if !new_script.trusted
+			if not trusted
 				script_binding = UntrustedScriptBinder.new.create_block.binding
 			elsif new_script.labels.length > 1
 				script_binding = ScriptBinder.new.create_block.binding
@@ -3948,77 +3947,144 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 				eval('script = Script.self', script_binding, script.name) if script_binding
 				Thread.current.priority = 1
 				respond("--- Lich: #{script.name} active.") unless script.quiet
-				begin
-					while (script = Script.self) and script.current_label
-						if script.trusted
+				if trusted
+					begin
+						while (script = Script.self) and script.current_label
 							eval(script.labels[script.current_label].to_s, script_binding, script.name)
-						else
-							proc { eval("$SAFE = 3 if $SAFE < 3\n#{script.labels[script.current_label]}", script_binding, script.name, 0) }.call
+							Script.self.get_next_label
 						end
-						Script.self.get_next_label
-					end
-					Script.self.kill
-				rescue SystemExit
-					Script.self.kill
-				rescue SyntaxError
-					$stdout.puts "--- SyntaxError: #{$!}"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- SyntaxError: #{$!}"
-					$stderr.puts $!.backtrace
-					respond "--- Lich: cannot execute #{Script.self.name}, aborting."
-					Script.self.kill
-				rescue ScriptError
-					$stdout.puts "--- ScriptError: #{$!}"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- ScriptError: #{$!}"
-					$stderr.puts $!.backtrace
-					Script.self.kill
-				rescue NoMemoryError
-					$stdout.puts "--- NoMemoryError: #{$!}"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- NoMemoryError: #{$!}"
-					$stderr.puts $!.backtrace
-					Script.self.kill
-				rescue LoadError
-					$stdout.puts "--- LoadError: #{$!}"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- LoadError: #{$!}"
-					$stderr.puts $!.backtrace
-					Script.self.kill
-				rescue SecurityError
-					$stdout.puts "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
-					$stdout.puts "--- SecurityError: #{$!}"
-					$stdout.puts $!.backtrace[0..1]
-					$stderr.puts "--- SecurityError: #{$!}"
-					$stderr.puts $!.backtrace
-					Script.self.kill
-				rescue ThreadError
-					$stdout.puts "--- ThreadError: #{$!}"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- ThreadError: #{$!}"
-					$stderr.puts $!.backtrace
-					Script.self.kill
-				rescue Exception
-					if $! == JUMP
-						retry if Script.self.get_next_label != JUMP_ERROR
-						$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+						Script.self.kill
+					rescue SystemExit
+						Script.self.kill
+					rescue SyntaxError
+						$stdout.puts "--- SyntaxError: #{$!}"
 						$stdout.puts $!.backtrace.first
-						$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+						$stderr.puts "--- SyntaxError: #{$!}"
+						$stderr.puts $!.backtrace
+						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
+						Script.self.kill
+					rescue ScriptError
+						$stdout.puts "--- ScriptError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- ScriptError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
-					else
-						$stdout.puts "--- Exception: #{$!}"
+					rescue NoMemoryError
+						$stdout.puts "--- NoMemoryError: #{$!}"
 						$stdout.puts $!.backtrace.first
-						$stderr.puts "--- Exception: #{$!}"
+						$stderr.puts "--- NoMemoryError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue LoadError
+						$stdout.puts "--- LoadError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- LoadError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue SecurityError
+						$stdout.puts "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
+						$stdout.puts "--- SecurityError: #{$!}"
+						$stdout.puts $!.backtrace[0..1]
+						$stderr.puts "--- SecurityError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue ThreadError
+						$stdout.puts "--- ThreadError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- ThreadError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue Exception
+						if $! == JUMP
+							retry if Script.self.get_next_label != JUMP_ERROR
+							$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+							$stdout.puts $!.backtrace.first
+							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+							$stderr.puts $!.backtrace
+							Script.self.kill
+						else
+							$stdout.puts "--- Exception: #{$!}"
+							$stdout.puts $!.backtrace.first
+							$stderr.puts "--- Exception: #{$!}"
+							$stderr.puts $!.backtrace
+							Script.self.kill
+						end
+					rescue
+						$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					end
-				rescue
-					$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
-					$stdout.puts $!.backtrace.first
-					$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
-					$stderr.puts $!.backtrace
-					Script.self.kill
+				else
+					begin
+						while (script = Script.self) and script.current_label
+							proc { eval("$SAFE = 3 if $SAFE < 3\n#{script.labels[script.current_label]}", script_binding, script.name, 0) }.call
+							Script.self.get_next_label
+						end
+						Script.self.kill
+					rescue SystemExit
+						Script.self.kill
+					rescue SyntaxError
+						$stdout.puts "--- SyntaxError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- SyntaxError: #{$!}"
+						$stderr.puts $!.backtrace
+						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
+						Script.self.kill
+					rescue ScriptError
+						$stdout.puts "--- ScriptError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- ScriptError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue NoMemoryError
+						$stdout.puts "--- NoMemoryError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- NoMemoryError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue LoadError
+						$stdout.puts "--- LoadError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- LoadError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue SecurityError
+						$stdout.puts "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
+						$stdout.puts "--- SecurityError: #{$!}"
+						$stdout.puts $!.backtrace[0..1]
+						$stderr.puts "--- SecurityError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue ThreadError
+						$stdout.puts "--- ThreadError: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- ThreadError: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					rescue Exception
+						if $! == JUMP
+							retry if Script.self.get_next_label != JUMP_ERROR
+							$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+							$stdout.puts $!.backtrace.first
+							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+							$stderr.puts $!.backtrace
+							Script.self.kill
+						else
+							$stdout.puts "--- Exception: #{$!}"
+							$stdout.puts $!.backtrace.first
+							$stderr.puts "--- Exception: #{$!}"
+							$stderr.puts $!.backtrace
+							Script.self.kill
+						end
+					rescue
+						$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
+						$stdout.puts $!.backtrace.first
+						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
+						$stderr.puts $!.backtrace
+						Script.self.kill
+					end
 				end
 			else
 				respond 'start_script screwed up...'
