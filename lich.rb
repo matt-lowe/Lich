@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.10'
+$version = '4.2.11'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -8407,6 +8407,45 @@ break_game_host_port = proc { |gamehost,gameport|
 	[ gamehost, gameport ]
 }
 
+get_process_list = proc {
+	begin
+		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+			process_query_information = 1024
+			process_vm_read = 16
+			max_list_size = 100
+			access = process_query_information | process_vm_read
+			kernel32 = DL.dlopen('kernel32.dll')
+			open_process = kernel32['OpenProcess', 'LLLL']
+			begin
+				psapi = DL.dlopen('psapi.dll')
+				enum_processes = psapi['EnumProcesses', 'LPLP']
+				get_module_filename_ex = psapi['GetModuleFileNameEx', 'LLLPL']
+			rescue
+				enum_processes = kernel32['EnumProcesses', 'LPLP']
+				get_module_filename_ex = kernel32['GetModuleFileNameEx', 'LLLPL']
+			end
+			process_ids = DL.malloc(DL.sizeof('L')*max_list_size)
+			size = DL.malloc(DL.sizeof('L'))
+			buffer = DL.malloc(DL.sizeof('C256'))
+			result = enum_processes.call(process_ids, DL.sizeof('L')*max_list_size, size)
+			process_list = Array.new
+			process_ids.to_a('L')[0...(size.to_a('L')[0]/DL.sizeof('L'))].each { |id|
+				handle = open_process.call(access, 0, id)
+				unless handle[0] == 0
+					result = get_module_filename_ex.call(handle[0], 0, buffer, 255)
+					process_list.push buffer.to_s
+				end
+			}
+			process_list
+		else
+			`ps xo command`.split("\n")[1..-1]
+		end
+	rescue
+		$stderr.puts "error: #{$!}"
+		Array.new
+	end
+}
+
 begin
 	undef :abort
 	alias :mana :checkmana
@@ -9739,26 +9778,12 @@ main_thread = Thread.new {
 			launcher_cmd = launcher_cmd.tr('/', "\\") if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 			launcher_cmd = "#{wine_bin} #{launcher_cmd}" if wine_bin
 			$stderr.puts "info: launcher_cmd: #{launcher_cmd}"
-			begin
-				if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-					if `tasklist.exe` =~ /Launcher\.exe/i
-						$stderr.puts "info: waiting for launcher to exit..."
-						20.times {
-							sleep "0.5".to_f
-							break unless `tasklist.exe` =~ /Launcher\.exe/i
-						}
-					end
-				else
-					if `ps ax` =~ /Launcher\.exe/i
-						$stderr.puts "info: waiting for launcher to exit..."
-						20.times {
-							sleep "0.5".to_f
-							break unless `ps ax` =~ /Launcher\.exe/i
-						}
-					end
-				end
-			rescue
-				$stderr.puts "error: #{$!}"
+			if get_process_list.call.any? { |line| line =~ /Launcher\.exe/i }
+				$stderr.puts "info: waiting for launcher to exit..."
+				20.times {
+					sleep "0.5".to_f
+					break unless get_process_list.call.any? { |line| line =~ /Launcher\.exe/i }
+				}
 			end
 			Thread.new { system(launcher_cmd) }
 			timeout_thr = Thread.new {
