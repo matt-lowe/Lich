@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.12'
+$version = '4.4.13'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3502,8 +3502,8 @@ class Spell
 			else
 				@persist_on_death = false
 			end
-			if xml_duration.attributes['max-duration']
-				@duration[cast_type][:max_duration] = xml_duration.attributes['max-duration'].to_f
+			if xml_duration.attributes['max']
+				@duration[cast_type][:max_duration] = xml_duration.attributes['max'].to_f
 			else
 				@duration[cast_type][:max_duration] = 250.0
 			end
@@ -4417,11 +4417,7 @@ class Gift
 		([360 - @@pulse_count, 0].max * 60).to_f
 	end
 	def Gift.restarts_on
-		if XMLData.game == 'GSF'
-			@@gift_start + 597600
-		else
-			@@gift_start + 604800
-		end
+		@@gift_start + 594000
 	end
 	def Gift.serialize
 		[@@gift_start, @@pulse_count]
@@ -7681,6 +7677,19 @@ def empty_hands
 	else
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
+	other_containers_var = nil
+	other_containers = proc {
+		if other_containers_var.nil?
+			Script.self.want_downstream = false
+			Script.self.want_downstream_xml = true
+			result = dothistimeout 'inventory containers', 5, /^You are wearing/
+			Script.self.want_downstream_xml = false
+			Script.self.want_downstream = true
+			other_containers_ids = result.scan(/exist="(.*?)"/).flatten - [ lootsack.id ]
+			other_containers_var = GameObj.inv.find_all { |obj| other_containers_ids.include?(obj.id) }
+		end
+		other_containers_var
+	}
 	if left_hand.id
 		waitrt?
 		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
@@ -7691,29 +7700,35 @@ def empty_hands
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-		elsif lootsack
-			actions.unshift proc {
-				dothistimeout "get ##{left_hand.id}", 3, /^You remove|^You reach into|^Get what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
-				if GameObj.right_hand.id == left_hand.id
-					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
-				end
-			}
-			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
-			if result =~ /^You can't .+ It's closed!$/
-				actions.push proc { fput "close ##{lootsack.id}" }
-				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
-			end
 		else
 			actions.unshift proc {
-				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
+				dothistimeout "get ##{left_hand.id}", 3, /^You remove|^You reach into|^Get what\?|^You already have/
+				20.times { break if (GameObj.left_hand.id == left_hand.id) or (GameObj.right_hand.id == left_hand.id); sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow left', 3, /^You put|^You slip .*? into|^You are not holding anything/
+			if lootsack
+				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				if result =~ /^You can't .+ It's closed!$/
+					actions.push proc { fput "close ##{lootsack.id}" }
+					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+					result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				end
+			else
+				result = nil
+			end
+			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
+				for container in other_containers.call
+					result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					if result =~ /^You can't .+ It's closed!$/
+						actions.push proc { fput "close ##{container.id}" }
+						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
+						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					end
+					break if result =~ /^You put|^You slip/
+				end
+			end
 		end
 	end
 	if right_hand.id
@@ -7731,29 +7746,35 @@ def empty_hands
 				end
 			}
 			fput 'stop 1012'
-		elsif lootsack
-			actions.unshift proc {
-				dothistimeout "get ##{right_hand.id}", 3, /^You remove|^You reach into|^Get what\?/
-				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
-				if GameObj.left_hand.id == right_hand.id
-					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
-				end
-			}
-			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
-			if result =~ /^You can't .+ It's closed!$/
-				actions.push proc { fput "close ##{lootsack.id}" }
-				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
-			end
 		else
 			actions.unshift proc {
-				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
+				dothistimeout "get ##{right_hand.id}", 3, /^You remove|^You reach into|^Get what\?|^You already have/
 				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow right', 3, /^You put|^You slip .*? into|^You are not holding anything/
+			if lootsack
+				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				if result =~ /^You can't .+ It's closed!$/
+					actions.push proc { fput "close ##{lootsack.id}" }
+					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				end
+			else
+				result = nil
+			end
+			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
+				for container in other_containers.call
+					result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					if result =~ /^You can't .+ It's closed!$/
+						actions.push proc { fput "close ##{container.id}" }
+						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
+						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					end
+					break if result =~ /^You put|^You slip/
+				end
+			end
 		end
 	end
 	$fill_hands_actions.push(actions)
@@ -7776,6 +7797,19 @@ def empty_hand
 	else
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
+	other_containers_var = nil
+	other_containers = proc {
+		if other_containers_var.nil?
+			Script.self.want_downstream = false
+			Script.self.want_downstream_xml = true
+			result = dothistimeout 'inventory containers', 5, /^You are wearing/
+			Script.self.want_downstream_xml = false
+			Script.self.want_downstream = true
+			other_containers_ids = result.scan(/exist="(.*?)"/).flatten - [ lootsack.id ]
+			other_containers_var = GameObj.inv.find_all { |obj| other_containers_ids.include?(obj.id) }
+		end
+		other_containers_var
+	}
 	unless (right_hand.id.nil? and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3)) or (left_hand.id.nil? and ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max < 3))
 		if right_hand.id and ((!XMLData.active_spells.keys.include?('Sonic Weapon Song') and !XMLData.active_spells.keys.include?('1012')) or ([ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max == 3)) and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3 or [ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max = 3)
 			waitrt?
@@ -7792,29 +7826,35 @@ def empty_hand
 					end
 				}
 				fput 'stop 1012'
-			elsif lootsack
-				actions.unshift proc {
-					dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
-					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
-					if GameObj.left_hand.id == right_hand.id
-						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
-					end
-				}
-				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
-				if result =~ /^You can't .+ It's closed!$/
-					actions.push proc { fput "close ##{lootsack.id}" }
-					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
-				end
 			else
 				actions.unshift proc {
-					dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
+					dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?|^You already have/
 					20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 					if GameObj.left_hand.id == right_hand.id
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
 				}
-				dothistimeout 'stow right', 3, /^You put|^You slip .*? into|^You are not holding anything/
+				if lootsack
+					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					if result =~ /^You can't .+ It's closed!$/
+						actions.push proc { fput "close ##{lootsack.id}" }
+						dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+						result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					end
+				else
+					result = nil
+				end
+				if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
+					for container in other_containers.call
+						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						if result =~ /^You can't .+ It's closed!$/
+							actions.push proc { fput "close ##{container.id}" }
+							dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
+							result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						end
+						break if result =~ /^You put|^You slip/
+					end
+				end
 			end
 		else
 			waitrt?
@@ -7826,29 +7866,35 @@ def empty_hand
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
 				}
-			elsif lootsack
-				actions.unshift proc {
-					dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
-					if GameObj.right_hand.id == left_hand.id
-						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
-					end
-				}
-				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
-				if result =~ /^You can't .+ It's closed!$/
-					actions.push proc { fput "close ##{lootsack.id}" }
-					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
-				end
 			else
 				actions.unshift proc {
-					dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
+					dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?|^You already have/
 					20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 					if GameObj.right_hand.id == left_hand.id
 						dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 					end
 				}
-				dothistimeout 'stow left', 3, /^You put|^You slip .*? into|^You are not holding anything/
+				if lootsack
+					result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					if result =~ /^You can't .+ It's closed!$/
+						actions.push proc { fput "close ##{lootsack.id}" }
+						dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+						result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					end
+				else
+					result = nil
+				end
+				if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
+					for container in other_containers.call
+						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						if result =~ /^You can't .+ It's closed!$/
+							actions.push proc { fput "close ##{container.id}" }
+							dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
+							result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						end
+						break if result =~ /^You put|^You slip/
+					end
+				end
 			end
 		end
 	end
@@ -7871,6 +7917,19 @@ def empty_right_hand
 	else
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
+	other_containers_var = nil
+	other_containers = proc {
+		if other_containers_var.nil?
+			Script.self.want_downstream = false
+			Script.self.want_downstream_xml = true
+			result = dothistimeout 'inventory containers', 5, /^You are wearing/
+			Script.self.want_downstream_xml = false
+			Script.self.want_downstream = true
+			other_containers_ids = result.scan(/exist="(.*?)"/).flatten - [ lootsack.id ]
+			other_containers_var = GameObj.inv.find_all { |obj| other_containers_ids.include?(obj.id) }
+		end
+		other_containers_var
+	}
 	if right_hand.id
 		waitrt?
 		if XMLData.active_spells.keys.include?('Sonic Weapon Song') or XMLData.active_spells.keys.include?('1012')
@@ -7886,29 +7945,35 @@ def empty_right_hand
 				end
 			}
 			fput 'stop 1012'
-		elsif lootsack
-			actions.unshift proc {
-				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
-				if GameObj.left_hand.id == right_hand.id
-					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
-				end
-			}
-			result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
-			if result =~ /^You can't .+ It's closed!$/
-				actions.push proc { fput "close ##{lootsack.id}" }
-				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
-			end
 		else
 			actions.unshift proc {
-				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?/
+				dothistimeout "get ##{right_hand.id}", 3, /^You|^Get what\?|^You already have/
 				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep "0.1".to_f }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow right', 3, /^You put|^You slip .*? into|^You are not holding anything/
+			if lootsack
+				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				if result =~ /^You can't .+ It's closed!$/
+					actions.push proc { fput "close ##{lootsack.id}" }
+					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				end
+			else
+				result = nil
+			end
+			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
+				for container in other_containers.call
+					result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					if result =~ /^You can't .+ It's closed!$/
+						actions.push proc { fput "close ##{container.id}" }
+						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
+						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					end
+					break if result =~ /^You put|^You slip/
+				end
+			end
 		end
 	end
 	$fill_right_hand_actions.push(actions)
@@ -7930,6 +7995,18 @@ def empty_left_hand
 	else
 		lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
 	end
+	other_containers_var = nil
+	other_containers = proc {
+		if other_containers_var.nil?
+			Script.self.want_downstream = false
+			Script.self.want_downstream_xml = true
+			result = dothistimeout 'inventory containers', 5, /^You are wearing/
+			Script.self.want_downstream_xml = false
+			Script.self.want_downstream = true
+			other_containers_var = result.scan(/exist="(.*?)"/) - [ lootsack.id ]
+		end
+		other_containers_var
+	}
 	if left_hand.id
 		waitrt?
 		if (left_hand.noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest|bow|crossbow|yumi|arbalest/) and (wear_result = dothistimeout("wear ##{left_hand.id}", 8, /^You .*#{left_hand.noun}|^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)) and (wear_result !~ /^You can only wear \w+ items in that location\.$|^You can't wear that\.$/)
@@ -7940,29 +8017,35 @@ def empty_left_hand
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-		elsif lootsack
-			actions.unshift proc {
-				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
-				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
-				if GameObj.right_hand.id == left_hand.id
-					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
-				end
-			}
-			result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\./
-			if result =~ /^You can't .+ It's closed!$/
-				actions.push proc { fput "close ##{lootsack.id}" }
-				dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-				dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\./
-			end
 		else
 			actions.unshift proc {
-				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?/
+				dothistimeout "get ##{left_hand.id}", 3, /^You|^Get what\?|^You already have/
 				20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep "0.1".to_f }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
-			dothistimeout 'stow left', 3, /^You put|^You slip .*? into|^You are not holding anything/
+			if lootsack
+				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				if result =~ /^You can't .+ It's closed!$/
+					actions.push proc { fput "close ##{lootsack.id}" }
+					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
+					dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				end
+			else
+				result = nil
+			end
+			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
+				for container in other_containers.call
+					result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					if result =~ /^You can't .+ It's closed!$/
+						actions.push proc { fput "close ##{container.id}" }
+						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
+						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					end
+					break if result =~ /^You put|^You slip/
+				end
+			end
 		end
 	end
 	$fill_left_hand_actions.push(actions)
@@ -9265,8 +9348,16 @@ system_win8fix = proc { |launcher_cmd|
 
 reconnect_if_wanted = proc {
 	if ARGV.include?('--reconnect') and ARGV.include?('--login') and not $_CLIENTBUFFER_.any? { |cmd| cmd =~ /^(?:\[.*?\])?(?:<c>)?(?:quit|exit)/i }
-		$stderr.puts 'info: waiting 60 seconds to reconnect...'
-		sleep 60
+		if reconnect_arg = ARGV.find { |arg| arg =~ /^\-\-reconnect\-delay=[0-9]+(?:\+[0-9]+)?$/ }
+			reconnect_arg =~ /^\-\-reconnect\-delay=([0-9]+)(\+[0-9]+)?/
+			reconnect_delay = $1.to_i
+			reconnect_step = $2.to_i
+		else
+			reconnect_delay = 60
+			reconnect_step = 0
+		end
+		$stderr.puts "info: waiting #{reconnect_delay} seconds to reconnect..."
+		sleep reconnect_delay
 		$stderr.puts 'info: reconnecting...'
 		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 			args = [ 'rubyw.exe' ]
@@ -9276,6 +9367,11 @@ reconnect_if_wanted = proc {
 		args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
 		args.concat ARGV
 		args.push '--reconnected' unless args.include?('--reconnected')
+		if reconnect_step > 0
+			args.delete(reconnect_arg)
+			args.concat ["--reconnect-delay=#{reconnect_delay+reconnect_step}+#{reconnect_step}"]
+		end
+		$stderr.puts "exec args.join(' '): exec #{args.join(' ')}"
 		exec args.join(' ')
 	end
 }
