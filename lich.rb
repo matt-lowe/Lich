@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.54'
+$version = '4.1.55'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -5445,6 +5445,12 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			waitrt?
 			put_dir.call
 		elsif line =~ /^You flick your hand (?:up|down)wards and focus your aura on your disk, but your disk only wobbles briefly\.$/
+			put_dir.call
+		elsif line == "You don't seem to be able to move to do that."
+			30.times { 
+				break if clear.include?('You regain control of your senses!')
+				sleep 0.1
+			}
 			put_dir.call
 		end
 		if XMLData.room_count > room_count
