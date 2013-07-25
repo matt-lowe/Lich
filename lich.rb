@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.64'
+$version = '4.1.65'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4039,10 +4039,7 @@ class GameObj
 	end
 	def type
 		GameObj.load_data if @@type_data.empty?
-		list = @@type_data.keys.find_all { |t| @name =~ @@type_data[t][:name] }
-		if list.empty?
-			list = @@type_data.keys.find_all { |t| @noun =~ @@type_data[t][:noun] }
-		end
+		list = @@type_data.keys.find_all { |t| (@name =~ @@type_data[t][:name] or @noun =~ @@type_data[t][:noun]) and (@@type_data[t][:exclude].nil? or @name !~ @@type_data[t][:exclude]) }
 		if list.empty?
 			nil
 		else
@@ -4051,11 +4048,8 @@ class GameObj
 	end
 	def sellable
 		GameObj.load_data if @@sellable_data.empty?
-		list = @@sellable_data.keys.find_all { |t| @name =~ @@sellable_data[t][:name] }
+		list = @@sellable_data.keys.find_all { |t| (@name =~ @@sellable_data[t][:name] or @noun =~ @@sellable_data[t][:noun]) and (@@sellable_data[t][:exclude].nil? or @name !~ @@sellable_data[t][:exclude]) }
 		if list.empty?
-			list = @@sellable_data.keys.find_all { |t| @noun =~ @@sellable_data[t][:noun] }
-		end
-		if list.empty? or list.include?('nil')
 			nil
 		else
 			list.join(',')
@@ -4285,32 +4279,37 @@ class GameObj
 		if File.exists?(filename)
 			begin
 				@@type_data = Hash.new
+				@@sellable_data = Hash.new
 				File.open(filename) { |file|
 					doc = REXML::Document.new(file.read)
 					doc.elements.each('data/type') { |e|
 						if type = e.attributes['name']
 							@@type_data[type] = Hash.new
-							@@type_data[type][:name] = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
-							@@type_data[type][:noun] = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+							@@type_data[type][:name]    = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
+							@@type_data[type][:noun]    = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+							@@type_data[type][:exclude] = Regexp.new(e.elements['exclude'].text) unless e.elements['exclude'].text.nil? or e.elements['exclude'].text.empty?
 						end
 					}
 					doc.elements.each('data/sellable') { |e|
 						if sellable = e.attributes['name']
 							@@sellable_data[sellable] = Hash.new
-							@@sellable_data[sellable][:name] = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
-							@@sellable_data[sellable][:noun] = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+							@@sellable_data[sellable][:name]    = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
+							@@sellable_data[sellable][:noun]    = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+							@@sellable_data[sellable][:exclude] = Regexp.new(e.elements['exclude'].text) unless e.elements['exclude'].text.nil? or e.elements['exclude'].text.empty?
 						end
 					}
 				}
 				true
 			rescue
 				@@type_data = nil
+				@@sellable_data = nil
 				echo "error: GameObj.load_data: #{$!}"
 				respond $!.backtrace[0..1]
 				false
 			end
 		else
 			@@type_data = nil
+			@@sellable_data = nil
 			echo "error: GameObj.load_data: file does not exist: #{filename}"
 			false
 		end
@@ -5625,6 +5624,9 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			waitrt?
 			put_dir.call
 		elsif line =~ /^You flick your hand (?:up|down)wards and focus your aura on your disk, but your disk only wobbles briefly\.$/
+			put_dir.call
+		elsif line =~ /^You dive into the fast-moving river, but the current catches you and whips you back to shore, wet and battered\.$/
+			waitrt?
 			put_dir.call
 		elsif line == "You don't seem to be able to move to do that."
 			30.times { 
