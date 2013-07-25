@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.14'
+$version = '4.2.15'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3969,7 +3969,11 @@ class Gift
 		([360 - @@pulse_count, 0].max * 60).to_f
 	end
 	def Gift.restarts_on
-		@@gift_start + 604800
+		if XMLData.game == 'GSF'
+			@@gift_start + 597600
+		else
+			@@gift_start + 604800
+		end
 	end
 	def Gift.serialize
 		[@@gift_start, @@pulse_count]
@@ -4485,8 +4489,8 @@ class Map
 	end
 	def Map.current
 		Map.load if @@list.empty?
-		if XMLData.room_count == @@current_room_count
-			@@list[@@current_room_id]
+		if (XMLData.room_count == @@current_room_count) and (room = @@list[@@current_room_id])
+			room
 		else
 			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
 			unless room
@@ -4578,10 +4582,15 @@ class Map
 					else
 						UNTRUSTED_UNTAINT.call(str)
 					end
-					if $SAFE < 3
-						proc { $SAFE = 3; eval(str) }.call
-					else
-						eval(str)
+					begin
+						if $SAFE < 3
+							proc { $SAFE = 3; eval(str) }.call
+						else
+							eval(str)
+						end
+					rescue
+						respond "--- error: Map.on_load (#{room.id}): #{$!}"
+						respond $!.backtrace[0..1]
 					end
 				end
 			}
@@ -5872,7 +5881,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 
 	need_full_hands = false
 	tried_open = false
-	tried_fix_drag = false
+	tried_fix_drag = 0
 	line_count = 0
 	room_count = XMLData.room_count
 	giveup_time = Time.now.to_i + giveup_seconds.to_i
@@ -5937,6 +5946,16 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			fput 'stand' unless standing?
 			waitrt?
 			put_dir.call
+		elsif line =~ /^You begin to climb up the silvery thread.* you tumble to the ground/
+			sleep 0.5
+			waitrt?
+			fput 'stand' unless standing?
+			waitrt?
+			if checkleft or checkright
+				need_full_hands = true
+				empty_hands
+			end
+			put_dir.call
 		elsif line == "You can't do that while engaged!"
 			# DragonRealms
 			fput 'retreat'
@@ -5957,15 +5976,21 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			dir.gsub!('climb', 'go')
 			put_dir.call
 		elsif line =~ /^You can't drag/
-			if tried_fix_drag
+			if tried_fix_drag == 0
+				tried_fix_drag = 1
+				dir.sub!(/^climb /, 'go ')
+				put_dir.call
+			elsif (tried_fix_drag == 1) and (dir =~ /^(?:go|climb) .+$/) and (line = reget.reverse.find { |line| line =~ /^You grab .*?(?:'s body)? and drag/ })
+				tried_fix_drag = 2
+				name = /^You grab (.*?)('s body)? and drag/.match(line).captures.first
+				target = /^(?:go|climb) (.+)$/.match(dir).captures.first
+				dir = "drag #{name} #{target}"
+				put_dir.call
+			else
 				fill_hands if need_full_hands
 				Script.self.downstream_buffer.unshift(save_stream)
 				Script.self.downstream_buffer.flatten!
 				return false
-			else
-				tried_fix_drag = true
-				dir.sub!('climb', 'go')
-				put_dir.call
 			end
 		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$|^It's a bit too difficult to swim holding|^You will need both hands free for such a difficult task\./
 			need_full_hands = true
@@ -8134,11 +8159,11 @@ def do_client(client_string)
 				end
 				unless alist['global'].empty?
 					respond '--- Global aliases'
-					alist['global'].each_pair { |trigger,target| respond "   #{trigger} => #{target}" }
+					alist['global'].to_a.sort { |a,b| a[0] <=> b[0] }.each { |a| respond "   #{a[0]} => #{a[1]}" }
 				end
 				unless alist[XMLData.name].empty?
 					respond "--- #{XMLData.name}'s aliases"
-					alist[XMLData.name].each_pair { |trigger,target| respond "   #{trigger} => #{target}" }
+					alist[XMLData.name].to_a.sort { |a,b| a[0] <=> b[0] }.each { |a| respond "   #{a[0]} => #{a[1]}" }
 				end
 				alist = nil
 			else
@@ -9905,7 +9930,7 @@ main_thread = Thread.new {
 					args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
 					args.concat ARGV
 					args.push '--reconnected' unless args.include?('--reconnected')
-					exec *args
+					exec args.join(' ')
 				end
 				exit(1)
 			}
@@ -9948,7 +9973,7 @@ main_thread = Thread.new {
 					args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
 					args.concat ARGV
 					args.push '--reconnected' unless args.include?('--reconnected')
-					exec *args
+					exec args.join(' ')
 				end
 				$stderr.puts "info: exiting..."
 				exit
@@ -10488,7 +10513,7 @@ main_thread = Thread.new {
 		args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
 		args.concat ARGV
 		args.push '--reconnected' unless args.include?('--reconnected')
-		exec *args
+		exec args.join(' ')
 	end
 	$stderr.puts 'info: exiting'
 	Gtk.queue { Gtk.main_quit } if HAVE_GTK
