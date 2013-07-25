@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.36'
+$version = '4.1.37'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6688,7 +6688,7 @@ def find_hosts_dir
 			end
 		end
 	else
-		test_dirs = [ '/etc', '/private/etc' ]
+		test_dirs = [ '/etc/', '/private/etc/' ]
 	end
 	test_dirs.each { |dir|
 		if File.exists?("#{dir}hosts.bak") or File.exists?("#{dir}hosts")
