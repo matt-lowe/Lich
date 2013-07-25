@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.4'
+$version = '4.4.5'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3491,6 +3491,11 @@ class Spell
 			@duration[cast_type][:duration] = xml_duration.text
 			@duration[cast_type][:stackable] = (xml_duration.attributes['span'].downcase == 'stackable')
 			@duration[cast_type][:refreshable] = (xml_duration.attributes['span'].downcase == 'refreshable')
+			if xml_duration.attributes['multicastable'] =~ /^(yes|true)$/i
+				@duration[cast_type][:multicastable] = true
+			else
+				@duration[cast_type][:multicastable] = false
+			end
 			if xml_duration.attributes['persist-on-death'] =~ /^(yes|true)$/i
 				@persist_on_death = true
 			else
@@ -3715,6 +3720,29 @@ class Spell
 				end
 			else
 				@duration['self'][:refreshable]
+			end
+		end
+	end
+	def multicastable?(options={})
+		if options[:caster] and (options[:caster] !~ /^(?:self|#{XMLData.name})$/i)
+			if options[:target] and (options[:target].downcase == options[:caster].downcase)
+				@duration['self'][:multicastable]
+			else
+				if @duration['target'][:multicastable].nil?
+					@duration['self'][:multicastable]
+				else
+					@duration['target'][:multicastable]
+				end
+			end
+		else
+			if options[:target] and (options[:target] !~ /^(?:self|#{XMLData.name})$/i)
+				if @duration['target'][:multicastable].nil?
+					@duration['self'][:multicastable]
+				else
+					@duration['target'][:multicastable]
+				end
+			else
+				@duration['self'][:multicastable]
 			end
 		end
 	end
