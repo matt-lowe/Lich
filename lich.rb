@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.61'
+$version = '4.1.62'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -606,6 +606,7 @@ class XMLParser
 		@room_description = String.new
 		@room_exits = Array.new
 		@room_exits_string = String.new
+		@room_changing = true
 
 		@familiar_room_title = String.new
 		@familiar_room_description = String.new
@@ -674,8 +675,19 @@ class XMLParser
 				@bold = true
 			elsif name == 'popBold'
 				@bold = false
+			elsif (name == 'streamWindow')
+				if attributes['id'] == 'room'
+					@room_changing = true
+				elsif (attributes['id'] == 'main') and attributes['subtitle']
+					@room_title = '[' + attributes['subtitle'][3..-1] + ']'
+				end
 			elsif name == 'style'
 				@current_style = attributes['id']
+				if @room_changing and attributes['id'] == 'roomName'
+					@room_count += 1
+					$room_count += 1
+					@room_changing = false
+				end
 			elsif name == 'prompt'
 				@server_time = attributes['time'].to_i
 				@server_time_offset = (Time.now.to_i - @server_time)
@@ -851,13 +863,6 @@ class XMLParser
 					end
 				end
 				$_CLIENT_.puts "\034GSV#{sprintf('%010d%010d%010d%010d%010d%010d%010d%010d', @max_health, @health, @max_spirit, @spirit, @max_mana, @mana, make_wound_gsl, make_scar_gsl)}\r\n" if @send_fake_tags
-			elsif (name == 'streamWindow')
-				if attributes['id'] == 'room'
-					@room_count += 1
-					$room_count += 1 
-				elsif (attributes['id'] == 'main') and attributes['subtitle']
-					@room_title = '[' + attributes['subtitle'][3..-1] + ']'
-				end
 			elsif name == 'compass'
 				if @current_stream == 'familiar'
 					@fam_mode = String.new
