@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.20'
+$version = '4.1.21'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -247,72 +247,61 @@ require 'drb'
 require 'resolv'
 begin
 	require 'gtk2'
-	require 'monitor'
 	module Gtk
-		GTK_PENDING_BLOCKS = []
-		GTK_PENDING_BLOCKS_LOCK = Monitor.new
-	
+		@@pending_blocks = Array.new
+
 		def Gtk.queue &block
-			GTK_PENDING_BLOCKS_LOCK.synchronize do
-				GTK_PENDING_BLOCKS << block
-			end
+			@@pending_blocks.push(block)
 		end
-	
-		def Gtk.main_with_queue timeout
-			Gtk.timeout_add timeout do
-				GTK_PENDING_BLOCKS_LOCK.synchronize do
-					for block in GTK_PENDING_BLOCKS
-						begin
-							block.call
-						rescue
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue SyntaxError
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue SystemExit
-							nil
-						rescue SecurityError
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue ThreadError
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue SystemStackError
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue Exception
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue ScriptError
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue LoadError
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue NoMemoryError
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						rescue
-							$stdout.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts "error in Gtk.queue: #{$!}"
-							$stderr.puts $!.backtrace
-						end
-					end
-					GTK_PENDING_BLOCKS.clear
+
+		def Gtk.do_queue
+			while block = @@pending_blocks.shift
+				begin
+					block.call
+				rescue
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue SyntaxError
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue SystemExit
+					nil
+				rescue SecurityError
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue ThreadError
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue SystemStackError
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue Exception
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue ScriptError
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue LoadError
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue NoMemoryError
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
+				rescue
+					respond "error in Gtk.queue: #{$!}"
+					$stderr.puts "error in Gtk.queue: #{$!}"
+					$stderr.puts $!.backtrace
 				end
-				true
 			end
-			Gtk.main
 		end
 	end
 	# fixme: $gtk and $lich are depreciated in version 4.0.0, remove sooner or later
@@ -857,6 +846,10 @@ class XMLParser
 				end
 			elsif (name == 'app') and (@name = attributes['char'])
 				if $frontend == 'wizard'
+					$_SERVER_.puts "<c>_flag Display Dialog Boxes 0"
+					sleep 0.05
+					$_SERVER_.puts "<c>_injury 2"
+					sleep 0.05
 					# fixme: game name hardcoded as Gemstone IV; maybe doesn't make any difference to the client
 					$_CLIENT_.puts "\034GSB0000000000#{attributes['char']}\r\n\034GSA#{Time.now.to_i.to_s}GemStone IV\034GSD\r\n"
 					# Sending fake GSL tags to the Wizard FE is disabled until now, because it doesn't accept the tags and just gives errors until initialized with the above line
@@ -878,13 +871,19 @@ class XMLParser
 					$_CLIENT_.puts "\034GSl#{sprintf('%-45s', GameObj.left_hand.name)}\r\n"
 					$_CLIENT_.puts "\034GSq#{sprintf('%010d', @server_time)}\r\n"
 					$_CLIENT_.puts "\034GSQ#{sprintf('%010d', @roundtime_end)}\r\n" if @roundtime_end > 0
+				else
+					LichSettings[@name] ||= Hash.new
+					if LichSettings[@name]['enable_inventory_boxes']
+						DownstreamHook.remove('inventory_boxes_off')
+					end
 				end
+				$_SERVER_.puts("<c>_flag Display Inventory Boxes 1")
 				UserVariables.init
 				Alias.init
 				Favorites.init
 			end
 		rescue
-			$stdout.puts "--- error: XMLParser.tag_start: #{$!}"
+			respond "--- error: XMLParser.tag_start: #{$!}"
 			$stderr.puts "error: XMLParser.tag_start: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.1
@@ -940,7 +939,6 @@ class XMLParser
 					end
 				elsif @active_ids.include?('room desc')
 					if text == '[Room window disabled at this location.]'
-						#respond '[Room window disabled at this location.]'
 						@room_window_disabled = true
 					else
 						@room_window_disabled = false
@@ -953,13 +951,19 @@ class XMLParser
 					@room_exits_string.concat(text)
 					@room_exits.push(text) if @active_tags.include?('d')
 				end
-			elsif @active_tags.include?('inv') and @active_tags.include?('a')
-				container_id = @active_ids.find { |id| !id.nil? }
-				if container_id.to_s == 'stow'
-					container_id = @stow_container_id
-				end
-				unless container_id.nil? or (container_id == @obj_exist)
-					obj = GameObj.new_inv(@obj_exist, @obj_noun, text, container_id)
+			elsif @active_tags.include?('inv')
+				if @active_tags.include?('a')
+					container_id = @active_ids.find { |id| !id.nil? }
+					if container_id.to_s == 'stow'
+						container_id = @stow_container_id
+					end
+					unless container_id.nil? or (container_id == @obj_exist)
+						obj = GameObj.new_inv(@obj_exist, @obj_noun, text, container_id)
+					end
+				else
+					if @active_ids.include('stow') and text == ' is closed.'
+						GameObj.delete_container(@stow_container_id)
+					end
 				end
 			elsif @current_stream == 'spellfront'
 				@spellfront.push(text.strip)
@@ -999,10 +1003,10 @@ class XMLParser
 							GameObj.new_fam_loot(@obj_exist, @obj_noun, text)
 						end
 					end
-					# respond 'things: ' + text
+					# puts 'things: ' + text
 				elsif @fam_mode == 'people' and @active_tags.include?('a')
 					GameObj.new_fam_pc(@obj_exist, @obj_noun, text)
-					# respond 'people: ' + text
+					# puts 'people: ' + text
 				elsif (@fam_mode == 'paths') and @active_tags.include?('a')
 					@familiar_room_exits.push(text)
 				end
@@ -1012,12 +1016,12 @@ class XMLParser
 					if @active_tags.include?('a')
 						GameObj.new_room_desc(@obj_exist, @obj_noun, text)
 					end
-				elsif text =~ /^Obvious (?:paths|exits): $/
+				elsif text =~ /^Obvious (?:paths|exits): (?:none)?$/
 					@room_exits_string = text.strip
 				end
 			end
 		rescue
-			$stdout.puts "--- error: XMLParser.text: #{$!}"
+			respond "--- error: XMLParser.text: #{$!}"
 			$stderr.puts "error: XMLParser.text: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.1
@@ -1034,7 +1038,7 @@ class XMLParser
 			elsif @room_window_disabled and (name == 'compass')
 				@room_window_disabled = false
 				@room_description = @room_description.strip
-				@room_exits_string = @room_exits_string + ' ' + @room_exits.join(', ')
+				@room_exits_string.concat " #{@room_exits.join(', ')}" unless @room_exits.empty?
 				gsl_exits = String.new
 				@room_exits.each { |exit| gsl_exits.concat(DIRMAP[SHORTDIR[exit]].to_s) }
 				$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
@@ -1043,7 +1047,7 @@ class XMLParser
 			@last_tag = @active_tags.pop
 			@last_id = @active_ids.pop
 		rescue
-			$stdout.puts "--- error: XMLParser.tag_end: #{$!}"
+			respond "--- error: XMLParser.tag_end: #{$!}"
 			$stderr.puts "error: XMLParser.tag_end: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.1
@@ -1101,7 +1105,7 @@ class DownstreamHook
 	def DownstreamHook.run(server_string)
 		for key in @@downstream_hooks.keys
 			begin
-				server_string = @@downstream_hooks[key].call(server_string)
+				server_string = @@downstream_hooks[key].call(server_string.dup)
 			rescue
 				@@downstream_hooks.delete(key)
 				respond "--- Lich: DownstreamHook: #{$!}"
@@ -1128,7 +1132,7 @@ class LichSettings
 					@@settings = Marshal.load(f.read)['lichsettings']
 				}
 			rescue
-				$stdout.puts "--- error: LichSettings.load: #{$!}"
+				respond "--- error: LichSettings.load: #{$!}"
 				$stderr.puts "error: LichSettings.load: #{$!}"
 				$stderr.puts $!.backtrace
 			end
@@ -1229,7 +1233,7 @@ class Settings
 							@@hash[who.name] = Marshal.load(f.read)
 						}
 					rescue
-						$stdout.puts "--- error: Settings.load: #{$!}"
+						respond "--- error: Settings.load: #{$!}"
 						$stderr.puts "error: Settings.load: #{$!}"
 						$stderr.puts $!.backtrace
 					end
@@ -1312,7 +1316,7 @@ class Favorites
 					@@settings = Marshal.load(f.read)['favorites']
 				}
 			rescue
-				$stdout.puts "--- error: Favorites.load: #{$!}"
+				respond "--- error: Favorites.load: #{$!}"
 				$stderr.puts "error: Favorites.load: #{$!}"
 				$stderr.puts $!.backtrace
 			end
@@ -1392,7 +1396,7 @@ class Alias
 					@@settings = Marshal.load(f.read)['alias']
 				}
 			rescue
-				$stdout.puts "--- error: Alias.init: #{$!}"
+				respond "--- error: Alias.init: #{$!}"
 				$stderr.puts "error: Alias.init: #{$!}"
 				$stderr.puts $!.backtrace
 			end
@@ -1420,7 +1424,7 @@ class Alias
 		true
 	end
 	def Alias.add(trigger, target, type = :char)
-		trigger = Regexp.escape(trigger)
+		trigger = Regexp.escape(trigger.strip)
 		if type == :char
 			@@settings[XMLData.name][trigger.downcase] = target
 			@@char_regex_string = @@settings[XMLData.name].keys.join('|')
@@ -1513,7 +1517,7 @@ class UserVariables
 					@@settings = Marshal.load(f.read)['uservariables']
 				}
 			rescue
-				$stdout.puts "--- error: UserVariables.init: #{$!}"
+				respond "--- error: UserVariables.init: #{$!}"
 				$stderr.puts "error: UserVariables.init: #{$!}"
 				$stderr.puts $!.backtrace
 			end
@@ -2743,7 +2747,8 @@ end
 
 class Spell
 	@@list ||= Array.new
-	@@loaded ||= nil
+	@@loaded ||= false
+	@@load_lock = Array.new
 	@@cast_lock ||= Array.new
 	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command
 	attr_accessor :stance, :channel
@@ -2778,36 +2783,45 @@ class Spell
 	end
 	def Spell.load(filename="#{$script_dir}spell-list.xml.txt")
 		if $SAFE == 0
-			50.times { sleep 0.1; return true if @@loaded } if @@loaded == false
-			@@loaded = false
+			script = Script.self
 			begin
-				spell_times = Hash.new
-				# reloading spell data should not reset spell tracking...
-				unless @@list.empty?
-					@@list.each { |spell| spell_times[spell.num] = spell.timeleft if spell.active? }
-					@@list.clear
+				@@load_lock.push(script)
+				unless @@load_lock.first == script
+					sleep 0.1 until @loaded or (@@load_lock.first == script) or @@load_lock.empty?
+					return true if @loaded
 				end
-				File.open(filename) { |file|
-					file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
-						spell = Hash.new
-						spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-						Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
-					}
-				}
-				@@list.each { |spell|
-					if spell_times[spell.num]
-						spell.timeleft = spell_times[spell.num]
-						spell.active = true
+				@@loaded = false
+				begin
+					spell_times = Hash.new
+					# reloading spell data should not reset spell tracking...
+					unless @@list.empty?
+						@@list.each { |spell| spell_times[spell.num] = spell.timeleft if spell.active? }
+						@@list.clear
 					end
-				}
-				@@loaded = true
-				return true
-			rescue
-				$stdout.puts "--- error: Spell.load: #{$!}"
-				$stderr.puts "error: Spell.load: #{$!}"
-				$stderr.puts $!.backtrace
-				@@loaded = nil
-				return false
+					File.open(filename) { |file|
+						file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
+							spell = Hash.new
+							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
+						}
+					}
+					@@list.each { |spell|
+						if spell_times[spell.num]
+							spell.timeleft = spell_times[spell.num]
+							spell.active = true
+						end
+					}
+					@@loaded = true
+					return true
+				rescue
+					respond "--- error: Spell.load: #{$!}"
+					$stderr.puts "error: Spell.load: #{$!}"
+					$stderr.puts $!.backtrace
+					@@loaded = false
+					return false
+				end
+			ensure
+				@@load_lock.delete(script)
 			end
 		else
 			UNTRUSTED_SPELL_LOAD.call
@@ -3080,8 +3094,15 @@ class Spell
 	end
 	def affordable?
 		# fixme: deal with them dirty bards!
-		return false if Spell[9699].active? and (self.stamina_cost > 0)
-		checkmana(self.mana_cost) and checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(self.stamina_cost)
+		if (self.mana_cost > 0) and (  !checkmana(self.mana_cost) or (Spell[515].active? and !checkmana(self.mana_cost + [self.mana_cost/4, 1].max))  )
+			false 
+		elsif (self.stamina_cost > 0) and (Spell[9699].active? or not checkstamina(self.stamina_cost))
+			false
+		elsif (self.spirit_cost > 0) and not checkspirit(self.spirit_cost + 1 + [ 9912, 9913, 9914, 9916, 9916, 9916, 9916, 9916 ].delete_if { |num| !Spell[num].active? }.length)
+			false
+		else
+			true
+		end
 	end
 	def cast(target=nil)
 		script = Script.self
@@ -3101,108 +3122,103 @@ class Spell
 			echo 'cast: not enough stamina'
 			return false
 		end
-		@@cast_lock.push(script)
-		until (@@cast_lock.first == script) or @@cast_lock.empty?
-			sleep 0.1
-			Script.self # allows this loop to be paused
-			@@cast_lock.delete_if { |s| s.paused or !(Script.running + Script.hidden).include?(s) }
-		end
-		unless checkmana(self.mana_cost)
-			echo 'cast: not enough mana'
-			@@cast_lock.delete(script)
-			return false
-		end
-		unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
-			echo 'cast: not enough spirit'
-			@@cast_lock.delete(script)
-			return false
-		end
-		unless checkstamina(self.stamina_cost)
-			echo 'cast: not enough stamina'
-			@@cast_lock.delete(script)
-			return false
-		end
-		if @command
-			cmd = @command
-			if target.class == GameObj
-				cmd += " ##{target.id}"
-			elsif target.class == Fixnum
-				cmd += " ##{target}"
-			elsif target.class == String
-				cmd += " #{target}"
+		begin
+			@@cast_lock.push(script)
+			until (@@cast_lock.first == script) or @@cast_lock.empty?
+				sleep 0.1
+				Script.self # allows this loop to be paused
+				@@cast_lock.delete_if { |s| s.paused }
 			end
-			waitrt?
-			waitcastrt?
-			fput cmd
-			@@cast_lock.delete(script)
-			true
-		else
-			if @channel
-				cast_cmd = 'channel'
-			else
-				cast_cmd = 'cast'
+			unless checkmana(self.mana_cost)
+				echo 'cast: not enough mana'
+				return false
 			end
-			if (target.nil? or target.to_s.empty?) and (@type =~ /attack/i)
-				cast_cmd += ' target'
-			elsif target.class == GameObj
-				cast_cmd += " ##{target.id}"
-			elsif target.class == Fixnum
-				cast_cmd += " ##{target}"
-			else
-				cast_cmd += " #{target}"
+			unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+				echo 'cast: not enough spirit'
+				return false
 			end
-			waitrt?
-			waitcastrt?
-			unless checkprep == @name
-				unless checkprep == 'None'
-					dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-					unless checkmana(self.mana_cost)
-						echo 'cast: not enough mana'
-						@@cast_lock.delete(script)
-						return false
-					end
-					unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
-						echo 'cast: not enough spirit'
-						@@cast_lock.delete(script)
-						return false
-					end
-					unless checkstamina(self.stamina_cost)
-						echo 'cast: not enough stamina'
-						@@cast_lock.delete(script)
-						return false
-					end
+			unless checkstamina(self.stamina_cost)
+				echo 'cast: not enough stamina'
+				return false
+			end
+			if @command
+				cmd = @command
+				if target.class == GameObj
+					cmd += " ##{target.id}"
+				elsif target.class == Fixnum
+					cmd += " ##{target}"
+				elsif target.class == String
+					cmd += " #{target}"
 				end
-				loop {
-					waitrt?
-					waitcastrt?
-					prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
-					if prepare_result =~ /^Your spell(?:song)? is ready\./
-						break
-					elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
+				waitrt?
+				waitcastrt?
+				fput cmd
+				sleep 0.1
+				true
+			else
+				if @channel
+					cast_cmd = 'channel'
+				else
+					cast_cmd = 'cast'
+				end
+				if (target.nil? or target.to_s.empty?) and (@type =~ /attack/i)
+					cast_cmd += ' target'
+				elsif target.class == GameObj
+					cast_cmd += " ##{target.id}"
+				elsif target.class == Fixnum
+					cast_cmd += " ##{target}"
+				else
+					cast_cmd += " #{target}"
+				end
+				waitrt?
+				waitcastrt?
+				unless checkprep == @name
+					unless checkprep == 'None'
 						dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 						unless checkmana(self.mana_cost)
 							echo 'cast: not enough mana'
-							@@cast_lock.delete(script)
 							return false
 						end
-					elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
-						@@cast_lock.delete(script)
-						return false
+						unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+							echo 'cast: not enough spirit'
+							return false
+						end
+						unless checkstamina(self.stamina_cost)
+							echo 'cast: not enough stamina'
+							return false
+						end
 					end
-				}
+					loop {
+						waitrt?
+						waitcastrt?
+						prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
+						if prepare_result =~ /^Your spell(?:song)? is ready\./
+							break
+						elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
+							dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
+							unless checkmana(self.mana_cost)
+								echo 'cast: not enough mana'
+								return false
+							end
+						elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
+							return false
+						end
+					}
+				end
+				if @stance and checkstance != 'offensive'
+					dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
+				end
+				cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$/
+				if @stance and checkstance !~ /^guarded$|^defensive$/
+					dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
+				end
+				if cast_result =~ /^Cast at what\?$|^Be at peace my child, there is no need for spells of war in here\.$/
+					dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
+				end
+				cast_result
 			end
-			if @stance and checkstance != 'offensive'
-				dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
-			end
-			cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$/
-			if @stance and checkstance !~ /^guarded$|^defensive$/
-				dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
-			end
-			if cast_result =~ /^Cast at what\?$|^Be at peace my child, there is no need for spells of war in here\.$/
-				dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-			end
+		ensure
 			@@cast_lock.delete(script)
-			cast_result
 		end
 	end
 	# for backwards compatiblity
@@ -4162,67 +4178,67 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 					rescue SystemExit
 						Script.self.kill
 					rescue SyntaxError
-						$stdout.puts "--- SyntaxError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- SyntaxError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- SyntaxError: #{$!}"
 						$stderr.puts $!.backtrace
 						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
 						Script.self.kill
 					rescue ScriptError
-						$stdout.puts "--- ScriptError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- ScriptError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- ScriptError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue NoMemoryError
-						$stdout.puts "--- NoMemoryError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- NoMemoryError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- NoMemoryError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue LoadError
-						$stdout.puts "--- LoadError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- LoadError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- LoadError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue SecurityError
-						$stdout.puts "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
-						$stdout.puts "--- SecurityError: #{$!}"
-						$stdout.puts $!.backtrace[0..1]
+						respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
+						respond "--- SecurityError: #{$!}"
+						respond $!.backtrace[0..1]
 						$stderr.puts "--- SecurityError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue ThreadError
-						$stdout.puts "--- ThreadError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- ThreadError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- ThreadError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue SystemStackError
-						$stdout.puts "--- SystemStackError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- SystemStackError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- SystemStackError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue Exception
 						if $! == JUMP
 							retry if Script.self.get_next_label != JUMP_ERROR
-							$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
-							$stdout.puts $!.backtrace.first
+							respond "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+							respond $!.backtrace.first
 							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
 							$stderr.puts $!.backtrace
 							Script.self.kill
 						else
-							$stdout.puts "--- Exception: #{$!}"
-							$stdout.puts $!.backtrace.first
+							respond "--- Exception: #{$!}"
+							respond $!.backtrace.first
 							$stderr.puts "--- Exception: #{$!}"
 							$stderr.puts $!.backtrace
 							Script.self.kill
 						end
 					rescue
-						$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- Error: #{Script.self.name}: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
@@ -4237,67 +4253,67 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 					rescue SystemExit
 						Script.self.kill
 					rescue SyntaxError
-						$stdout.puts "--- SyntaxError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- SyntaxError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- SyntaxError: #{$!}"
 						$stderr.puts $!.backtrace
 						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
 						Script.self.kill
 					rescue ScriptError
-						$stdout.puts "--- ScriptError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- ScriptError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- ScriptError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue NoMemoryError
-						$stdout.puts "--- NoMemoryError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- NoMemoryError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- NoMemoryError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue LoadError
-						$stdout.puts "--- LoadError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- LoadError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- LoadError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue SecurityError
-						$stdout.puts "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
-						$stdout.puts "--- SecurityError: #{$!}"
-						$stdout.puts $!.backtrace[0..1]
+						respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
+						respond "--- SecurityError: #{$!}"
+						respond $!.backtrace[0..1]
 						$stderr.puts "--- SecurityError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue ThreadError
-						$stdout.puts "--- ThreadError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- ThreadError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- ThreadError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue SystemStackError
-						$stdout.puts "--- SystemStackError: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- SystemStackError: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- SystemStackError: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
 					rescue Exception
 						if $! == JUMP
 							retry if Script.self.get_next_label != JUMP_ERROR
-							$stdout.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
-							$stdout.puts $!.backtrace.first
+							respond "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
+							respond $!.backtrace.first
 							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
 							$stderr.puts $!.backtrace
 							Script.self.kill
 						else
-							$stdout.puts "--- Exception: #{$!}"
-							$stdout.puts $!.backtrace.first
+							respond "--- Exception: #{$!}"
+							respond $!.backtrace.first
 							$stderr.puts "--- Exception: #{$!}"
 							$stderr.puts $!.backtrace
 							Script.self.kill
 						end
 					rescue
-						$stdout.puts "--- Error: #{Script.self.name}: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- Error: #{Script.self.name}: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 						$stderr.puts $!.backtrace
 						Script.self.kill
@@ -4348,57 +4364,57 @@ def start_exec_script(cmd_data, flags=Hash.new)
 				rescue SystemExit
 					Script.self.kill
 				rescue SyntaxError
-					$stdout.puts "--- SyntaxError: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- SyntaxError: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- SyntaxError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue ScriptError
-					$stdout.puts "--- ScriptError: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- ScriptError: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- ScriptError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue NoMemoryError
-					$stdout.puts "--- NoMemoryError: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- NoMemoryError: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- NoMemoryError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue LoadError
 					respond("--- LoadError: #{$!}")
-					$stdout.puts "--- LoadError: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- LoadError: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- LoadError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue SecurityError
-					$stdout.puts "--- SecurityError: #{$!}"
-					$stdout.puts $!.backtrace[0..1]
+					respond "--- SecurityError: #{$!}"
+					respond $!.backtrace[0..1]
 					$stderr.puts "--- SecurityError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue ThreadError
-					$stdout.puts "--- ThreadError: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- ThreadError: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- ThreadError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue SystemStackError
-					$stdout.puts "--- SystemStackError: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- SystemStackError: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- SystemStackError: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue Exception
-					$stdout.puts "--- Exception: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- Exception: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- Exception: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
 				rescue
-					$stdout.puts "--- Error: #{$!}"
-					$stdout.puts $!.backtrace.first
+					respond "--- Error: #{$!}"
+					respond $!.backtrace.first
 					$stderr.puts "--- Error: #{$!}"
 					$stderr.puts $!.backtrace
 					Script.self.kill
@@ -4762,7 +4778,6 @@ def o;    'out';       end
 def out;  'out';       end
 
 def move(dir='none', giveup_seconds=30, giveup_lines=30)
-	#It's a bit too difficult to swim holding an oak-hafted engraved sudis."  (20:37:42)
 	#[LNet]-[Private]-Casis: "You begin to make your way up the steep headland pathway.  Before traveling very far, however, you lose your footing on the loose stones.  You struggle in vain to maintain your balance, then find yourself falling to the bay below!"  (20:35:36)
 	#[LNet]-[Private]-Casis: "You smack into the water with a splash and sink far below the surface."  (20:35:50)
 	# You approach the entrance and identify yourself to the guard.  The guard checks over a long scroll of names and says, "I'm sorry, the Guild is open to invitees only.  Please do return at a later date when we will be open to the public."
@@ -4823,7 +4838,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			sleep 1
 			waitrt?
 			put_dir.call
-		elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$|^You search for a way to make the climb .*? but without success\.$|^You start to climb .* you fall to the ground/
+		elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$|^You search for a way to make the climb .*? but without success\.$|^You start to climb .* you fall to the ground|^You attempt to climb .* wrong approach/
 			sleep 1
 			waitrt?
 			fput 'stand' unless standing?
@@ -4835,7 +4850,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 		elsif line =~ /^You can't climb that\./
 			dir.gsub!('climb', 'go')
 			put_dir.call
-		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$/
+		elsif line =~ /^Maybe if your hands were empty|^You figure freeing up both hands might help\.|^You can't .+ with your hands full\.$|^You'll need empty hands to climb that\.$|^It's a bit too difficult to swim holding/
 			need_full_hands = true
 			empty_hands
 			put_dir.call
@@ -5901,62 +5916,73 @@ def unnoded_pulse
 end
 
 def empty_hands
-	$rh_thingie, $lh_thingie = checkright, checkleft
-	if $rh_thingie
-		if Lich.lootsack.nil?
-			fput "stow #{$rh_thingie}"
-		else
-			result = dothistimeout "put my #{$rh_thingie} in my #{Lich.lootsack}", 4, /^You put|^You can't .+ It's closed!$/
+	$empty_hands = {
+		'right' => GameObj.right_hand,
+		'left' => GameObj.left_hand,
+		'close_lootsack' => false,
+	}
+	lootsack = GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack.strip)}/i } || GameObj.inv.find { |obj| obj.name =~ /#{Regexp.escape(UserVars.lootsack).sub(' ', ' .*')}/i }
+	if $empty_hands['right'].id
+		waitrt?
+		if $empty_hands['right'].name =~ /sonic/
+			fput 'stop 1012'
+		elsif lootsack
+			result = dothistimeout "put ##{$empty_hands['right'].id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
 			if result =~ /^You can't .+ It's closed!$/
-				fput "open my #{Lich.lootsack}"
-				fput "put my #{$rh_thingie} in my #{Lich.lootsack}"
-				$close_lootsack = true
+				fput "open ##{lootsack.id}"
+				fput "put ##{$empty_hands['right'].id} in ##{lootsack.id}"
+				$empty_hands['close_lootsack'] = true
 			end
+		else
+			fput 'stow right'
 		end
 		
 	end
-	if $lh_thingie
-		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/
-			fput "wear my #{$lh_thingie}"
-		else
-			if Lich.lootsack.nil?
-				fput "stow #{$lh_thingie}"
-			else
-				result = dothistimeout "put my #{$lh_thingie} in my #{Lich.lootsack}", 4, /^You put|^You can't .+ It's closed!$/
-				if result =~ /^You can't .+ It's closed!$/
-					fput "open my #{Lich.lootsack}"
-					fput "put my #{$lh_thingie} in my #{Lich.lootsack}"
-					$close_lootsack = true
-				end
+	if $empty_hands['left'].id
+		waitrt?
+		if $empty_hands['left'].noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis|arbalest/
+			fput "wear ##{$empty_hands['left'].id}"
+		elsif lootsack
+			result = dothistimeout "_drag ##{$empty_hands['left'].id} ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
+			if result =~ /^You can't .+ It's closed!$/
+				fput "open ##{lootsack.id}"
+				fput "_drag ##{$empty_hands['left'].id} ##{lootsack.id}"
+				$empty_hands['close_lootsack'] = true
 			end
+		else
+			fput 'stow left'
 		end
+		
 	end
 end
 
 def fill_hands
-	$rh_thingie ||= nil
-	$lh_thingie ||= nil
-	$close_lootsack ||= nil
-	if $rh_thingie
+	$empty_hands ||= Hash.new
+	if $empty_hands['right'].id
 		waitrt?
-		if Lich.lootsack.nil?
-			fput "get my #{$rh_thingie}"
+		if $empty_hands['right'].name =~ /sonic/
+			type = $empty_hands['right'].noun
+			type = 'short' if type == 'sword' and $empty_hands['right'].name =~ /short/
+			if sonic_weapon_song = Spell[1012]
+				sonic_weapon_song.cast(type) if sonic_weapon_song.known? and sonic_weapon_song.affordable?
+			end
 		else
-			fput "get my #{$rh_thingie} from my #{Lich.lootsack}"
+			fput "get ##{$empty_hands['right'].id}"
 		end
+		$empty_hands['right'] = nil
 	end
-	if $lh_thingie
+	if $empty_hands['left'].id
 		waitrt?
-		if $lh_thingie =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis/
-			fput "remove my #{$lh_thingie}"
-		elsif Lich.lootsack.nil?
-			fput "get my #{$lh_thingie}"
+		if $empty_hands['left'].noun =~ /shield|buckler|targe|heater|parma|aegis|scutum|greatshield|mantlet|pavis/
+			fput "remove ##{$empty_hands['left'].id}"
 		else
-			fput "get my #{$lh_thingie} from my #{Lich.lootsack}"
+			fput "get ##{$empty_hands['left'].id}"
 		end
+		fput 'swap' if GameObj.right_hand.id == $empty_hands['left'].id
+		$empty_hands['left'] = nil
 	end
-	fput "close my #{Lich.lootsack}" if $close_lootsack
-	$rh_thingie, $lh_thingie, $close_lootsack = nil, nil, nil
+	fput "close ##{lootsack.id}" if $empty_hands['close_lootsack']
+	$empty_hands['close_lootsack'] = false
 end
 
 def dothis (action, success_line)
@@ -6459,7 +6485,7 @@ end
 def monsterbold_start
 	if $frontend == 'wizard'
 		"\034GSL\r\n"
-	elsif $fontend == 'stormfront'
+	elsif $frontend == 'stormfront'
 		'<pushBold/>'
 	else
 		''
@@ -8487,8 +8513,8 @@ main_thread = Thread.new {
 							do_client(cmd)
 						end
 					rescue
-						$stdout.puts "--- error: client_thread: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- error: client_thread: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "error: client_thread: #{$!}"
 						$stderr.puts $!.backtrace
 					end
@@ -8555,13 +8581,6 @@ main_thread = Thread.new {
 				$_CLIENTBUFFER_.push("<c>\r\n")
 				$_SERVER_.write("<c>\r\n")
 			}
-			#
-			# set up some stuff
-			#
-			for client_string in [ "<c>_injury 2\r\n", "<c>_flag Display Inventory Boxes 1\r\n", "<c>_flag Display Dialog Boxes 0\r\n" ]
-				$_CLIENTBUFFER_.push(client_string)
-				$_SERVER_.write(client_string)
-			end
 		end
 	else
 		#
@@ -8623,44 +8642,61 @@ main_thread = Thread.new {
 				#
 				$_CLIENT_.gets
 			else
-=begin
-				sf_inv_off_proc = proc { |server_string|
+				inv_off_proc = proc { |server_string|
 					if server_string =~ /^<container id=['"]-?[0-9]+['"]/
 						server_string.gsub!(/<(?:container|clearContainer)[^>]*>/, '')
-						server_string.gsub!(/<inv id=['"]-?[0-9]+['"].*/inv>/, '')
+						server_string.gsub!(/<inv id=['"]-?[0-9]+['"].*\/inv>/, '')
 						if server_string.empty?
 							nil
 						else
 							server_string
 						end
+					elsif server_string =~ /^<flag id="Display Inventory Boxes" status='on' desc="Display all inventory and container windows."\/>/
+						server_string.sub("status='on'", "status='off'")
+					elsif server_string =~ /^\s*<d cmd="flag Inventory off">Inventory<\/d>\s+ON/
+						server_string.sub("flag Inventory off", "flag Inventory on").sub('ON', 'OFF')
 					else
 						server_string
 					end
 				}
-				DownstreamHook.add('sf_inv_off', sf_inv_off_proc)
-				sf_inv_toggle_proc = proc { |client_string|
-					# set|flag inv on|off
+				DownstreamHook.add('inventory_boxes_off', inv_off_proc)
+				inv_toggle_proc = proc { |client_string|
 					if client_string =~ /^(?:<c>)?_flag Display Inventory Boxes ([01])/
-						if $1 == '0'
-							DownstreamHook.add('sf_inv_off', sf_inv_off_proc)
+						if $1 == '1'
+							DownstreamHook.remove('inventory_boxes_off')
+							LichSettings[XMLData.name]['enable_inventory_boxes'] = true
+							LichSettings.save
 						else
-							DownstreamHook.remove('sf_inv_off')
+							DownstreamHook.add('inventory_boxes_off', inv_off_proc)
+							LichSettings[XMLData.name]['enable_inventory_boxes'] = false
+							LichSettings.save
+						end
+						nil
+					elsif client_string =~ /^(?:<c>)?\s*(?:set|flag)\s+inv(?:e|en|ent|ento|entor|entory)?\s+(on|off)/i
+						if $1.downcase == 'on'
+							DownstreamHook.remove('inventory_boxes_off')
+							respond 'You have enabled viewing of inventory and container windows.'
+							LichSettings[XMLData.name]['enable_inventory_boxes'] = true
+							LichSettings.save
+						else
+							DownstreamHook.add('inventory_boxes_off', inv_off_proc)
+							respond 'You have disabled viewing of inventory and container windows.'
+							LichSettings[XMLData.name]['enable_inventory_boxes'] = false
+							LichSettings.save
 						end
 						nil
 					else
 						client_string
 					end
 				}
-=end
+				UpstreamHook.add('inventory_boxes_toggle', inv_toggle_proc)
+
 				unless $offline_mode
 					client_string = $_CLIENT_.gets
 					$_SERVER_.write(client_string)
 					client_string = $_CLIENT_.gets
 					$_CLIENTBUFFER_.push(client_string.dup)
 					$_SERVER_.write(client_string)
-					# client_string = "<c>_flag Display Inventory Boxes 1\r\n"
-					# $_CLIENTBUFFER_.push(client_string)
-					# $_SERVER_.write(client_string)
 				end
 			end
 		
@@ -8675,15 +8711,15 @@ main_thread = Thread.new {
 							do_client(client_string)
 						end
 					rescue
-						$stdout.puts "--- error: client_thread: #{$!}"
-						$stdout.puts $!.backtrace.first
+						respond "--- error: client_thread: #{$!}"
+						respond $!.backtrace.first
 						$stderr.puts "error: client_thread: #{$!}"
 						$stderr.puts $!.backtrace
 					end
 				end
 			rescue
-				$stdout.puts "--- error: client_thread: #{$!}"
-				$stdout.puts $!.backtrace.first
+				respond "--- error: client_thread: #{$!}"
+				respond $!.backtrace.first
 				$stderr.puts "error: client_thread: #{$!}"
 				$stderr.puts $!.backtrace
 				sleep 0.2
@@ -8715,7 +8751,7 @@ main_thread = Thread.new {
 							$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
 							retry
 						end
-						$stdout.puts "--- error: server_thread: #{$!}"
+						respond "--- error: server_thread: #{$!}"
 						$stderr.puts "error: server_thread: #{$!}"
 						$stderr.puts $!.backtrace
 						XMLData.reset
@@ -8723,24 +8759,24 @@ main_thread = Thread.new {
 					Script.new_downstream_xml($_SERVERSTRING_)
 					stripped_server = strip_xml($_SERVERSTRING_)
 					stripped_server.split("\r\n").each { |line|
-						unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring|joins the adventure|just bit the dust)|^\r*\n*$/
+						unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring\.|joins the adventure\.|(?:is off to a rough start!  (?:H|She) )?just bit the dust!|was just incinerated!|was just vaporized!|has been vaporized!|has disconnected\.)$|^ \* The death cry of [A-Z][a-z]+ echoes in your mind!$|^\r*\n*$/
 							Script.new_downstream(line) unless line.empty?
 						end
 					}
 				rescue
-					$stdout.puts "--- error: server_thread: #{$!}"
+					respond "--- error: server_thread: #{$!}"
 					$stderr.puts "error: server_thread: #{$!}"
 					$stderr.puts $!.backtrace
 				end
 			end
 		rescue Exception
-			$stdout.puts "--- error: server_thread: #{$!}"
+			respond "--- error: server_thread: #{$!}"
 			$stderr.puts "error: server_thread: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.2
 			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or ($!.to_s =~ /invalid argument/i)
 		rescue
-			$stdout.puts "--- error: server_thread: #{$!}"
+			respond "--- error: server_thread: #{$!}"
 			$stderr.puts "error: server_thread: #{$!}"
 			$stderr.puts $!.backtrace
 			sleep 0.2
@@ -8781,7 +8817,9 @@ main_thread = Thread.new {
 }
 
 if HAVE_GTK
-	Gtk.main_with_queue(100)
+	Thread.current.priority = -10
+	GLib::Timeout.add(100) { Gtk.do_queue; true }
+	Gtk.main
 else
 	main_thread.join
 end
