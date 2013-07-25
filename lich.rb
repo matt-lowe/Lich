@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.0'
+$version = '4.3.1'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -71,14 +71,8 @@ if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts '      --platinum      Connect to the Gemstone IV/DragonRealms Platinum server.'
 	puts '  -g, --game          Set the IP address and port of the game.  See example below.'
 	puts ''
-#	puts '      --bare          Perform no data-scanning, just pass all game lines directly to scripts.  For maximizing efficiency w/ non-Simu MUDs.'
-#	puts '  -c, --compressed    Do compression/decompression of the I/O data using Zlib (this is for MCCP, Mud Client Compression Protocol).'
-#	puts '      --debug         Mainly of use in Windows; redirects the program\'s STDERR & STDOUT to the \'/lich_err.txt\' file.'
 	puts '      --install       Edits the Windows/WINE registry so that Lich is started when logging in using the website or SGE.'
 	puts '      --uninstall     Removes Lich from the registry.'
-#	puts ''
-#	puts '      --test'
-#	puts '      --stderr'
 	puts ''
 	puts 'The majority of Lich\'s built-in functionality was designed and implemented with Simutronics MUDs in mind (primarily Gemstone IV): as such, many options/features provided by Lich may not be applicable when it is used with a non-Simutronics MUD.  In nearly every aspect of the program, users who are not playing a Simutronics game should be aware that if the description of a feature/option does not sound applicable and/or compatible with the current game, it should be assumed that the feature/option is not.  This particularly applies to in-script methods (commands) that depend heavily on the data received from the game conforming to specific patterns (for instance, it\'s extremely unlikely Lich will know how much "health" your character has left in a non-Simutronics game, and so the "health" script command will most likely return a value of 0).'
 	puts ''
@@ -8734,7 +8728,7 @@ get_process_list = proc {
 }
 
 reconnect_if_wanted = proc {
-	if ARGV.include?('--reconnect') and ARGV.include?('--login')
+	if ARGV.include?('--reconnect') and ARGV.include?('--login') and not $_CLIENTBUFFER_.any? { |cmd| cmd =~ /^(?:\[.*?\])?(?:<c>)?(?:quit|exit)/i }
 		$stderr.puts 'info: waiting 60 seconds to reconnect...'
 		sleep 60
 		$stderr.puts 'info: reconnecting...'
@@ -9015,40 +9009,7 @@ main_thread = Thread.new {
 	LichSettings['serverbuffer_min_size'] ||= 200
 	LichSettings['clientbuffer_max_size'] ||= 100
 	LichSettings['clientbuffer_min_size'] ||= 50
-	LichSettings['trusted_scripts'] ||= [ 'updater', 'infomon', 'lnet', 'narost', 'repository' ]
-	if LichSettings['quick_game_entry']
-		temp_array = Array.new
-		LichSettings['quick_game_entry'].each_pair { |charname,data|
-			temp_hash = Hash.new
-			temp_hash[:char_name] = charname
-			temp_hash[:user_id] = data[0]
-			temp_hash[:password] = data[1].unpack('m').first
-			temp_hash[:char_code] = data[3]
-			temp_hash[:game_code] = data[2]
-			if data[2] == 'GS3'
-				temp_hash[:game_name] = 'Gemstone IV'
-			elsif data[2] == 'GSF'
-				temp_hash[:game_name] = 'Gemstone IV Shattered'
-			elsif data[2] == 'GSX'
-				temp_hash[:game_name] = 'Gemstone IV Platinum'
-			else
-				temp_hash[:game_name] = 'unkown'
-			end
-			if data[4]
-				temp_hash[:frontend] = 'wizard'
-			else
-				temp_hash[:frontend] = 'stormfront'
-			end
-			temp_array.push(temp_hash)
-			temp_hash = nil
-		}
-		File.open("#{$data_dir}entry.dat", 'w') { |file|
-			file.write([Marshal.dump(temp_array)].pack('m'))
-		}
-		temp_array = nil
-		LichSettings['quick_game_entry'] = nil
-		LichSettings.save
-	end
+	LichSettings['trusted_scripts']       ||= [ 'updater', 'infomon', 'lnet', 'narost', 'repository' ]
 
 	$clean_lich_char = LichSettings['lich_char']
 	$lich_char = Regexp.escape("#{$clean_lich_char}")
@@ -9099,24 +9060,27 @@ main_thread = Thread.new {
 				end
 			}
 	
-			begin
+			login_server = nil
+			connect_thread = nil
+			timeout_thread = Thread.new {
+				sleep 30
+				$stdout.puts "error: timed out connecting to eaccess.play.net:7900"
+				$stderr.puts "error: timed out connecting to eaccess.play.net:7900"
+				connect_thread.kill rescue()
 				login_server = nil
-				connect_thread = Thread.new {
+			}
+			connect_thread = Thread.new {
+				begin
 					login_server = TCPSocket.new('eaccess.play.net', 7900)
-				}
-				300.times {
-					sleep 0.1
-					break unless connect_thread.status
-				}
-				if connect_thread.status
-					connect_thread.kill rescue()
-					$stdout.puts "error: timed out connecting to eaccess.play.net:7900"
-					$stderr.puts "error: timed out connecting to eaccess.play.net:7900"
+				rescue
+					login_server = nil
+					$stdout.puts "error connecting to server: #{$!}"
+					$stderr.puts "error connecting to server: #{$!}"
 				end
-			rescue
-				$stdout.puts "error connecting to server: #{$!}"
-				$stderr.puts "error connecting to server: #{$!}"
-			end
+			}
+			connect_thread.join
+			timeout_thread.kill rescue()
+
 			if login_server
 				login_server.puts "K\n"
 				hashkey = login_server.gets
@@ -9189,8 +9153,8 @@ main_thread = Thread.new {
 				exit
 			end
 		else
-				$stdout.puts "error: failed to find login data for #{char_name}"
-				$stderr.puts "error: failed to find login data for #{char_name}"
+			$stdout.puts "error: failed to find login data for #{char_name}"
+			$stderr.puts "error: failed to find login data for #{char_name}"
 		end
 	elsif HAVE_GTK and ARGV.empty?
 		if File.exists?("#{$data_dir}entry.dat")
@@ -10053,8 +10017,6 @@ main_thread = Thread.new {
 	trace_var(:$_SERVER_, sock_keepalive_proc)
 	Socket.do_not_reverse_lookup = true
 
-	$frontend = 'suks' if ARGV.find { |arg| arg == '--suks' }
-
 	#
 	# open the client and have it connect to us
 	#
@@ -10304,22 +10266,22 @@ main_thread = Thread.new {
 
 		hack_hosts(hosts_dir, game_host)
 
-		timeout_thread = Thread.new {
-			sleep 120
-			$stdout.puts 'error: timed out waiting for client to connect'
-			$stderr.puts 'error: timed out waiting for client to connect'
-			heal_hosts(hosts_dir)
-			exit(1)
-		}
 		$stdout.puts "Pretending to be #{game_host}"
 		$stdout.puts "Listening on port #{game_port}"
 		$stdout.puts "Waiting for the client to connect..."
 		$stderr.puts "info: pretending to be #{game_host}"
 		$stderr.puts "info: listening on port #{game_port}"
 		$stderr.puts "info: waiting for the client to connect..."
+
+		timeout_thread = Thread.new {
+			sleep 120
+			$stdout.puts 'error: timed out waiting for client to connect'
+			$stderr.puts 'error: timed out waiting for client to connect'
+			heal_hosts(hosts_dir)
+			exit
+		}
 		$_CLIENT_ = listener.accept
 		timeout_thread.kill
-		timeout_thread = nil
 		$stdout.puts "Connection with the local game client is open."
 		$stderr.puts "info: connection with the game client is open"
 		heal_hosts(hosts_dir)
@@ -10330,22 +10292,22 @@ main_thread = Thread.new {
 			$stderr.puts 'info: connecting to the real game host...'
 			game_host, game_port = fix_game_host_port.call(game_host, game_port)
 			begin
-				connect_thread = Thread.new {
-					$_SERVER_ = TCPSocket.open(gamehost, gameport)
+				timeout_thread = Thread.new {
+					sleep 30
+					$stderr.puts "error: timed out connecting to #{game_host}:#{game_port}"
+					$stdout.puts "error: timed out connecting to #{game_host}:#{game_port}"
+					exit
 				}
-				300.times {
-					sleep 0.1
-					break unless connect_thread.status
-				}
-				if connect_thread.status
-					connect_thread.kill rescue()
-					raise "error: timed out connecting to #{gamehost}:#{gameport}"
+				begin
+					$_SERVER_ = TCPSocket.open(game_host, game_port)
+				rescue
+					$stderr.puts "error: #{$!}"
+					$stdout.puts "error: #{$!}"
+					exit
 				end
-			rescue
-				puts $!
-				exit
+				timeout_thread.kill rescue()
+				$stderr.puts 'info: connection with the game host is open'
 			end
-			$stderr.puts 'info: connection with the game host is open'
 		end
 	else
 		#
@@ -10464,64 +10426,6 @@ main_thread = Thread.new {
 			}
 			$login_time = Time.now
 		}
-	elsif $frontend == 'suks'
-=begin
-		io_string = String.new
-		$_CLIENT_ = StringIO.new(io_string)
-		$_CLIENT_READER_ = StringIO.new(io_string)
-		$stdout = $_CLIENT_
-		$_CLIENT_.sync = true
-		SUKS = SuperUltraKoboldSmasher.new
-		client_thread = Thread.new {
-			$login_time = Time.now
-			begin
-				loop {
-					if client_string = $_CLIENT_READER_.gets
-						begin
-							REXML::Document.parse_stream(client_string, SUKS)
-						rescue
-							if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
-								# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
-								$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
-								retry
-							end
-							$stdout.puts "--- error: server_thread: #{$!}"
-							$stderr.puts "error: server_thread: #{$!}"
-							$stderr.puts $!.backtrace
-							SUKS.reset
-						end
-					else
-						sleep "0.011".to_f
-					end
-				}
-			rescue
-				puts $!
-				puts $!.backtrace[0..1]
-			end
-		}
-
-		unless $offline_mode
-			#
-			# send the login key
-			#
-			$_SERVER_.write("#{game_key}\r\n")
-			game_key = nil
-			#
-			# send version string
-			#
-			client_string = "/FE:WIZARD /VERSION:1.0.1.22 /P:#{RUBY_PLATFORM} /XML\r\n"
-			$_CLIENTBUFFER_.push(client_string.dup)
-			$_SERVER_.write(client_string)
-			#
-			# tell the server we're ready
-			#
-			2.times {
-				sleep "0.3".to_f
-				$_CLIENTBUFFER_.push("#{$cmd_prefix}\r\n")
-				$_SERVER_.write("#{$cmd_prefix}\r\n")
-			}
-		end
-=end
 	else
 		#
 		# shutdown listening socket
@@ -10708,23 +10612,6 @@ main_thread = Thread.new {
 					end
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
-=begin
-						if defined?(SUKS) and SUKS.active
-							begin
-								REXML::Document.parse_stream(alt_string, SUKS)
-							rescue
-								if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
-									# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
-									$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
-									retry
-								end
-								$stdout.puts "--- error: server_thread: #{$!}"
-								$stderr.puts "error: server_thread: #{$!}"
-								$stderr.puts $!.backtrace
-								SUKS.reset
-							end
-						end
-=end
 						if $frontend =~ /^(?:wizard|avalon)$/
 							alt_string = sf_to_wiz(alt_string)
 						end
