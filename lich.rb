@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.42'
+$version = '4.1.43'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -215,7 +215,8 @@ $stderr = File.open(debug_filename, 'w')
 $stderr.sync = true
 
 $stderr.puts "info: #{Time.now}"
-$stderr.puts "info: #{$version}"
+$stderr.puts "info: Lich #{$version}"
+$stderr.puts "info: #{RUBY_PLATFORM}"
 $stderr.puts "info: $lich_dir: #{$lich_dir}"
 $stderr.puts "info: $script_dir: #{$script_dir}"
 $stderr.puts "info: $data_dir: #{$data_dir}"
@@ -346,18 +347,18 @@ $room_count = 0
 #
 # Allow untrusted scripts to do a few things
 #
-UNTRUSTED_SETTINGS_LOAD = proc { |var| Settings.load }
-UNTRUSTED_SETTINGS_SAVE = proc { |var| Settings.save }
-UNTRUSTED_SETTINGS_SAVE_ALL = proc { |var| Settings.save_all }
-UNTRUSTED_GAMESETTINGS_LOAD = proc { |var| GameSettings.load }
-UNTRUSTED_GAMESETTINGS_SAVE = proc { |var| GameSettings.save }
-UNTRUSTED_GAMESETTINGS_SAVE_ALL = proc { |var| GameSettings.save_all }
-UNTRUSTED_CHARSETTINGS_LOAD = proc { |var| CharSettings.load }
-UNTRUSTED_CHARSETTINGS_SAVE = proc { |var| CharSettings.save }
-UNTRUSTED_CHARSETTINGS_SAVE_ALL = proc { |var| CharSettings.save_all }
-UNTRUSTED_MAP_LOAD = proc { |var| Map.load }
-UNTRUSTED_MAP_SAVE = proc { |var| Map.save }
-UNTRUSTED_SPELL_LOAD = proc { |var| Spell.load }
+UNTRUSTED_SETTINGS_LOAD = proc { Settings.load }
+UNTRUSTED_SETTINGS_SAVE = proc { Settings.save }
+UNTRUSTED_SETTINGS_SAVE_ALL = proc { Settings.save_all }
+UNTRUSTED_GAMESETTINGS_LOAD = proc { GameSettings.load }
+UNTRUSTED_GAMESETTINGS_SAVE = proc { GameSettings.save }
+UNTRUSTED_GAMESETTINGS_SAVE_ALL = proc { GameSettings.save_all }
+UNTRUSTED_CHARSETTINGS_LOAD = proc { CharSettings.load }
+UNTRUSTED_CHARSETTINGS_SAVE = proc { CharSettings.save }
+UNTRUSTED_CHARSETTINGS_SAVE_ALL = proc { CharSettings.save_all }
+UNTRUSTED_MAP_LOAD = proc { Map.load }
+UNTRUSTED_MAP_SAVE = proc { Map.save }
+UNTRUSTED_SPELL_LOAD = proc { Spell.load }
 UNTRUSTED_START_SCRIPT = proc { |script_name,cli_vars,force| start_script(script_name,cli_vars,force) }
 UNTRUSTED_START_EXEC_SCRIPT = proc { |cmd_data,flags|
 	flags = Hash.new unless flags.class == Hash
@@ -3156,15 +3157,16 @@ class Spell
 	@@loaded ||= false
 	@@load_lock = Array.new
 	@@cast_lock ||= Array.new
-	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command
+	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command, :castProc
 	attr_accessor :stance, :channel
-	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
-		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
+	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
+		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@castProc,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
 		@time_per_formula.untaint
 		@mana_cost_formula.untaint
 		@spirit_cost_formula.untaint
 		@stamina_cost_formula.untaint
 		@renew_cost_formula.untaint
+		@castProc.untaint
 		@bolt_as_formula.untaint
 		@physical_as_formula.untaint
 		@bolt_ds_formula.untaint
@@ -3207,8 +3209,8 @@ class Spell
 					File.open(filename) { |file|
 						file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
 							spell = Hash.new
-							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
+							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|castProc|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['castProc'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
 						}
 					}
 					@@list.each { |spell|
@@ -3516,15 +3518,15 @@ class Spell
 			echo "cast: spell missing type (#{@name})"
 			return false
 		end
-		unless checkmana(self.mana_cost)
+		unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 			echo 'cast: not enough mana'
 			return false
 		end
-		unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+		unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 			echo 'cast: not enough spirit'
 			return false
 		end
-		unless checkstamina(self.stamina_cost)
+		unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 			echo 'cast: not enough stamina'
 			return false
 		end
@@ -3535,19 +3537,23 @@ class Spell
 				Script.self # allows this loop to be paused
 				@@cast_lock.delete_if { |s| s.paused }
 			end
-			unless checkmana(self.mana_cost)
+			unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 				echo 'cast: not enough mana'
 				return false
 			end
-			unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+			unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 				echo 'cast: not enough spirit'
 				return false
 			end
-			unless checkstamina(self.stamina_cost)
+			unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 				echo 'cast: not enough stamina'
 				return false
 			end
-			if @command
+			if @castProc
+				waitrt?
+				waitcastrt?
+				eval(@castProc)
+			elsif @command
 				cmd = @command
 				if target.class == GameObj
 					cmd += " ##{target.id}"
@@ -3579,19 +3585,19 @@ class Spell
 				cast_result = nil
 				loop {
 					waitrt?
-					waitcastrt?
 					unless checkprep == @name
+						waitcastrt? unless Spell[515].active?
 						unless checkprep == 'None'
 							dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-							unless checkmana(self.mana_cost)
+							unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 								echo 'cast: not enough mana'
 								return false
 							end
-							unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+							unless (self.spirit_cost <= 0) or checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 								echo 'cast: not enough spirit'
 								return false
 							end
-							unless checkstamina(self.stamina_cost)
+							unless (self.stamina_cost <= 0) or checkstamina(self.stamina_cost)
 								echo 'cast: not enough stamina'
 								return false
 							end
@@ -3604,7 +3610,7 @@ class Spell
 								break
 							elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
 								dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-								unless checkmana(self.mana_cost)
+								unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 									echo 'cast: not enough mana'
 									return false
 								end
@@ -3616,7 +3622,7 @@ class Spell
 					if @stance and checkstance != 'offensive'
 						dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
 					end
-					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$/
+					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$|^Your magic fizzles ineffectually\.$|^All you manage to do is cough up some blood\.$|^And give yourself away!  Never!$|^You are unable to do that right now\.$/
 					if @stance and checkstance !~ /^guarded$|^defensive$/
 						dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
 					end
@@ -3872,7 +3878,7 @@ class GameObj
 		@id = id
 		@noun = noun
 		@noun = 'lapis' if @noun == 'lapis lazuli'
-		# fixme: 'mother-of-pearl' gives 'pearl' as the noun?
+		@noun = 'hammer' if @noun == "Hammer of Kai"
 		@noun = 'mother-of-pearl' if (@noun == 'pearl') and (@name =~ /mother\-of\-pearl/)
 		@name = name
 		@@npc_status[@id] = status
@@ -4144,7 +4150,7 @@ class Map
 				false
 			end
 		else
-			UNTRUSTED_MAP_LOAD.call(filename)
+			UNTRUSTED_MAP_LOAD.call
 		end
 	end
 	def Map.load_xml(filename="#{$script_dir}map.xml")
@@ -4214,7 +4220,7 @@ class Map
 			end
 			GC.start
 		else
-			UNTRUSTED_MAP_SAVE.call(filename)
+			UNTRUSTED_MAP_SAVE.call
 		end
 	end
 	def Map.save_xml(filename="#{$script_dir}map.xml")
@@ -6133,7 +6139,7 @@ def fput(message, *waitingfor)
 			clear
 			fput("stand")
 			next
-		elsif string =~ /stunned|can't do that while|cannot seem|can't seem|don't seem|Sorry, you may only type ahead/
+		elsif string =~ /stunned|can't do that while|cannot seem|^(?!You rummage).*can't seem|don't seem|Sorry, you may only type ahead/
 			if dead?
 				echo("You're dead...! You can't do that!")
 				sleep 1
@@ -7506,6 +7512,8 @@ begin
 	alias :checkhiding :checkhidden
 	alias :invisible? :checkinvisible
 	alias :standing? :checkstanding
+	alias :kneeling? :checkkneeling
+	alias :sitting? :checksitting
 	alias :stance? :checkstance
 	alias :stance :checkstance
 	alias :joined? :checkgrouped
@@ -7748,94 +7756,170 @@ main_thread = Thread.new {
 	LichSettings['clientbuffer_max_size'] ||= 100
 	LichSettings['clientbuffer_min_size'] ||= 50
 	LichSettings['trusted_scripts'] ||= [ 'updater', 'infomon', 'lnet', 'narost', 'repository' ]
-	LichSettings['quick_game_entry'].delete_if { |key,val| val.length != 5 }
+	if LichSettings['quick_game_entry']
+		temp_array = Array.new
+		LichSettings['quick_game_entry'].each_pair { |charname,data|
+			temp_hash = Hash.new
+			temp_hash[:char_name] = charname
+			temp_hash[:user_id] = data[0]
+			temp_hash[:password] = data[1].unpack('m').first
+			temp_hash[:char_code] = data[3]
+			temp_hash[:game_code] = data[2]
+			if data[2] == 'GS3'
+				temp_hash[:game_name] = 'Gemstone IV'
+			elsif data[2] == 'GSF'
+				temp_hash[:game_name] = 'Gemstone IV Shattered'
+			elsif data[2] == 'GSX'
+				temp_hash[:game_name] = 'Gemstone IV Platinum'
+			else
+				temp_hash[:game_name] = 'unkown'
+			end
+			if data[4]
+				temp_hash[:frontend] = 'wizard'
+			else
+				temp_hash[:frontend] = 'stormfront'
+			end
+			temp_array.push(temp_hash)
+			temp_hash = nil
+		}
+		File.open("#{$data_dir}entry.dat", 'w') { |file|
+			file.write([Marshal.dump(temp_array)].pack('m'))
+		}
+		temp_array = nil
+		LichSettings['quick_game_entry'] = nil
+	end
 
 	$clean_lich_char = LichSettings['lich_char']
 	$lich_char = Regexp.escape("#{$clean_lich_char}")
 
 	launch_data = nil
 
-	if ARGV.include?('--login') and (charname = ARGV[ARGV.index('--login')+1].capitalize) and LichSettings['quick_game_entry'][charname]
-		$stderr.puts "info: using quick game entry settings for #{charname}"
-		msgbox = proc { |msg|
-			if HAVE_GTK
-				done = false
-				Gtk.queue {
-					dialog = Gtk::MessageDialog.new(nil, Gtk::Dialog::DESTROY_WITH_PARENT, Gtk::MessageDialog::QUESTION, Gtk::MessageDialog::BUTTONS_CLOSE, msg)
-					dialog.run
-					dialog.destroy
-					done = true
-				}
-				sleep "0.1".to_f until done
-			else
-				$stdout.puts(msg)
-				$stderr.puts(msg)
-			end
-		}
-
-		begin
-			login_server = TCPSocket.new('eaccess.play.net', 7900)
-		rescue
-			msgbox.call "error connecting to server: #{$!}"
+	if ARGV.include?('--login')
+		if File.exists?("#{$data_dir}entry.dat")
+			entry_data = File.open("#{$data_dir}entry.dat", 'r') { |file|
+				begin
+					Marshal.load(file.read.unpack('m').first)
+				rescue
+					Array.new
+				end
+			}
+		else
+			entry_data = Array.new
 		end
-		if login_server
-			login_server.puts "K\n"
-			hashkey = login_server.gets
-			if 'test'[0].class == String
-				password = LichSettings['quick_game_entry'][charname][1].unpack('m').first.split('').collect { |c| c.getbyte(0) }
-				hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
+		char_name = ARGV[ARGV.index('--login')+1].capitalize
+		if ARGV.include?('--gemstone')
+			if ARGV.include?('--platinum')
+				data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSX') }
 			else
-				password = LichSettings['quick_game_entry'][charname][1].unpack('m').first.split('').collect { |c| c[0] }
-				hashkey = hashkey.split('').collect { |c| c[0] }
+				data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GS3') }
 			end
-			password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
-			password = password.collect { |c| c.chr }.join
-			login_server.puts "A\t#{LichSettings['quick_game_entry'][charname][0]}\t#{password}\n"
-			password = nil
-			response = login_server.gets
-			login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
-			if login_key
-				login_server.puts "M\n"
+		elsif ARGV.include?('--shattered')
+			data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSF') }
+		else
+			data = entry_data.find { |d| (d[:char_name] == char_name) }
+		end
+		if data
+			$stderr.puts "info: using quick game entry settings for #{char_name}"
+			msgbox = proc { |msg|
+				if HAVE_GTK
+					done = false
+					Gtk.queue {
+						dialog = Gtk::MessageDialog.new(nil, Gtk::Dialog::DESTROY_WITH_PARENT, Gtk::MessageDialog::QUESTION, Gtk::MessageDialog::BUTTONS_CLOSE, msg)
+						dialog.run
+						dialog.destroy
+						done = true
+					}
+					sleep "0.1".to_f until done
+				else
+					$stdout.puts(msg)
+					$stderr.puts(msg)
+				end
+			}
+	
+			begin
+				login_server = TCPSocket.new('eaccess.play.net', 7900)
+			rescue
+				$stdout.puts "error connecting to server: #{$!}"
+				$stderr.puts "error connecting to server: #{$!}"
+			end
+			if login_server
+				login_server.puts "K\n"
+				hashkey = login_server.gets
+				if 'test'[0].class == String
+					password = data[:password].split('').collect { |c| c.getbyte(0) }
+					hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
+				else
+					password = data[:password].split('').collect { |c| c[0] }
+					hashkey = hashkey.split('').collect { |c| c[0] }
+				end
+				password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
+				password = password.collect { |c| c.chr }.join
+				login_server.puts "A\t#{data[:user_id]}\t#{password}\n"
+				password = nil
 				response = login_server.gets
-				if response =~ /^M\t/
-					login_server.puts "F\t#{LichSettings['quick_game_entry'][charname][2]}\n"
+				login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
+				if login_key
+					login_server.puts "M\n"
 					response = login_server.gets
-					if response =~ /NORMAL|PREMIUM|TRIAL/
-						login_server.puts "G\t#{LichSettings['quick_game_entry'][charname][2]}\n"
-						login_server.gets
-						login_server.puts "P\t#{LichSettings['quick_game_entry'][charname][2]}\n"
-						login_server.gets
-						login_server.puts "C\n"
+					if response =~ /^M\t/
+						login_server.puts "F\t#{data[:game_code]}\n"
 						response = login_server.gets
-						login_server.puts "L\t#{LichSettings['quick_game_entry'][charname][3]}\tSTORM\n"
-						response = login_server.gets
-						if response =~ /^L\t/
-							login_server.close unless login_server.closed?
-							launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-							if LichSettings['quick_game_entry'][charname][4]
-								launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+						if response =~ /NORMAL|PREMIUM|TRIAL/
+							login_server.puts "G\t#{data[:game_code]}\n"
+							login_server.gets
+							login_server.puts "P\t#{data[:game_code]}\n"
+							login_server.gets
+							login_server.puts "C\n"
+							char_code = login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/).find { |c| c.split("\t")[1] == data[:char_name] }.split("\t")[0]
+							login_server.puts "L\t#{char_code}\tSTORM\n"
+							response = login_server.gets
+							if response =~ /^L\t/
+								login_server.close unless login_server.closed?
+								launch_data = response.sub(/^L\tOK\t/, '').split("\t")
+								if data[:frontend] == 'wizard'
+									launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+								end
+							else
+								login_server.close unless login_server.closed?
+								$stdout.puts "error: unrecognized response from server. (#{response})"
+								$stderr.puts "error: unrecognized response from server. (#{response})"
 							end
 						else
 							login_server.close unless login_server.closed?
-							msgbox.call("Unrecognized response from server. (#{response})")
+							$stdout.puts "error: unrecognized response from server. (#{response})"
+							$stderr.puts "error: unrecognized response from server. (#{response})"
 						end
 					else
 						login_server.close unless login_server.closed?
-						msgbox.call("Unrecognized response from server. (#{response})")
+						$stdout.puts "error: unrecognized response from server. (#{response})"
+						$stderr.puts "error: unrecognized response from server. (#{response})"
 					end
 				else
 					login_server.close unless login_server.closed?
-					msgbox.call("Unrecognized response from server. (#{response})")
+					$stdout.puts "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
+					$stderr.puts "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
 				end
 			else
-				login_server.close unless login_server.closed?
-				msgbox.call "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
+				$stdout.puts "failed to connect to server"
+				$stderr.puts "failed to connect to server"
 			end
 		else
-			msgbox.call "failed to connect to server"
+				$stdout.puts "error: failed to find login data for #{char_name}"
+				$stderr.puts "error: failed to find login data for #{char_name}"
 		end
 	elsif HAVE_GTK and ARGV.empty?
-		setting_quick_game_entry = LichSettings['quick_game_entry'] || Hash.new
+		if File.exists?("#{$data_dir}entry.dat")
+			entry_data = File.open("#{$data_dir}entry.dat", 'r') { |file|
+				begin
+					Marshal.load(file.read.unpack('m').first)
+				rescue
+					Array.new
+				end
+			}
+		else
+			entry_data = Array.new
+		end
+		save_entry_data = false
 		done = false
 		Gtk.queue {
 
@@ -7852,23 +7936,22 @@ main_thread = Thread.new {
 			#
 			# quick game entry tab
 			#
-
-			if setting_quick_game_entry.empty?
+			if entry_data.empty?
 				box = Gtk::HBox.new
 				box.pack_start(Gtk::Label.new('You have no saved login info.'), true, true, 0)
 				quick_game_entry_tab = Gtk::VBox.new
 				quick_game_entry_tab.pack_start(box, true, true, 0)
 			else
-				quick_table = Gtk::Table.new(setting_quick_game_entry.length, 3, true)
-				row = 0
-				setting_quick_game_entry.keys.sort.each { |char_name|
-					label = Gtk::Label.new(char_name)
+				quick_box = Gtk::VBox.new
+				entry_data.each { |data|
+					label = Gtk::Label.new("#{data[:char_name]} (#{data[:game_name]})")
 					play_button = Gtk::Button.new('Play')
-					remove_button = Gtk::Button.new('Remove')
-					quick_table.attach(label, 0, 1, row, row+1, Gtk::EXPAND|Gtk::FILL, Gtk::EXPAND|Gtk::FILL, 5, 5)
-					quick_table.attach(play_button, 1, 2, row, row+1, Gtk::EXPAND|Gtk::FILL, Gtk::EXPAND|Gtk::FILL, 5, 5)
-					quick_table.attach(remove_button, 2, 3, row, row+1, Gtk::EXPAND|Gtk::FILL, Gtk::EXPAND|Gtk::FILL, 5, 5)
-					row += 1
+					remove_button = Gtk::Button.new('X')
+					char_box = Gtk::HBox.new
+					char_box.pack_start(label, false, false, 6)
+					char_box.pack_end(remove_button, false, false, 0)
+					char_box.pack_end(play_button, false, false, 0)
+					quick_box.pack_start(char_box, false, false, 0)
 					play_button.signal_connect('clicked') {
 						play_button.sensitive = false
 						begin
@@ -7881,15 +7964,15 @@ main_thread = Thread.new {
 							login_server.puts "K\n"
 							hashkey = login_server.gets
 							if 'test'[0].class == String
-								password = setting_quick_game_entry[char_name][1].unpack('m').first.split('').collect { |c| c.getbyte(0) }
+								password = data[:password].split('').collect { |c| c.getbyte(0) }
 								hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
 							else
-								password = setting_quick_game_entry[char_name][1].unpack('m').first.split('').collect { |c| c[0] }
+								password = data[:password].split('').collect { |c| c[0] }
 								hashkey = hashkey.split('').collect { |c| c[0] }
 							end
 							password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
 							password = password.collect { |c| c.chr }.join
-							login_server.puts "A\t#{setting_quick_game_entry[char_name][0]}\t#{password}\n"
+							login_server.puts "A\t#{data[:user_id]}\t#{password}\n"
 							password = nil
 							response = login_server.gets
 							login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
@@ -7897,21 +7980,21 @@ main_thread = Thread.new {
 								login_server.puts "M\n"
 								response = login_server.gets
 								if response =~ /^M\t/
-									login_server.puts "F\t#{setting_quick_game_entry[char_name][2]}\n"
+									login_server.puts "F\t#{data[:game_code]}\n"
 									response = login_server.gets
 									if response =~ /NORMAL|PREMIUM|TRIAL/
-										login_server.puts "G\t#{setting_quick_game_entry[char_name][2]}\n"
+										login_server.puts "G\t#{data[:game_code]}\n"
 										login_server.gets
-										login_server.puts "P\t#{setting_quick_game_entry[char_name][2]}\n"
+										login_server.puts "P\t#{data[:game_code]}\n"
 										login_server.gets
 										login_server.puts "C\n"
-										response = login_server.gets
-										login_server.puts "L\t#{setting_quick_game_entry[char_name][3]}\tSTORM\n"
+										char_code = login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/).find { |c| c.split("\t")[1] == data[:char_name] }.split("\t")[0]
+										login_server.puts "L\t#{char_code}\tSTORM\n"
 										response = login_server.gets
 										if response =~ /^L\t/
 											login_server.close unless login_server.closed?
 											launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-											if setting_quick_game_entry[char_name][4]
+											if data[:frontend] == 'wizard'
 												launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
 											end
 											window.destroy
@@ -7942,15 +8025,22 @@ main_thread = Thread.new {
 						end
 					}
 					remove_button.signal_connect('clicked') {
-						setting_quick_game_entry.delete(char_name)
-						label.visible = false
-						play_button.visible = false
-						remove_button.visible = false
+						entry_data.delete(data)
+						save_entry_data = true
+						char_box.visible = false
 					}
 				}
 
+				adjustment = Gtk::Adjustment.new(0, 0, 1000, 5, 20, 500)
+				quick_vp = Gtk::Viewport.new(adjustment, adjustment)
+				quick_vp.add(quick_box)
+
+				quick_sw = Gtk::ScrolledWindow.new
+				quick_sw.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
+				quick_sw.add(quick_vp)
+
 				quick_game_entry_tab = Gtk::VBox.new
-				quick_game_entry_tab.pack_start(quick_table, false, false, 5)
+				quick_game_entry_tab.pack_start(quick_sw, true, true, 5)
 			end
 
 			#
@@ -7977,39 +8067,26 @@ main_thread = Thread.new {
 			login_button_box.pack_end(connect_button, false, false, 5)
 			login_button_box.pack_end(disconnect_button, false, false, 5)
 
-			game_liststore = Gtk::ListStore.new(String, String)
-			game_liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
+			liststore = Gtk::ListStore.new(String, String, String, String)
+			liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
 
-			game_renderer = Gtk::CellRendererText.new
-			game_renderer.background = 'white'
+			renderer = Gtk::CellRendererText.new
+			renderer.background = 'white'
 
-			col = Gtk::TreeViewColumn.new("Select game:", game_renderer, :text => 1, :background_set => 2)
+			treeview = Gtk::TreeView.new(liststore)
+			treeview.height_request = 160
+
+			col = Gtk::TreeViewColumn.new("Game", renderer, :text => 1, :background_set => 2)
 			col.resizable = true
+			treeview.append_column(col)
 
-			game_treeview = Gtk::TreeView.new(game_liststore)
-			game_treeview.height_request = 160
-			game_treeview.append_column(col)
-
-			game_sw = Gtk::ScrolledWindow.new
-			game_sw.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
-			game_sw.add(game_treeview)
-
-			char_liststore = Gtk::ListStore.new(String, String)
-			char_liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
-
-			char_renderer = Gtk::CellRendererText.new
-			char_renderer.background = 'white'
-
-			col = Gtk::TreeViewColumn.new("Select character:", char_renderer, :text => 1, :background_set => 2)
+			col = Gtk::TreeViewColumn.new("Character", renderer, :text => 3, :background_set => 2)
 			col.resizable = true
+			treeview.append_column(col)
 
-			char_treeview = Gtk::TreeView.new(char_liststore)
-			char_treeview.height_request = 90
-			char_treeview.append_column(col)
-
-			char_sw = Gtk::ScrolledWindow.new
-			char_sw.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
-			char_sw.add(char_treeview)
+			sw = Gtk::ScrolledWindow.new
+			sw.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
+			sw.add(treeview)
 
 			wizard_option = Gtk::RadioButton.new('Wizard')
 			stormfront_option = Gtk::RadioButton.new(wizard_option, 'Stormfront')
@@ -8033,125 +8110,112 @@ main_thread = Thread.new {
 			game_entry_tab = Gtk::VBox.new
 			game_entry_tab.pack_start(login_table, false, false, 0)
 			game_entry_tab.pack_start(login_button_box, false, false, 0)
-			game_entry_tab.pack_start(game_sw, true, true, 3)
-			game_entry_tab.pack_start(char_sw, false, true, 3)
+			game_entry_tab.pack_start(sw, true, true, 3)
 			game_entry_tab.pack_start(frontend_box, false, false, 3)
 			game_entry_tab.pack_start(make_quick_option, false, false, 3)
 			game_entry_tab.pack_start(play_button_box, false, false, 3)
-
-			selected_game_code = nil
 
 			connect_button.signal_connect('clicked') {
 				connect_button.sensitive = false
 				user_id_entry.sensitive = false
 				pass_entry.sensitive = false
-				begin
-					login_server = TCPSocket.new('eaccess.play.net', 7900)
-				rescue
-					msgbox.call "error connecting to server: #{$!}"
-					connect_button.sensitive = true
-					user_id_entry.sensitive = true
-					pass_entry.sensitive = true
-				end
-				disconnect_button.sensitive = true
-				if login_server
-					login_server.puts "K\n"
-					hashkey = login_server.gets
-					if 'test'[0].class == String
-						password = pass_entry.text.split('').collect { |c| c.getbyte(0) }
-						hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
-					else
-						password = pass_entry.text.split('').collect { |c| c[0] }
-						hashkey = hashkey.split('').collect { |c| c[0] }
-					end
-					# pass_entry.text = String.new
-					password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
-					password = password.collect { |c| c.chr }.join
-					login_server.puts "A\t#{user_id_entry.text}\t#{password}\n"
-					password = nil
-					response = login_server.gets
-					login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
-					if login_key
-						login_server.puts "M\n"
-						response = login_server.gets
-						if response =~ /^M\t/
-							response.sub(/^M\t/, '').scan(/[^\t]+\t[^\t]+/).each { |line|
-								game_code, game_name = line.split("\t")
-								login_server.puts "N\t#{game_code}\n"
-								if login_server.gets =~ /STORM/
-									iter = game_liststore.append
-									iter[0] = game_code.strip
-									iter[1] = game_name.strip
-								end
-							}
-							disconnect_button.sensitive = true
-						else
-							login_server.close unless login_server.closed?
-							msgbox.call "Unrecognized response from server (#{response})"
-						end
-
-					else
-						login_server.close unless login_server.closed?
-						disconnect_button.sensitive = false
+				iter = liststore.append
+				iter[1] = 'working...'
+				Gtk.queue {
+					begin
+						login_server = TCPSocket.new('eaccess.play.net', 7900)
+					rescue
+						msgbox.call "error connecting to server: #{$!}"
 						connect_button.sensitive = true
 						user_id_entry.sensitive = true
 						pass_entry.sensitive = true
-						msgbox.call "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
 					end
+					disconnect_button.sensitive = true
+					if login_server
+						login_server.puts "K\n"
+						hashkey = login_server.gets
+						if 'test'[0].class == String
+							password = pass_entry.text.split('').collect { |c| c.getbyte(0) }
+							hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
+						else
+							password = pass_entry.text.split('').collect { |c| c[0] }
+							hashkey = hashkey.split('').collect { |c| c[0] }
+						end
+						# pass_entry.text = String.new
+						password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
+						password = password.collect { |c| c.chr }.join
+						login_server.puts "A\t#{user_id_entry.text}\t#{password}\n"
+						password = nil
+						response = login_server.gets
+						login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
+						if login_key
+							login_server.puts "M\n"
+							response = login_server.gets
+							if response =~ /^M\t/
+								liststore.clear
+								for game in response.sub(/^M\t/, '').scan(/[^\t]+\t[^\t^\n]+/)
+									game_code, game_name = game.split("\t")
+									login_server.puts "G\t#{game_code}\n"
+									login_server.gets
+									login_server.puts "N\t#{game_code}\n"
+									if login_server.gets =~ /STORM/
+										login_server.puts "F\t#{game_code}\n"
+										if login_server.gets =~ /NORMAL|PREMIUM|TRIAL/
+											login_server.puts "C\n"
+											for code_name in login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/)
+												char_code, char_name = code_name.split("\t")
+												iter = liststore.append
+												iter[0] = game_code
+												iter[1] = game_name
+												iter[2] = char_code
+												iter[3] = char_name
+											end
+										end
+									end
+								end
+								disconnect_button.sensitive = true
+							else
+								login_server.close unless login_server.closed?
+								msgbox.call "Unrecognized response from server (#{response})"
+							end
+						else
+							login_server.close unless login_server.closed?
+							disconnect_button.sensitive = false
+							connect_button.sensitive = true
+							user_id_entry.sensitive = true
+							pass_entry.sensitive = true
+							msgbox.call "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
+						end
+					end
+				}
+			}
+			treeview.signal_connect('cursor-changed') {
+				if login_server
+					play_button.sensitive = true
 				end
 			}
 			disconnect_button.signal_connect('clicked') {
 				disconnect_button.sensitive = false
 				play_button.sensitive = false
-				game_liststore.clear
-				char_liststore.clear
+				liststore.clear
 				login_server.close unless login_server.closed?
 				connect_button.sensitive = true
 				user_id_entry.sensitive = true
 				pass_entry.sensitive = true
 			}
-			game_treeview.signal_connect('cursor-changed') {
-				if selected_game_code != game_treeview.selection.selected[0]
-					selected_game_code = game_treeview.selection.selected[0]
-					char_liststore.clear
-					if login_server and not login_server.closed?
-						login_server.puts "F\t#{selected_game_code.upcase}\n"
-						response = login_server.gets
-						if response =~ /NORMAL|PREMIUM|TRIAL/
-							login_server.puts "G\t#{selected_game_code.upcase}\n"
-							login_server.gets
-							login_server.puts "P\t#{selected_game_code.upcase}\n"
-							login_server.gets
-							login_server.puts "C\n"
-							response = login_server.gets
-							response.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+\t/, '').scan(/[^\t]+\t[^\t]+/).each { |line|
-								char_code, char_name = line.split("\t")
-								iter = char_liststore.append
-								iter[0] = char_code.strip
-								iter[1] = char_name.strip
-							}
-						elsif response =~ /NEW_TO_GAME/
-							play_button.sensitive = false
-						else
-							# fixme
-							msgbox.call("Unrecognized response from server. (#{response})")
-						end
-					else
-						disconnect_button.sensitive = false
-						play_button.sensitive = false
-						connect_button.sensitive = true
-						user_id_entry.sensitive = true
-						pass_entry.sensitive = true
-					end
-				end
-			}
-			char_treeview.signal_connect('cursor-changed') {
-				play_button.sensitive = true unless char_treeview.selection.selected[0].nil? or char_treeview.selection.selected[0].empty?
-			}
 			play_button.signal_connect('clicked') {
 				play_button.sensitive = false
-				char_code = char_treeview.selection.selected[0]
+				game_code = treeview.selection.selected[0]
+				char_code = treeview.selection.selected[2]
 				if login_server and not login_server.closed?
+					login_server.puts "F\t#{game_code}\n"
+					login_server.gets
+					login_server.puts "G\t#{game_code}\n"
+					login_server.gets
+					login_server.puts "P\t#{game_code}\n"
+					login_server.gets
+					login_server.puts "C\n"
+					login_server.gets
 					login_server.puts "L\t#{char_code}\tSTORM\n"
 					response = login_server.gets
 					if response =~ /^L\t/
@@ -8163,13 +8227,19 @@ main_thread = Thread.new {
 						login_server.close unless login_server.closed?
 						if wizard_option.active?
 							launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=WIZ") }
-						end
-						if suks_option.active?
+						elsif suks_option.active?
 							launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=SUKS") }
 						end
 						if make_quick_option.active?
-							setting_quick_game_entry[char_treeview.selection.selected[1]] = [ user_id_entry.text, [pass_entry.text].pack('m'), selected_game_code, char_code, wizard_option.active? ]
+							if wizard_option.active?
+								frontend = 'wizard'
+							else
+								frontend = 'stormfront'
+							end
+							entry_data.push h={ :char_name => treeview.selection.selected[3], :game_code => treeview.selection.selected[0], :game_name => treeview.selection.selected[1], :user_id => user_id_entry.text, :password => pass_entry.text, :frontend => frontend }
+							save_entry_data = true
 						end
+						user_id_entry.text = String.new
 						pass_entry.text = String.new
 						window.destroy
 						done = true
@@ -8188,6 +8258,12 @@ main_thread = Thread.new {
 					user_id_entry.sensitive = true
 					pass_entry.sensitive = true
 				end
+			}
+			user_id_entry.signal_connect('activate') {
+				pass_entry.grab_focus
+			}
+			pass_entry.signal_connect('activate') {
+				connect_button.clicked
 			}
 
 			#
@@ -8578,14 +8654,17 @@ main_thread = Thread.new {
 
 			window.show_all
 
-			notebook.set_page(1) if setting_quick_game_entry.empty?
+			notebook.set_page(1) if entry_data.empty?
 		}
 
 		wait_until { done }
 
-		LichSettings['quick_game_entry'] = setting_quick_game_entry
-		LichSettings.save
-		setting_quick_game_entry = nil
+		if save_entry_data
+			File.open("#{$data_dir}entry.dat", 'w') { |file|
+				file.write([Marshal.dump(entry_data)].pack('m'))
+			}
+		end
+		entry_data = nil
 
 		unless launch_data
 			Gtk.queue { Gtk.main_quit }
@@ -8652,7 +8731,14 @@ main_thread = Thread.new {
 			$stderr.puts "error: launch_data contains no GAME info"
 			exit(1)
 		end
-		if game =~ /SUKS/i
+		if ARGV.include?('--without-frontend')
+			$frontend = 'unknown'
+			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
+				$stdout.puts "error: launch_data contains no KEY info"
+				$stderr.puts "error: launch_data contains no KEY info"
+				exit(1)
+			end
+		elsif game =~ /SUKS/i
 			$frontend = 'suks'
 			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
 				$stdout.puts "error: launch_data contains no KEY info"
@@ -8687,7 +8773,9 @@ main_thread = Thread.new {
 		$stderr.puts "info: gamehost: #{gamehost}"
 		$stderr.puts "info: gameport: #{gameport}"
 		$stderr.puts "info: game: #{game}"
-		if $frontend == 'suks'
+		if ARGV.include?('--without-frontend')
+			$_CLIENT_ = nil
+		elsif $frontend == 'suks'
 			nil
 		else
 			if game =~ /WIZ/i
@@ -8888,7 +8976,28 @@ main_thread = Thread.new {
 	undef :exit!
 	$_SERVER_.sync = true
 
-	if $frontend == 'suks'
+	if ARGV.include?('--without-frontend')
+		client_thread = nil
+		#
+		# send the login key
+		#
+		$_SERVER_.write("#{game_key}\r\n")
+		game_key = nil
+		#
+		# send version string
+		#
+		client_string = "/FE:WIZARD /VERSION:1.0.1.22 /P:#{RUBY_PLATFORM} /XML\r\n"
+		$_CLIENTBUFFER_.push(client_string.dup)
+		$_SERVER_.write(client_string)
+		#
+		# tell the server we're ready
+		#
+		2.times {
+			sleep "0.3".to_f
+			$_CLIENTBUFFER_.push("<c>\r\n")
+			$_SERVER_.write("<c>\r\n")
+		}
+	elsif $frontend == 'suks'
 		client_io_string = String.new
 		$_CLIENT_ = StringIO.new(client_io_string)
 		$_CLIENT_READER_ = StringIO.new(client_io_string)
@@ -9287,6 +9396,7 @@ main_thread = Thread.new {
 	$_SERVER_.close rescue()
 	$_CLIENT_.close rescue()
 	Gtk.queue { Gtk.main_quit } if HAVE_GTK
+	exit
 }
 
 if HAVE_GTK
@@ -9295,4 +9405,5 @@ if HAVE_GTK
 	Gtk.main
 else
 	main_thread.join
+	exit
 end
