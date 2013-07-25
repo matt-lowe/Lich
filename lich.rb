@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.15'
+$version = '4.1.16'
 
 # rubyw.exe doesn't have $stdout or $stderr, warnings caused by stupid Windows bugs crash Lich
 begin
@@ -557,6 +557,8 @@ class XMLParser
 		@bold = false
 		@active_tags = Array.new
 		@active_ids = Array.new
+		@last_tag = String.new
+		@last_id = String.new
 		@current_stream = String.new
 		@current_style = String.new
 		@stow_container_id = nil
@@ -889,6 +891,8 @@ class XMLParser
 	end
 	def text(text)
 		begin
+			# fixme: /<stream id="Spells">.*?<\/stream>/m
+			$_CLIENT_.write(text) unless ($frontend != 'suks') or (@current_stream =~ /^(?:spellfront|inv|bounty|society)$/) or @active_tags.any? { |tag| tag =~ /^(?:compDef|inv|component|right|left|spell)$/ } or (@active_tags.include?('stream') and @active_ids.include?('Spells')) or (text == "\n" and (@last_tag =~ /^(?:popStream|prompt|compDef|dialogData|openDialog|switchQuickBar|component)$/))
 			if @active_tags.last == 'prompt'
 				#@prompt = text
 				nil
@@ -1034,8 +1038,8 @@ class XMLParser
 				$_CLIENT_.puts "\034GSj#{sprintf('%-20s', gsl_exits)}\r\n"
 				gsl_exits = nil
 			end
-			@active_tags.pop
-			@active_ids.pop
+			@last_tag = @active_tags.pop
+			@last_id = @active_ids.pop
 		rescue
 			$stdout.puts "--- error: XMLParser.tag_end: #{$!}"
 			$stderr.puts "error: XMLParser.tag_end: #{$!}"
@@ -2716,6 +2720,7 @@ end
 
 class Spell
 	@@list ||= Array.new
+	@@loaded ||= nil
 	@@cast_lock ||= Array.new
 	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command
 	attr_accessor :stance, :channel
@@ -2750,6 +2755,8 @@ class Spell
 	end
 	def Spell.load(filename="#{$script_dir}spell-list.xml.txt")
 		if $SAFE == 0
+			50.times { sleep 0.1; return true if @@loaded } if @@loaded == false
+			@@loaded = false
 			begin
 				spell_times = Hash.new
 				# reloading spell data should not reset spell tracking...
@@ -2764,15 +2771,19 @@ class Spell
 						Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end))
 					}
 				}
-				spell_times.each_pair { |num,timeleft|
-					Spell[num].timeleft = timeleft
-					Spell[num].active = true
+				@@list.each { |spell|
+					if spell_times[spell.num]
+						spell.timeleft = spell_times[spell.num]
+						spell.active = true
+					end
 				}
+				@@loaded = true
 				return true
 			rescue
 				$stdout.puts "--- error: Spell.load: #{$!}"
 				$stderr.puts "error: Spell.load: #{$!}"
 				$stderr.puts $!.backtrace
+				@@loaded = nil
 				return false
 			end
 		else
@@ -2780,7 +2791,7 @@ class Spell
 		end
 	end
 	def Spell.[](val)
-		Spell.load if @@list.empty?
+		Spell.load unless @@loaded
 		if val.class == Spell
 			val
 		elsif (val.class == Fixnum) or (val.class == String and val =~ /^[0-9]+$/)
@@ -2796,25 +2807,25 @@ class Spell
 		end
 	end
 	def Spell.active
-		Spell.load if @@list.empty?
+		Spell.load unless @@loaded
 		active = Array.new
 		@@list.each { |spell| active.push(spell) if spell.active? }
 		active
 	end
 	def Spell.active?(val)
-		Spell.load if @@list.empty?
+		Spell.load unless @@loaded
 		Spell[val].active?
 	end
 	def Spell.list
-		Spell.load if @@list.empty?
+		Spell.load unless @@loaded
 		@@list
 	end
 	def Spell.upmsgs
-		Spell.load if @@list.empty?
+		Spell.load unless @@loaded
 		@@list.collect { |spell| spell.msgup }
 	end
 	def Spell.dnmsgs
-		Spell.load if @@list.empty?
+		Spell.load unless @@loaded
 		@@list.collect { |spell| spell.msgdn }
 	end
 	def mana_cost
@@ -8091,11 +8102,6 @@ main_thread = Thread.new {
 		end
 	end
 	if launch_data
-		unless launcher_cmd = get_real_launcher_cmd.call
-			$stdout.puts 'error: failed to find the Simutronics launcher'
-			$stderr.puts 'error: failed to find the Simutronics launcher'
-			exit(1)
-		end
 		unless gamecode = launch_data.find { |line| line =~ /GAMECODE=/ }
 			$stdout.puts "error: launch_data contains no GAMECODE info"
 			$stderr.puts "error: launch_data contains no GAMECODE info"
@@ -8121,6 +8127,12 @@ main_thread = Thread.new {
 			unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
 				$stdout.puts "error: launch_data contains no KEY info"
 				$stderr.puts "error: launch_data contains no KEY info"
+				exit(1)
+			end
+		else
+			unless launcher_cmd = get_real_launcher_cmd.call
+				$stdout.puts 'error: failed to find the Simutronics launcher'
+				$stderr.puts 'error: failed to find the Simutronics launcher'
 				exit(1)
 			end
 		end
@@ -8417,7 +8429,7 @@ main_thread = Thread.new {
 			input_box.child.signal_connect('activate') {
 				Gtk.queue {
 					cmd = input_box.child.text.dup
-					game_textview_add_line.call(">#{cmd}\n")
+					game_textview_add_line.call(cmd)
 					input_box.child.text = String.new
 					if cmd.length > 3
 						# fixme: don't append duplicate
@@ -8473,7 +8485,7 @@ main_thread = Thread.new {
 			begin
 				loop {
 					if client_string = $_CLIENT_READER_.gets
-						game_textview_add_line.call(client_string)
+						game_textview_add_line.call("\n#{client_string.chomp}")
 					else
 						sleep 0.011
 					end
@@ -8653,12 +8665,8 @@ main_thread = Thread.new {
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
-						if $frontend == 'wizard'
-							alt_string = sf_to_wiz(alt_string)
-						elsif $frontend == 'suks'
-							alt_string = alt_string.gsub(/<pushStream id=["'](?:spellfront|inv|bounty|society)["'][^>]*\/>.*?<popStream[^>]*>/m, '').gsub(/<stream id="Spells">.*?<\/stream>/m, '').gsub(/<(compDef|inv|component|right|left|spell|prompt)[^>]*>.*?<\/\1>/m, '').gsub(/<[^>]+>/, '').gsub('&gt;', '>').gsub('&lt;', '<').gsub('&amp;', '&')
-						end
-						$_CLIENT_.write(alt_string)
+						alt_string = sf_to_wiz(alt_string) if $frontend == 'wizard'
+						$_CLIENT_.write(alt_string) unless $frontend == 'suks'
 					end
 					begin
 						REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
