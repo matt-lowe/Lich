@@ -44,7 +44,7 @@ $stdout.write(' ') rescue($stdout = StringIO.new(''))
 STDERR = $stderr rescue()
 STDOUT = $stderr rescue()
 
-$version = '4.1.24'
+$version = '4.1.25'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -5920,6 +5920,7 @@ def empty_hands
 		'right' => GameObj.right_hand,
 		'left' => GameObj.left_hand,
 		'close_lootsack' => false,
+		'sonic' => false,
 	}
 	if UserVars.lootsack.nil? or UserVars.lootsack.empty?
 		lootsack = nil
@@ -5928,7 +5929,8 @@ def empty_hands
 	end
 	if $empty_hands['right'].id
 		waitrt?
-		if $empty_hands['right'].name =~ /sonic/
+		if XMLData.spellfront.include?("Sonic Weapon Song")
+			$empty_hands['sonic'] = true
 			fput 'stop 1012'
 		elsif lootsack
 			result = dothistimeout "put ##{$empty_hands['right'].id} in ##{lootsack.id}", 4, /^You put|^You can't .+ It's closed!$/
@@ -5964,7 +5966,7 @@ def fill_hands
 	$empty_hands ||= Hash.new
 	if $empty_hands['right'].id
 		waitrt?
-		if $empty_hands['right'].name =~ /sonic/
+		if $empty_hands['sonic']
 			type = $empty_hands['right'].noun
 			type = 'short' if type == 'sword' and $empty_hands['right'].name =~ /short/
 			if sonic_weapon_song = Spell[1012]
@@ -5987,6 +5989,7 @@ def fill_hands
 	end
 	fput "close ##{lootsack.id}" if $empty_hands['close_lootsack']
 	$empty_hands['close_lootsack'] = false
+	$empty_hands['sonic'] = false
 end
 
 def dothis (action, success_line)
