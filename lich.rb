@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.8'
+$version = '4.2.9'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -707,7 +707,9 @@ class XMLParser
 		begin
 			@active_tags.push(name)
 			@active_ids.push(attributes['id'].to_s)
-			if name == 'pushStream'
+			if name =~ /^(?:dialogData|resource|nav)$/
+				nil
+			elsif name == 'pushStream'
 				@in_stream = true
 				@current_stream = attributes['id'].to_s
 				GameObj.clear_inv if attributes['id'].to_s == 'inv'
@@ -769,8 +771,10 @@ class XMLParser
 				else
 					@obj_location = attributes['id']
 				end
-				@obj_before_name = nil
+				@obj_exist = nil
+				@obj_noun = nil
 				@obj_name = nil
+				@obj_before_name = nil
 				@obj_after_name = nil
 			elsif name == 'progressBar'
 				if attributes['id'] == 'pbarStance'
@@ -1137,7 +1141,7 @@ class XMLParser
 			if (name == 'inv') and (@obj_exist != @obj_location)
 				if @obj_name == ' is closed.'
 					GameObj.delete_container(@stow_container_id)
-				else
+				elsif @obj_exist
 					GameObj.new_inv(@obj_exist, @obj_noun, @obj_name, @obj_location, @obj_before_name, @obj_after_name)
 				end
 			elsif @send_fake_tags and (@active_ids.last == 'room exits')
@@ -2076,7 +2080,7 @@ end
 class Script
 	@@running ||= Array.new
 	attr_reader :name, :vars, :safe, :labels, :file_name, :label_order, :thread_group
-	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :want_script_output, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings, :watchfor
+	attr_accessor :quiet, :no_echo, :jump_label, :current_label, :want_downstream, :want_downstream_xml, :want_upstream, :want_script_output, :dying_procs, :hidden, :paused, :silent, :no_pause_all, :no_kill_all, :downstream_buffer, :upstream_buffer, :unique_buffer, :die_with, :match_stack_labels, :match_stack_strings, :watchfor, :command_line
 	def Script.self
 		if script = @@running.find { |scr| scr.thread_group == Thread.current.group }
 			sleep "0.2".to_f while script.paused
@@ -2170,9 +2174,10 @@ class Script
 			UNTRUSTED_SCRIPT_LOG.call(data)
 		end
 	end
-	def initialize(file_name, cli_vars=[])
+	def initialize(file_name, cli_vars=[], cmd_line=nil)
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
 		@file_name = file_name
+		@command_line = cmd_line || cli_vars.join(' ')
 		@vars = Array.new
 		unless cli_vars.empty?
 			cli_vars.each_index { |idx| @vars[idx+1] = cli_vars[idx] }
@@ -4403,6 +4408,10 @@ class Map
 	@@tags ||= Array.new
 	@@warned_depreciated_guaranteed_shortest_pathfind = false
 	@@warned_depreciated_estimation_pathfind = false
+	@@current_room_id ||= 0
+	@@current_room_count ||= -1
+	@@current_location ||= nil
+	@@current_location_count ||= -1
 	attr_reader :id
 	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location
 	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil)
@@ -4443,34 +4452,48 @@ class Map
 			@@list.find { |room| room.title.find { |title| title =~ chk } } || @@list.find { |room| room.description.find { |desc| desc =~ chk } } || @@list.find { |room| room.description.find { |desc| desc =~ chkre } }
 		end
 	end
-	def Map.current
-		Map.load if @@list.empty?
-		room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
-		unless room
-			desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
-		end
-		if room.check_location
+	def Map.get_location
+		unless XMLData.room_count == @@current_location_count
 			script = Script.self
 			save_want_downstream = script.want_downstream
 			script.want_downstream = true
 			location_result = dothistimeout 'location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$/
 			script.want_downstream = save_want_downstream
-			current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
-			room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+			@@current_location_count = XMLData.room_count
+			@@current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+		end
+		@@current_location
+	end
+	def Map.current
+		Map.load if @@list.empty?
+		if XMLData.room_count == @@current_room_count
+			@@list[@@current_room_id]
+		else
+			room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
 			unless room
 				desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
-				room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
+				room = @@list.find { |r| r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
 			end
+			if room.check_location
+				current_location = Map.get_location
+				room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
+				unless room
+					desc_regex = /#{Regexp.escape(XMLData.room_description.strip).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+					room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.paths.include?(XMLData.room_exits_string.strip) and r.description.find { |desc| desc =~ desc_regex } }
+				end
+			end
+			if room
+				@@current_room_count = XMLData.room_count
+				@@current_room_id = room.id
+			end
+			room
 		end
-		room
 	end
 	def Map.current_or_new
 		if XMLData.game =~ /DR/
 			Map.current || Map.new(Map.get_free_id, [ XMLData.room_title ], [ XMLData.room_description.strip ], [ XMLData.room_exits_string.strip ])
 		else
-			location_result = dothistimeout('location', 15, /^You carefully survey your surroundings and guess that your current location is .*? or somewhere close to it\.$/)
-			current_location = /^You carefully survey your surroundings and guess that your current location is (.*?) or somewhere close to it\.$/.match(location_result).captures.first
+			current_location = Map.get_location
 			if room = @@list.find { |r| (r.location == current_location) and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
 				return room
 			elsif room = @@list.find { |r| r.location.nil? and r.title.include?(XMLData.room_title) and r.description.include?(XMLData.room_description.strip) and r.paths.include?(XMLData.room_exits_string.strip) }
@@ -4927,11 +4950,11 @@ class Map
 		target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }
 	end
 	def find_nearest(target_list)
-		target_list.collect! { |num| num.to_i }
-		previous, shortest_distances = Map.dijkstra(@id, target_list)
+		target_list = target_list.collect { |num| num.to_i }
 		if target_list.include?(@id)
 			@id
 		else
+			previous, shortest_distances = Map.dijkstra(@id, target_list)
 			target_list.delete_if { |room_num| shortest_distances[room_num].nil? }
 			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }.first
 		end
@@ -5147,7 +5170,7 @@ def goto(label)
 	raise JUMP
 end
 
-def start_script(script_name,cli_vars=[],flags=Hash.new)
+def start_script(script_name, cli_vars=[], flags=Hash.new)
 	# fixme: look in wizard script directory
 	if $SAFE == 0
 		file_name = nil
@@ -5176,7 +5199,7 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 				new_script = WizardScript.new("#{$script_dir}#{file_name}", cli_vars)
 			else
 				trusted = LichSettings['trusted_scripts'].include?(file_name.sub(/\.lic$/,''))
-				new_script = Script.new("#{$script_dir}#{file_name}", cli_vars)
+				new_script = Script.new("#{$script_dir}#{file_name}", cli_vars, flags[:command_line])
 			end
 			if not trusted
 				script_binding = UntrustedScriptBinder.new.create_block.binding
@@ -5375,8 +5398,10 @@ def start_scripts(*script_names)
 	}
 end
 
-def force_start_script(script_name,cli_vars=[])
-	start_script(script_name,cli_vars,flags={ :force => true })
+def force_start_script(script_name,cli_vars=[], flags={})
+	flags = Hash.new unless flags.class == Hash
+	flags[:force] = true
+	start_script(script_name,cli_vars,flags)
 end
 
 def start_exec_script(cmd_data, flags=Hash.new)
@@ -7985,7 +8010,7 @@ def do_client(client_string)
 		elsif cmd =~ /^force\s+(?:.+)$/
 			script_name = Regexp.escape(cmd.split[1].chomp)
 			vars = cmd.split[2..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).collect { |val| val.gsub(/(?!\\)?"/,'') }
-			force_start_script(script_name, vars)
+			force_start_script(script_name, vars, flags={:command_line => client_string})
 		elsif cmd =~ /^send |^s /
 			if cmd.split[1] == "to"
 				script = (Script.running + Script.hidden).find { |scr| scr.name == cmd.split[2].chomp.strip } || script = (Script.running + Script.hidden).find { |scr| scr.name =~ /^#{cmd.split[2].chomp.strip}/i }
@@ -8263,7 +8288,7 @@ def do_client(client_string)
 		else
 			script_name = Regexp.escape(cmd.split.first.chomp)
 			vars = cmd.split[1..-1].join(' ').scan(/"[^"]+"|[^"\s]+/).collect { |val| val.gsub(/(?!\\)?"/,'') }
-			start_script(script_name, vars)
+			start_script(script_name, vars, flags={:command_line => client_string})
 		end
 	else
 		if $offline_mode
@@ -9206,6 +9231,8 @@ main_thread = Thread.new {
 				rescue
 					need_admin = false
 				end
+			else
+				need_admin = false
 			end
 
 			if need_admin
@@ -9703,21 +9730,64 @@ main_thread = Thread.new {
 			end
 			localport = listener.addr[1]
 			launch_data.collect! { |line| line.sub(/GAMEPORT=.+/, "GAMEPORT=#{localport}").sub(/GAMEHOST=.+/, "GAMEHOST=localhost") }
-			File.open("#{$temp_dir}lich.sal", 'w') { |f| f.puts launch_data }
-			launcher_cmd = launcher_cmd.sub('%1', "#{$temp_dir}lich.sal")
+			sal_filename = "#{$temp_dir}lich#{rand(10000)}.sal"
+			while File.exists?(sal_filename)
+				sal_filename = "#{$temp_dir}lich#{rand(10000)}.sal"
+			end
+			File.open(sal_filename, 'w') { |f| f.puts launch_data }
+			launcher_cmd = launcher_cmd.sub('%1', sal_filename)
 			launcher_cmd = launcher_cmd.tr('/', "\\") if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 			launcher_cmd = "#{wine_bin} #{launcher_cmd}" if wine_bin
 			$stderr.puts "info: launcher_cmd: #{launcher_cmd}"
+			begin
+				if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+					if `tasklist.exe` =~ /Launcher\.exe/i
+						$stderr.puts "info: waiting for launcher to exit..."
+						20.times {
+							sleep 0.5
+							break unless `tasklist.exe` =~ /Launcher\.exe/i
+						}
+					end
+				else
+					if `ps ax` =~ /Launcher\.exe/i
+						$stderr.puts "info: waiting for launcher to exit..."
+						20.times {
+							sleep 0.5
+							break unless `ps ax` =~ /Launcher\.exe/i
+						}
+					end
+				end
+			rescue
+				$stderr.puts "error: #{$!}"
+			end
 			Thread.new { system(launcher_cmd) }
 			timeout_thr = Thread.new {
 				sleep 30
 				$stdout.puts "error: timeout waiting for client to connect"
 				$stderr.puts "error: timeout waiting for client to connect"
+				File.delete(sal_filename) rescue()
+				listener.close rescue()
+				$_CLIENT_.close rescue()
+				if ARGV.include?('--reconnect') and ARGV.include?('--login')
+					$stderr.puts 'info: waiting 60 seconds to reconnect...'
+					sleep 60
+					$stderr.puts 'info: reconnecting...'
+					if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+						args = [ 'rubyw.exe' ]
+					else
+						args = [ 'ruby' ]
+					end
+					args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
+					args.concat ARGV
+					args.push '--reconnected' unless args.include?('--reconnected')
+					exec *args
+				end
 				exit(1)
 			}
 			$stderr.puts 'info: waiting for client to connect...'
 			$_CLIENT_ = listener.accept
 			$stderr.puts 'info: connected'
+			File.delete(sal_filename) rescue()
 			begin
 				timeout_thr.kill
 				listener.close
@@ -9737,8 +9807,22 @@ main_thread = Thread.new {
 				$_SERVER_ = TCPSocket.open(gamehost, gameport)
 			rescue
 				$stderr.puts "error: #{$!}"
-				$stderr.puts "info: exiting..."
 				$_CLIENT_.close rescue()
+				if ARGV.include?('--reconnect') and ARGV.include?('--login')
+					$stderr.puts 'info: waiting 60 seconds to reconnect...'
+					sleep 60
+					$stderr.puts 'info: reconnecting...'
+					if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+						args = [ 'rubyw.exe' ]
+					else
+						args = [ 'ruby' ]
+					end
+					args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
+					args.concat ARGV
+					args.push '--reconnected' unless args.include?('--reconnected')
+					exec *args
+				end
+				$stderr.puts "info: exiting..."
 				exit
 			end
 		end
@@ -10134,18 +10218,33 @@ main_thread = Thread.new {
 		$link_highlight_end = "\240"
 	end
 
+	last_server_thread_recv = Time.now
+	server_thread = nil
+
+	Thread.new {
+		loop {
+			if last_server_thread_recv + 300 < Time.now
+				server_thread.kill rescue()
+			end
+			sleep (300 - (Time.now - last_server_thread_recv))
+			sleep 1
+		}
+	}
+
 	server_thread = Thread.new {
 		begin
 			while $_SERVERSTRING_ = $_SERVER_.gets
+				last_server_thread_recv = Time.now
 				begin
 					$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
 					# The Rift, Scatter is broken...
-					$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
+					if $_SERVERSTRING_ =~ /<compDef id='room text'><\/compDef>/
+						$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
+					end
 					# Cry For Help spell is broken...
 					if $_SERVERSTRING_ =~ /<pushStream id="familiar" \/><prompt time="[0-9]+">&gt;<\/prompt>/
 						$_SERVERSTRING_.sub!('<pushStream id="familiar" />', '')
 					end
-
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
 						if defined?(SUKS) and SUKS.active
@@ -10249,6 +10348,20 @@ main_thread = Thread.new {
 	$stderr.puts 'info: closing connections...'
 	$_SERVER_.close rescue()
 	$_CLIENT_.close rescue()
+	if ARGV.include?('--reconnect') and ARGV.include?('--login') and not $_CLIENTBUFFER_.any? { |cmd| cmd =~ /^(?:\[.*?\])?(?:<c>)?(?:quit|exit)/i }
+		$stderr.puts 'info: waiting 30 seconds to reconnect...'
+		sleep 30
+		$stderr.puts 'info: reconnecting...'
+		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
+			args = [ 'rubyw.exe' ]
+		else
+			args = [ 'ruby' ]
+		end
+		args.push $PROGRAM_NAME.slice(/[^\/\\]+$/)
+		args.concat ARGV
+		args.push '--reconnected' unless args.include?('--reconnected')
+		exec *args
+	end
 	$stderr.puts 'info: exiting'
 	Gtk.queue { Gtk.main_quit } if HAVE_GTK
 	exit
