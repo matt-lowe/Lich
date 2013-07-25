@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.9'
+$version = '4.4.10'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -9149,6 +9149,8 @@ is_win8 = proc {
 			os_version_info[:dwOSVersionInfoSize] = DL.sizeof('LLLLLC128')
 			get_version_ex.call(os_version_info)
 
+			$stderr.puts "info: Windows version: #{os_version_info[:dwMajorVersion]}.#{os_version_info[:dwMinorVersion]}"
+
 			if (os_version_info[:dwMajorVersion] == 6) and (os_version_info[:dwMinorVersion] >= 2)
 				true
 			else
@@ -9167,7 +9169,11 @@ system_win8fix = proc { |launcher_cmd|
 	if is_win8.call and launcher_cmd =~ /^"(.*?)"\s*(.*)$/
 		dir_file = $1
 		param = $2
-		
+		dir = dir_file.slice(/^.*[\/\\]/)
+		file = dir_file.sub(/^.*[\/\\]/, '')
+		$stderr.puts "info: using Win8 workaround"
+		$stderr.puts "info: dir = #{dir}, file = #{file}, parameters = #{param}"
+
 		shell32 = DL.dlopen('shell32.dll')
 		shell_execute_ex = shell32['ShellExecuteEx', 'LP']
 
@@ -9178,8 +9184,8 @@ system_win8fix = proc { |launcher_cmd|
 		shell_execute_info[:hwnd] = 0
 		shell_execute_info[:lpVerb] = "open"
 		shell_execute_info[:lpParameters] = param
-		shell_execute_info[:lpDirectory] = dir_file.slice(/^.*[\/\\]/)
-		shell_execute_info[:lpFile] = dir_file.sub(/^.*[\/\\]/, '')
+		shell_execute_info[:lpDirectory] = dir
+		shell_execute_info[:lpFile] = file
 		shell_execute_info[:nShow] = 1
 		shell_execute_info[:hInstApp] = 0
 		shell_execute_info[:lpIDList] = 0
