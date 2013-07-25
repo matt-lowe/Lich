@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.53'
+$version = '4.1.54'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3350,19 +3350,19 @@ class Spell
 	def time_per(mod_skills=Hash.new)
 		if mod_skills.empty?
 			if $SAFE < 3
-				proc { $SAFE = 3; eval(@time_per_formula) }.call.to_i
+				proc { $SAFE = 3; eval(@time_per_formula) }.call.to_f
 			else
-				eval(@time_per_formula).to_i
+				eval(@time_per_formula).to_f
 			end
 		else
 			formula = @time_per_formula.dup
 			mod_skills.each_pair { |name,value| formula.gsub!(name, value.to_i.to_s) }
 			if $SAFE < 3
 				formula.untaint
-				proc { $SAFE = 3; eval(formula) }.call.to_i
+				proc { $SAFE = 3; eval(formula) }.call.to_f
 			else
 				UNTRUSTED_UNTAINT.call(formula)
-				eval(formula).to_i
+				eval(formula).to_f
 			end
 		end
 	end
