@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.62'
+$version = '4.1.63'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -377,6 +377,7 @@ UNTRUSTED_USERVARIABLES_CHANGE = proc { |var_name, value, type| UserVariables.ch
 UNTRUSTED_USERVARIABLES_SAVE = proc { UserVariables.save }
 UNTRUSTED_SPELL_RANKS_LOAD = proc { SpellRanks.load }
 UNTRUSTED_SPELL_RANKS_SAVE = proc { SpellRanks.save }
+UNTRUSTED_SCRIPT_LOG = proc { |data| Script.log(data) }
 
 JUMP = Exception.exception('JUMP')
 JUMP_ERROR = Exception.exception('JUMP_ERROR')
@@ -2096,6 +2097,27 @@ class Script
 				}
 			end
 		}
+	end
+	def Script.log(data)
+		if $SAFE == 0
+			if script = Script.self
+				begin
+					unless File.exists?("#{$lich_dir}logs")
+						Dir.mkdir("#{$lich_dir}logs")
+					end
+					File.open("#{$lich_dir}logs/#{script.name}.log", 'a') { |file| file.puts data }
+					true
+				rescue
+					respond "--- error: Script.log: #{$!}"
+					false
+				end
+			else
+				respond '--- Script.log: unable to identify calling script'
+				false
+			end
+		else
+			UNTRUSTED_SCRIPT_LOG.call(data)
+		end
 	end
 	def initialize(file_name, cli_vars=[])
 		@name = /.*[\/\\]+([^\.]+)\./.match(file_name).captures.first
@@ -3986,24 +4008,23 @@ class Watchfor
 end
 
 class GameObj
-	@@loot ||= Array.new
-	@@npcs ||= Array.new
-	@@npc_status ||= Hash.new
-	@@pcs ||= Array.new
-	@@pc_status ||= Hash.new
-	@@inv ||= Array.new
-	@@contents ||= Hash.new
-	@@right_hand ||= nil
-	@@left_hand ||= nil
-	@@room_desc ||= Array.new
-	@@fam_loot ||= Array.new
-	@@fam_npcs ||= Array.new
-	@@fam_pcs ||= Array.new
+	@@loot          ||= Array.new
+	@@npcs          ||= Array.new
+	@@npc_status    ||= Hash.new
+	@@pcs           ||= Array.new
+	@@pc_status     ||= Hash.new
+	@@inv           ||= Array.new
+	@@contents      ||= Hash.new
+	@@right_hand    ||= nil
+	@@left_hand     ||= nil
+	@@room_desc     ||= Array.new
+	@@fam_loot      ||= Array.new
+	@@fam_npcs      ||= Array.new
+	@@fam_pcs       ||= Array.new
 	@@fam_room_desc ||= Array.new
+	@@type_data     ||= Hash.new
+	@@sellable_data ||= Hash.new
 
-	def GameObj.pc_status
-		@@pc_status
-	end
 	attr_reader :id
 	attr_accessor :noun, :name, :before_name, :after_name
 	def initialize(id, noun, name, before=nil, after=nil)
@@ -4015,6 +4036,30 @@ class GameObj
 		@name = name
 		@before_name = before
 		@after_name = after
+	end
+	def type
+		GameObj.load_data if @@type_data.empty?
+		list = @@type_data.keys.find_all { |t| @name =~ @@type_data[t][:name] }
+		if list.empty?
+			list = @@type_data.keys.find_all { |t| @noun =~ @@type_data[t][:noun] }
+		end
+		if list.empty?
+			nil
+		else
+			list.join(',')
+		end
+	end
+	def sellable
+		GameObj.load_data if @@sellable_data.empty?
+		list = @@sellable_data.keys.find_all { |t| @name =~ @@sellable_data[t][:name] }
+		if list.empty?
+			list = @@sellable_data.keys.find_all { |t| @noun =~ @@sellable_data[t][:noun] }
+		end
+		if list.empty? or list.include?('nil')
+			nil
+		else
+			list.join(',')
+		end
 	end
 	def status
 		if @@npc_status.keys.include?(@id)
@@ -4041,6 +4086,22 @@ class GameObj
 	end
 	def empty?
 		false
+	end
+	def contents
+		@@contents[@id].dup
+	end
+	def GameObj.[](val)
+		if val.class == String
+			if val =~ /^\-?[0-9]+$/
+				obj = @@inv.find { |o| o.id == val } || @@loot.find { |o| o.id == val } || @@npcs.find { |o| o.id == val } || @@pcs.find { |o| o.id == val } || @@right_hand.find { |o| o.id == val } || @@left_hand.find { |o| o.id == val } || @@room_desc.find { |o| o.id == val }
+			elsif val.split(' ').length == 1
+				obj = @@inv.find { |o| o.noun == val } || @@loot.find { |o| o.noun == val } || @@npcs.find { |o| o.noun == val } || @@pcs.find { |o| o.noun == val } || @@right_hand.find { |o| o.noun == val } || @@left_hand.find { |o| o.noun == val } || @@room_desc.find { |o| o.noun == val }
+			else
+				obj = @@inv.find { |o| o.name == val } || @@loot.find { |o| o.name == val } || @@npcs.find { |o| o.name == val } || @@pcs.find { |o| o.name == val } || @@right_hand.find { |o| o.name == val } || @@left_hand.find { |o| o.name == val } || @@room_desc.find { |o| o.name == val } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@right_hand.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@left_hand.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@right_hand.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@left_hand.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i }
+			end
+		elsif val.class == Regexp
+			obj = @@inv.find { |o| o.name =~ val } || @@loot.find { |o| o.name =~ val } || @@npcs.find { |o| o.name =~ val } || @@pcs.find { |o| o.name =~ val } || @@right_hand.find { |o| o.name =~ val } || @@left_hand.find { |o| o.name =~ val } || @@room_desc.find { |o| o.name =~ val }
+		end
 	end
 	def GameObj
 		@noun
@@ -4220,8 +4281,39 @@ class GameObj
 	def GameObj.containers
 		@@contents.dup
 	end
-	def contents
-		@@contents[@id].dup
+	def GameObj.load_data(filename="#{$script_dir}gameobj-data.xml")
+		if File.exists?(filename)
+			begin
+				@@type_data = Hash.new
+				File.open(filename) { |file|
+					doc = REXML::Document.new(file.read)
+					doc.elements.each('data/type') { |e|
+						if type = e.attributes['name']
+							@@type_data[type] = Hash.new
+							@@type_data[type][:name] = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
+							@@type_data[type][:noun] = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+						end
+					}
+					doc.elements.each('data/sellable') { |e|
+						if sellable = e.attributes['name']
+							@@sellable_data[sellable] = Hash.new
+							@@sellable_data[sellable][:name] = Regexp.new(e.elements['name'].text) unless e.elements['name'].text.nil? or e.elements['name'].text.empty?
+							@@sellable_data[sellable][:noun] = Regexp.new(e.elements['noun'].text) unless e.elements['noun'].text.nil? or e.elements['noun'].text.empty?
+						end
+					}
+				}
+				true
+			rescue
+				@@type_data = nil
+				echo "error: GameObj.load_data: #{$!}"
+				respond $!.backtrace[0..1]
+				false
+			end
+		else
+			@@type_data = nil
+			echo "error: GameObj.load_data: file does not exist: #{filename}"
+			false
+		end
 	end
 end
 
@@ -5468,6 +5560,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 		elsif line == "You can't do that while engaged!"
 			# DragonRealms
 			fput 'retreat'
+			fput 'retreat'
 			put_dir.call
 		elsif line == 'You are too injured to be doing any climbing!'
 			if (resolve = Spell[9704]) and resolve.known?
@@ -6581,10 +6674,14 @@ def empty_hands
 		waitrt?
 		if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
 			type = right_hand.noun
-			type = 'short' if type == 'sword' and right_hand.name =~ /short/
+			if (type == 'sword') and right_hand.name =~ /short/
+				type = 'short'
+			elsif (type.downcase == 'hammer') and right_hand.name =~ /Hammer of Kai/
+				type = 'hammer of kai'
+			end
 			actions.unshift proc {
-				if sonic_weapon_song = Spell[1012]
-					sonic_weapon_song.cast(type) if sonic_weapon_song.known? and sonic_weapon_song.affordable?
+				if (sonic_weapon_song = Spell[1012]) and sonic_weapon_song.known? and sonic_weapon_song.affordable?
+					sonic_weapon_song.cast(type)
 				end
 			}
 			fput 'stop 1012'
@@ -6643,10 +6740,14 @@ def empty_hand
 			waitrt?
 			if XMLData.spellfront.include?('Sonic Weapon Song') or XMLData.spellfront.include?('1012')
 				type = right_hand.noun
-				type = 'short' if type == 'sword' and right_hand.name =~ /short/
+				if (type == 'sword') and right_hand.name =~ /short/
+					type = 'short'
+				elsif (type.downcase == 'hammer') and right_hand.name =~ /Hammer of Kai/
+					type = 'hammer of kai'
+				end
 				actions.unshift proc {
-					if sonic_weapon_song = Spell[1012]
-						sonic_weapon_song.cast(type) if sonic_weapon_song.known? and sonic_weapon_song.affordable?
+					if (sonic_weapon_song = Spell[1012]) and sonic_weapon_song.known? and sonic_weapon_song.affordable?
+						sonic_weapon_song.cast(type)
 					end
 				}
 				fput 'stop 1012'
@@ -9594,7 +9695,6 @@ main_thread = Thread.new {
 						$_CLIENT_.write(alt_string)
 					end
 					unless $_SERVERSTRING_ =~ /^<setting/
-
 						begin
 							REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
 						rescue
