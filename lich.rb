@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.9'
+$version = '4.3.11'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2847,7 +2847,7 @@ class Char
 			rnk = Skills.send(fmt[1][n])
 			ary.push sprintf("  %s%s|%08s%08s", fmt[0][n], dots, Skills.to_bonus(rnk), rnk) unless rnk.zero?
 		}
-		%[Minor Elemental,Major Elemental,Minor Spirit,Major Spirit,Bard,Cleric,Empath,Paladin,Ranger,Sorcerer,Wizard].split(',').each { |circ|
+		%[Minor Elemental,Major Elemental,Minor Spirit,Major Spirit,Minor Mental,Bard,Cleric,Empath,Paladin,Ranger,Sorcerer,Wizard].split(',').each { |circ|
 			rnk = Spells.send(circ.gsub(" ", '').downcase)
 			if rnk.nonzero?
 				ary.push ''
@@ -3239,6 +3239,7 @@ end
 
 class Spells
 	@@minorelemental ||= 0
+	@@minormental    ||= 0
 	@@majorelemental ||= 0
 	@@minorspiritual ||= 0
 	@@majorspiritual ||= 0
@@ -3251,6 +3252,8 @@ class Spells
 	@@bard           ||= 0
 	def Spells.minorelemental=(val); @@minorelemental = val; end
 	def Spells.minorelemental;       @@minorelemental;       end
+	def Spells.minormental=(val);    @@minormental = val;    end
+	def Spells.minormental;          @@minormental;          end
 	def Spells.majorelemental=(val); @@majorelemental = val; end
 	def Spells.majorelemental;       @@majorelemental;       end
 	def Spells.minorspiritual=(val); @@minorspiritual = val; end
@@ -3297,6 +3300,8 @@ class Spells
 			'Bard'
 		elsif val == '11'
 			'Empath'
+		elsif val == '12'
+			'Minor Mental'
 		elsif val == '16'
 			'Paladin'
 		elsif val == '17'
@@ -3330,10 +3335,12 @@ class Spells
 		return known_spells
 	end
 	def Spells.serialize
-		[@@minorelemental,@@majorelemental,@@minorspiritual,@@majorspiritual,@@wizard,@@sorcerer,@@ranger,@@paladin,@@empath,@@cleric,@@bard]
+		[@@minorelemental,@@majorelemental,@@minorspiritual,@@majorspiritual,@@wizard,@@sorcerer,@@ranger,@@paladin,@@empath,@@cleric,@@bard,@@minormental]
 	end
 	def Spells.load_serialized=(val)
-		@@minorelemental,@@majorelemental,@@minorspiritual,@@majorspiritual,@@wizard,@@sorcerer,@@ranger,@@paladin,@@empath,@@cleric,@@bard = val
+		@@minorelemental,@@majorelemental,@@minorspiritual,@@majorspiritual,@@wizard,@@sorcerer,@@ranger,@@paladin,@@empath,@@cleric,@@bard,@@minormental = val
+		# new spell circle added 2012-07-18; old data files will make @@minormental nil
+		@@minormental ||= 0
 	end
 end
 
@@ -3342,7 +3349,7 @@ class SpellRanks
 	@@timestamp ||= 0
 	@@loaded    ||= false
 	attr_reader :name
-	attr_accessor :minorspiritual, :majorspiritual, :cleric, :minorelemental, :majorelemental, :ranger, :sorcerer, :wizard, :bard, :empath, :paladin, :arcanesymbols, :magicitemuse
+	attr_accessor :minorspiritual, :majorspiritual, :cleric, :minorelemental, :majorelemental, :minormental, :ranger, :sorcerer, :wizard, :bard, :empath, :paladin, :arcanesymbols, :magicitemuse
 	def SpellRanks.load
 		if $SAFE == 0
 			if File.exists?("#{$data_dir}#{XMLData.game}/spell-ranks.dat")
@@ -3350,6 +3357,8 @@ class SpellRanks
 					File.open("#{$data_dir}#{XMLData.game}/spell-ranks.dat", 'rb') { |f|
 						@@timestamp, @@list = Marshal.load(f.read)
 					}
+					# minor mental circle added 2012-07-18; old data files will have @minormental as nil
+					@@list.each { |rank_info| rank_info.minormental ||= 0 }
 					@@loaded = true
 				rescue
 					respond "--- error: SpellRanks.load: #{$!}"
@@ -3404,7 +3413,7 @@ class SpellRanks
 	def initialize(name)
 		SpellRanks.load unless @@loaded
 		@name = name
-		@minorspiritual, @majorspiritual, @cleric, @minorelemental, @majorelemental, @ranger, @sorcerer, @wizard, @bard, @empath, @paladin, @arcanesymbols, @magicitemuse = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+		@minorspiritual, @majorspiritual, @cleric, @minorelemental, @majorelemental, @ranger, @sorcerer, @wizard, @bard, @empath, @paladin, @minormental, @arcanesymbols, @magicitemuse = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 		@@list.push(self)
 	end
 end
@@ -3414,10 +3423,10 @@ class Spell
 	@@loaded ||= false
 	@@load_lock = Array.new
 	@@cast_lock ||= Array.new
-	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command, :castProc, :real_time, :max_duration, :clear_on_death
+	attr_reader :timestamp, :num, :name, :time_per_formula, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :mental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :mental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command, :castProc, :real_time, :max_duration, :clear_on_death
 	attr_accessor :stance, :channel
-	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration,clear_on_death)
-		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@castProc,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel,@real_time,@max_duration,@clear_on_death = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration,clear_on_death
+	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,mentalCS,spiritCS,sorcererCS,elementalTD,mentalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration,clear_on_death)
+		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@castProc,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@mental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@mental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel,@real_time,@max_duration,@clear_on_death = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,castProc,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,mentalCS,spiritCS,sorcererCS,elementalTD,mentalTD,spiritTD,sorcererTD,strength,dodging,stance,channel,real_time,max_duration,clear_on_death
 		@time_per_formula.untaint
 		@mana_cost_formula.untaint
 		@spirit_cost_formula.untaint
@@ -3429,9 +3438,11 @@ class Spell
 		@bolt_ds_formula.untaint
 		@physical_ds_formula.untaint
 		@elemental_cs_formula.untaint
+		@mental_cs_formula.untaint
 		@spirit_cs_formula.untaint
 		@sorcerer_cs_formula.untaint
 		@elemental_td_formula.untaint
+		@mental_td_formula.untaint
 		@spirit_td_formula.untaint
 		@sorcerer_td_formula.untaint
 		@strength_formula.untaint
@@ -3466,8 +3477,8 @@ class Spell
 					File.open(filename) { |file|
 						file.read.split(/<\/spell>.*?<spell>/m).each { |spell_data|
 							spell = Hash.new
-							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|castProc|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|spiritCS|sorcererCS|elementalTD|spiritTD|sorcererTD|strength|dodging|stance|channel|realtime|maxduration|clearondeath)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
-							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['castProc'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end),(if spell['realtime'] and spell['realtime'] == 'true' then true else false end),(if spell['maxduration'] then spell['maxduration'].to_f else 250.0 end),(if spell['clearondeath'] and (spell['clearondeath'] == 'false'); false; else; true; end))
+							spell_data.split("\n").each { |line| if line =~ /<(number|name|type|duration|manaCost|spiritCost|staminaCost|renewCost|stacks|command|castProc|selfonly|msgup|msgdown|boltAS|physicalAS|boltDS|physicalDS|elementalCS|mentalCS|spiritCS|sorcererCS|elementalTD|mentalTD|spiritTD|sorcererTD|strength|dodging|stance|channel|realtime|maxduration|clearondeath)[^>]*>([^<]*)<\/\1>/ then spell[$1] = $2 end }
+							Spell.new(spell['number'],spell['name'],spell['type'],(spell['duration'] || '0'),(spell['manaCost'] || '0'),(spell['spiritCost'] || '0'),(spell['staminaCost'] || '0'),(spell['renewCost'] || '0'),(if spell['stacks'] and spell['stacks'] != 'false' then true else false end),(if spell['selfonly'] and spell['selfonly'] != 'false' then true else false end),spell['command'],spell['castProc'],spell['msgup'],spell['msgdown'],(spell['boltAS'] || '0'),(spell['physicalAS'] || '0'),(spell['boltDS'] || '0'),(spell['physicalDS'] || '0'),(spell['elementalCS'] || '0'),(spell['mentalCS'] || '0'),(spell['spiritCS'] || '0'),(spell['sorcererCS'] || '0'),(spell['elementalTD'] || '0'),(spell['mentalTD'] || '0'),(spell['spiritTD'] || '0'),(spell['sorcererTD'] || '0'),(spell['strength'] || '0'),(spell['dodging'] || '0'),(if spell['stance'] and spell['stance'] != 'false' then true else false end),(if spell['channel'] and spell['channel'] != 'false' then true else false end),(if spell['realtime'] and spell['realtime'] == 'true' then true else false end),(if spell['maxduration'] then spell['maxduration'].to_f else 250.0 end),(if spell['clearondeath'] and (spell['clearondeath'] == 'false'); false; else; true; end))
 						}
 					}
 					@@list.each { |spell|
@@ -3612,6 +3623,13 @@ class Spell
 			eval(@elemental_cs_formula).to_i
 		end
 	end
+	def mental_cs
+		if $SAFE < 3
+			proc { $SAFE = 3; eval(@mental_cs_formula) }.call.to_i
+		else
+			eval(@mental_cs_formula).to_i
+		end
+	end
 	def spirit_cs
 		if $SAFE < 3
 			proc { $SAFE = 3; eval(@spirit_cs_formula) }.call.to_i
@@ -3631,6 +3649,13 @@ class Spell
 			proc { $SAFE = 3; eval(@elemental_td_formula) }.call.to_i
 		else
 			eval(@elemental_td_formula).to_i
+		end
+	end
+	def mental_td
+		if $SAFE < 3
+			proc { $SAFE = 3; eval(@mental_td_formula) }.call.to_i
+		else
+			eval(@mental_td_formula).to_i
 		end
 	end
 	def spirit_td
@@ -3718,6 +3743,8 @@ class Spell
 			ranks = [ Spells.bard, XMLData.level ].min
 		elsif circle_num == 11
 			ranks = [ Spells.empath, XMLData.level ].min
+		elsif circle_num == 12
+			ranks = [ Spells.minormental, XMLData.level ].min
 		elsif circle_num == 16
 			ranks = [ Spells.paladin, XMLData.level ].min
 		elsif (circle_num == 97) and (Society.status == 'Guardians of Sunfist')
@@ -3968,9 +3995,11 @@ class Spell
 	def boltDS;        @bolt_ds_formula;        end
 	def physicalDS;    @physical_ds_formula;    end
 	def elementalCS;   @elemental_cs_formula;   end
+	def mentalCS;      @mental_cs_formula;      end
 	def spiritCS;      @spirit_cs_formula;      end
 	def sorcererCS;    @sorcerer_cs_formula;    end
 	def elementalTD;   @elemental_td_formula;   end
+	def mentalTD;      @mental_td_formula;      end
 	def spiritTD;      @spirit_td_formula;      end
 	def sorcererTD;    @sorcerer_td_formula;    end
 end
@@ -8095,7 +8124,7 @@ def sf_to_wiz(line)
 			$_CLIENT_.puts "\034GSw00005\r\nhttps://www.play.net#{$1}\r\n"
 		end
 		if line =~ /<preset id='speech'>(.*?)<\/preset>/m
-			line = line.sub(/<preset id='speech'>.*?<\/preset>/m, "#{$speech_highlight_start}#{$1}${$speech_highlight_end}")
+			line = line.sub(/<preset id='speech'>.*?<\/preset>/m, "#{$speech_highlight_start}#{$1}#{$speech_highlight_end}")
 		end
 		if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?:(.*?)<popStream\/>/m
 			line = line.sub(/<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*[\s\[\]\(\)A-z]+:.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}#{$3}")
