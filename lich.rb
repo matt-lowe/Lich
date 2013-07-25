@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.33'
+$version = '4.1.34'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -249,6 +249,7 @@ require 'dl'
 require 'zlib'
 require 'drb'
 require 'resolv'
+require 'digest/md5'
 begin
 	require 'gtk2'
 	module Gtk
@@ -347,6 +348,8 @@ $room_count = 0
 #
 UNTRUSTED_SETTINGS_LOAD = proc { |var| Settings.load }
 UNTRUSTED_SETTINGS_SAVE = proc { |var| Settings.save }
+UNTRUSTED_OPTIONS_LOAD = proc { |var| Options.load }
+UNTRUSTED_OPTIONS_SAVE = proc { |var| Options.save }
 UNTRUSTED_MAP_LOAD = proc { |var| Map.load }
 UNTRUSTED_MAP_SAVE = proc { |var| Map.save }
 UNTRUSTED_SPELL_LOAD = proc { |var| Spell.load }
@@ -632,11 +635,11 @@ class XMLParser
 	def make_wound_gsl
 		@wound_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",@injuries['nsys']['wound'],@injuries['leftEye']['wound'],@injuries['rightEye']['wound'],@injuries['back']['wound'],@injuries['abdomen']['wound'],@injuries['chest']['wound'],@injuries['leftHand']['wound'],@injuries['rightHand']['wound'],@injuries['leftLeg']['wound'],@injuries['rightLeg']['wound'],@injuries['leftArm']['wound'],@injuries['rightArm']['wound'],@injuries['neck']['wound'],@injuries['head']['wound'])
 	end
-	
+
 	def make_scar_gsl
 		@scar_gsl = sprintf("0b0%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b%02b",@injuries['nsys']['scar'],@injuries['leftEye']['scar'],@injuries['rightEye']['scar'],@injuries['back']['scar'],@injuries['abdomen']['scar'],@injuries['chest']['scar'],@injuries['leftHand']['scar'],@injuries['rightHand']['scar'],@injuries['leftLeg']['scar'],@injuries['rightLeg']['scar'],@injuries['leftArm']['scar'],@injuries['rightArm']['scar'],@injuries['neck']['scar'],@injuries['head']['scar'])
 	end
-	
+
 	def tag_start(name, attributes)
 		begin
 			@active_tags.push(name)
@@ -875,6 +878,15 @@ class XMLParser
 				end
 			elsif (name == 'app') and (@name = attributes['char'])
 				@game = attributes['game']
+				if @game.nil? or @game.empty?
+					@game = 'unknown'
+				end
+				unless File.exists?("#{$data_dir}#{@game}")
+					Dir.mkdir("#{$data_dir}#{@game}")
+				end
+				unless File.exists?("#{$data_dir}#{@game}/#{@name}")
+					Dir.mkdir("#{$data_dir}#{@game}/#{@name}")
+				end
 				if $frontend == 'wizard'
 					$_SERVER_.puts "<c>_flag Display Dialog Boxes 0"
 					sleep "0.05".to_f
@@ -1319,6 +1331,113 @@ class Settings
 		end
 		@@hash[script.to_s] ||= Hash.new
 		@@hash[script.to_s]
+	end
+end
+
+class Options
+	@@options    ||= Hash.new
+	@@timestamps ||= Hash.new
+	@@md5        ||= Hash.new
+	def Options.load
+		if $SAFE == 0
+			if script = Script.self
+				if script.class == Script
+					if script.name =~ /^lich$/i
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Options, because it will conflict with Lich\'s settings.'
+						return false
+					end
+					filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script.name}.sav"
+					if File.exists?(filename) and (@@timestamps[script.name].nil? or (@@timestamps[script.name] < File.mtime(filename)))
+						begin
+							File.open(filename, 'rb') { |f| @@options[script.name] = Marshal.load(f.read) }
+							@@timestamps[script] = File.mtime(filename)
+							@@md5[script.name] = Digest::MD5.hexdigest(@@options[script.name].inspect)
+						rescue
+							respond "--- error: Options.load: #{$!}"
+							$stderr.puts "error: Options.load: #{$!}"
+							$stderr.puts $!.backtrace
+						end
+					end
+				end
+			else
+				respond '--- Lich: Options: cannot identify calling script'
+			end
+		else
+			UNTRUSTED_OPTIONS_LOAD.call
+		end
+		nil
+	end
+	def Options.save
+		if $SAFE == 0
+			if script = Script.self
+				if script.class == Script
+					if script.name =~ /^lich$/i
+						respond '--- Lich: If you insist, you may have a script named \'lich\', but it cannot use Options, because it will conflict with Lich\'s settings.'
+						return false
+					end
+					filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script.name}.sav"
+					@@options[script.name] ||= Hash.new
+					unless (@@options[script.name].empty? and not File.exists?(filename))
+						start_time = Time.now
+						md5 = Digest::MD5.hexdigest(@@options[script.name].inspect)
+						end_time = Time.now
+						unless @@md5[script.name] == md5
+							begin
+								File.open(filename, 'wb') { |f| f.write(Marshal.dump(@@options[script.name])) }
+								@@timestamps[script.name] = File.mtime(filename)
+								@@md5[script.name] = md5
+							rescue
+								respond "--- error: Options.save: #{$!}"
+								$stderr.puts "error: Options.save: #{$!}"
+								$stderr.puts $!.backtrace
+							end
+						end
+					end
+				end
+			else
+				respond '--- Lich: Options: cannot identify calling script'
+			end
+		else
+			UNTRUSTED_OPTIONS_SAVE.call
+		end
+		nil
+	end
+	def Options.clear
+		if (script = Script.self) and (script.class == Script)
+			@@options[script.name] ||= Hash.new
+			@@options[script.name].clear
+		else
+			respond '--- Lich: Options: cannot identify calling script'
+			nil
+		end
+	end
+	def Options.[](val)
+		if (script = Script.self) and (script.class == Script)
+			@@options[script.name] ||= Hash.new
+			@@options[script.name][val]
+		else
+			respond '--- Lich: Options: cannot identify calling script'
+			nil
+		end
+	end
+	def Options.[]=(setting, val)
+		if (script = Script.self) and (script.class == Script)
+			@@options[script.name] ||= Hash.new
+			@@options[script.name][setting] = val
+			@@options[script.name][setting]
+		else
+			respond '--- Lich: Options: cannot identify calling script'
+			nil
+		end
+	end
+	def Options.to_hash
+		if (script = Script.self) and (script.class == Script)
+			@@options[script.name] ||= Hash.new
+			@@options[script.name]
+		else
+			respond '--- Lich: Options: cannot identify calling script'
+			nil
+		end
 	end
 end
 
@@ -1848,7 +1967,7 @@ class Script
 	end
 	def to_s
 		@name
-	end	
+	end
 	def gets
 		if @want_downstream or @want_downstream_xml
 			sleep "0.05".to_f while @downstream_buffer.empty?
@@ -2014,13 +2133,13 @@ class WizardScript<Script
 			'divide'   => '/',
 			'set'      => ''
 		}
-		
+
 		setvars = Array.new
 		data.each { |line| setvars.push($1) if line =~ /[\s\t]*setvariable\s+([^\s\t]+)[\s\t]/i and not setvars.include?($1) }
 		has_counter = data.find { |line| line =~ /%c/i }
 		has_save = data.find { |line| line =~ /%s/i }
 		has_nextroom = data.find { |line| line =~ /nextroom/i }
-		
+
 		fixstring = proc { |str|
 			while not setvars.empty? and str =~ /%(#{setvars.join('|')})%/io
 				str.gsub!('%' + $1 + '%', '#{' + $1.downcase + '}')
@@ -2032,7 +2151,7 @@ class WizardScript<Script
 			end
 			str
 		}
-		
+
 		fixline = proc { |line|
 			if line =~ /^[\s\t]*[A-Za-z0-9_\-']+:/i
 				line = line.downcase.strip
@@ -2089,9 +2208,9 @@ class WizardScript<Script
 				line = '#' + line
 			end
 		}
-		
+
 		lich_block = false
-		
+
 		data.each_index { |idx|
 			if lich_block
 				if data[idx] =~ /\}[\s\t]*LICH[\s\t]*$/
@@ -2099,7 +2218,7 @@ class WizardScript<Script
 					lich_block = false
 				else
 					next
-				end		
+				end
 			elsif data[idx] =~ /^[\s\t]*#|^[\s\t]*$/
 				next
 			elsif data[idx] =~ /^[\s\t]*LICH[\s\t]*\{/
@@ -2113,7 +2232,7 @@ class WizardScript<Script
 				data[idx] = fixline.call(data[idx])
 			end
 		}
-		
+
 		if has_counter or has_save or has_nextroom
 			data.each_index { |idx|
 				next if data[idx] =~ /^[\s\t]*#/
@@ -2125,7 +2244,7 @@ class WizardScript<Script
 				break
 			}
 		end
-		
+
 		@current_label = '~start'
 		@labels[@current_label] = String.new
 		@label_order.push(@current_label)
@@ -2157,7 +2276,7 @@ class UntrustedScriptBinder
 		Proc.new { }
 	end
 end
-	
+
 class Char
 	@@cha ||= nil
 	@@name ||= nil
@@ -3196,51 +3315,55 @@ class Spell
 				else
 					cast_cmd += " #{target}"
 				end
-				waitrt?
-				waitcastrt?
-				unless checkprep == @name
-					unless checkprep == 'None'
-						dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-						unless checkmana(self.mana_cost)
-							echo 'cast: not enough mana'
-							return false
-						end
-						unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
-							echo 'cast: not enough spirit'
-							return false
-						end
-						unless checkstamina(self.stamina_cost)
-							echo 'cast: not enough stamina'
-							return false
-						end
-					end
-					loop {
-						waitrt?
-						waitcastrt?
-						prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
-						if prepare_result =~ /^Your spell(?:song)? is ready\./
-							break
-						elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
+				cast_result = nil
+				loop {
+					waitrt?
+					waitcastrt?
+					unless checkprep == @name
+						unless checkprep == 'None'
 							dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
 							unless checkmana(self.mana_cost)
 								echo 'cast: not enough mana'
 								return false
 							end
-						elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
-							return false
+							unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+								echo 'cast: not enough spirit'
+								return false
+							end
+							unless checkstamina(self.stamina_cost)
+								echo 'cast: not enough stamina'
+								return false
+							end
 						end
-					}
-				end
-				if @stance and checkstance != 'offensive'
-					dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
-				end
-				cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$/
-				if @stance and checkstance !~ /^guarded$|^defensive$/
-					dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
-				end
-				if cast_result =~ /^Cast at what\?$|^Be at peace my child, there is no need for spells of war in here\.$/
-					dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-				end
+						loop {
+							waitrt?
+							waitcastrt?
+							prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
+							if prepare_result =~ /^Your spell(?:song)? is ready\./
+								break
+							elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
+								dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
+								unless checkmana(self.mana_cost)
+									echo 'cast: not enough mana'
+									return false
+								end
+							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$/
+								return false
+							end
+						}
+					end
+					if @stance and checkstance != 'offensive'
+						dothistimeout 'stance offensive', 5, /^You are now in an offensive stance\.$|^You are unable to change your stance\.$/
+					end
+					cast_result = dothistimeout cast_cmd, 5, /^(?:Cast|Sing) Roundtime [0-9]+ Seconds\.$|^Cast at what\?$|^But you don't have any mana!$|^\[Spell Hindrance for|^You don't have a spell prepared!$|keeps? the spell from working\.|^Be at peace my child, there is no need for spells of war in here\.$|Spells of War cannot be cast|^As you focus on your magic, your vision swims with a swirling haze of crimson\.$/
+					if @stance and checkstance !~ /^guarded$|^defensive$/
+						dothistimeout 'stance guarded', 5, /^You are now in an? \w+ stance\.$|^You are unable to change your stance\.$/
+					end
+					if cast_result =~ /^Cast at what\?$|^Be at peace my child, there is no need for spells of war in here\.$/
+						dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
+					end
+					break unless (@circle.to_i == 10) and (cast_result =~ /^\[Spell Hindrance for/)
+				}
 				cast_result
 			end
 		ensure
@@ -4201,12 +4324,15 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 				respond("--- Lich: #{script.name} active.") unless script.quiet
 				if trusted
 					begin
+						Options.load
 						while (script = Script.self) and script.current_label
 							eval(script.labels[script.current_label].to_s, script_binding, script.name)
 							Script.self.get_next_label
 						end
+						Options.save
 						Script.self.kill
 					rescue SystemExit
+						Options.save
 						Script.self.kill
 					rescue SyntaxError
 						respond "--- SyntaxError: #{$!}"
@@ -4214,24 +4340,28 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						$stderr.puts "--- SyntaxError: #{$!}"
 						$stderr.puts $!.backtrace
 						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
+						Options.save
 						Script.self.kill
 					rescue ScriptError
 						respond "--- ScriptError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ScriptError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue NoMemoryError
 						respond "--- NoMemoryError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- NoMemoryError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue LoadError
 						respond "--- LoadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- LoadError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue SecurityError
 						respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
@@ -4239,18 +4369,21 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace[0..1]
 						$stderr.puts "--- SecurityError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue ThreadError
 						respond "--- ThreadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ThreadError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue SystemStackError
 						respond "--- SystemStackError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- SystemStackError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue Exception
 						if $! == JUMP
@@ -4259,12 +4392,14 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 							respond $!.backtrace.first
 							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
 							$stderr.puts $!.backtrace
+							Options.save
 							Script.self.kill
 						else
 							respond "--- Exception: #{$!}"
 							respond $!.backtrace.first
 							$stderr.puts "--- Exception: #{$!}"
 							$stderr.puts $!.backtrace
+							Options.save
 							Script.self.kill
 						end
 					rescue
@@ -4272,16 +4407,20 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace.first
 						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					end
 				else
 					begin
+						Options.load
 						while (script = Script.self) and script.current_label
 							proc { script.labels[script.current_label].untaint; $SAFE = 3; eval(script.labels[script.current_label], script_binding, script.name, 0) }.call
 							Script.self.get_next_label
 						end
+						Options.save
 						Script.self.kill
 					rescue SystemExit
+						Options.save
 						Script.self.kill
 					rescue SyntaxError
 						respond "--- SyntaxError: #{$!}"
@@ -4289,24 +4428,28 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						$stderr.puts "--- SyntaxError: #{$!}"
 						$stderr.puts $!.backtrace
 						respond "--- Lich: cannot execute #{Script.self.name}, aborting."
+						Options.save
 						Script.self.kill
 					rescue ScriptError
 						respond "--- ScriptError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ScriptError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue NoMemoryError
 						respond "--- NoMemoryError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- NoMemoryError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue LoadError
 						respond "--- LoadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- LoadError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue SecurityError
 						respond "--- Review this script (#{Script.self.name}) to make sure it isn't malicious, and type ;trust #{Script.self.name}"
@@ -4314,18 +4457,21 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace[0..1]
 						$stderr.puts "--- SecurityError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue ThreadError
 						respond "--- ThreadError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- ThreadError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue SystemStackError
 						respond "--- SystemStackError: #{$!}"
 						respond $!.backtrace.first
 						$stderr.puts "--- SystemStackError: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					rescue Exception
 						if $! == JUMP
@@ -4334,12 +4480,14 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 							respond $!.backtrace.first
 							$stderr.puts "--- Label Error: `#{Script.self.jump_label}' was not found, and no `LabelError' label was found!"
 							$stderr.puts $!.backtrace
+							Options.save
 							Script.self.kill
 						else
 							respond "--- Exception: #{$!}"
 							respond $!.backtrace.first
 							$stderr.puts "--- Exception: #{$!}"
 							$stderr.puts $!.backtrace
+							Options.save
 							Script.self.kill
 						end
 					rescue
@@ -4347,6 +4495,7 @@ def start_script(script_name,cli_vars=[],flags=Hash.new)
 						respond $!.backtrace.first
 						$stderr.puts "--- Error: #{Script.self.name}: #{$!}"
 						$stderr.puts $!.backtrace
+						Options.save
 						Script.self.kill
 					end
 				end
@@ -5553,7 +5702,7 @@ def match(label, string)
 	else
 		if script.respond_to?(:match_stack_add)
 			script.match_stack_add(strings.first.to_s, strings.last)
-		else	
+		else
 			script.match_stack_labels.push(strings[0].to_s)
 			script.match_stack_strings.push(strings[1])
 		end
@@ -5905,7 +6054,7 @@ def respond(first = "", *messages)
 	begin
 		if first.class == Array
 			first.flatten.each { |ln| str += sprintf("%s\r\n", ln.to_s.chomp) }
-		else	
+		else
 			str += sprintf("%s\r\n", first.to_s.chomp)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
@@ -6443,7 +6592,7 @@ def sf_to_wiz(line)
 	# fixme: voln thoughts
 	begin
 		return line if line == "\r\n"
-	
+
 		if $sftowiz_multiline
 			$sftowiz_multiline = $sftowiz_multiline + line
 			line = $sftowiz_multiline
@@ -6457,8 +6606,7 @@ def sf_to_wiz(line)
 			return nil
 		end
 		$sftowiz_multiline = nil
-	
-		if line =~ /<LaunchURL src="(\/gs4\/play\/cm\/loader.asp[^"]*)" \/>/
+		if line =~ /<LaunchURL src="(.*?)" \/>/
 			$_CLIENT_.puts "\034GSw00005\r\nhttps://www.play.net#{$1}\r\n"
 		end
 		if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?:(.*?)<popStream\/>/m
@@ -7000,6 +7148,7 @@ def do_client(client_string)
 		if $offline_mode
 			respond "--- Lich: offline mode: ignoring #{client_string}"
 		else
+			client_string = "<c>bbs\n" if ($frontend == 'wizard') and (client_string == "<c>\egbbk\n") # launch forum
 			$_SERVER_.puts client_string
 		end
 		$_CLIENTBUFFER_.push client_string
@@ -7163,7 +7312,7 @@ $stormfront = true
 
 
 
-	
+
 if RUBY_PLATFORM =~ /win|mingw/i
 	wine_dir = wine_bin = nil
 else
@@ -7523,7 +7672,7 @@ main_thread = Thread.new {
 						remove_button.visible = false
 					}
 				}
-	
+
 				quick_game_entry_tab = Gtk::VBox.new
 				quick_game_entry_tab.pack_start(quick_table, false, false, 5)
 			end
@@ -7773,23 +7922,23 @@ main_thread = Thread.new {
 				begin
 					kernel32 = DL.dlopen('kernel32.dll')
 					get_version_ex = kernel32['GetVersionEx', 'LP']
-			
+
 					os_version_info = DL.malloc(DL.sizeof('LLLLLC128'))
 					os_version_info.struct!('LLLLLC128', :dwOSVersionInfoSize, :dwMajorVersion, :dwMinorVersion, :dwBuildNumber, :dwPlatformId, :szCSDVersion)
 					os_version_info[:dwOSVersionInfoSize] = DL.sizeof('LLLLLC128')
 					get_version_ex.call(os_version_info)
-			
+
 					if os_version_info[:dwMajorVersion] >= 6 # >= Vista
 						get_current_process = kernel32['GetCurrentProcess', 'L']
 						close_handle = kernel32['CloseHandle', 'LL']
-					
+
 						advapi32 = DL.dlopen('advapi32.dll')
 						open_process_token = advapi32['OpenProcessToken', 'LLLP']
 						get_token_information = advapi32['GetTokenInformation', 'LLLPLP']
-					
+
 						token_handle = DL.malloc(DL.sizeof('L')); token_handle.struct!('L', :handle)
 						open_process_token.call(get_current_process.call[0], 8, token_handle) # 8 = TOKEN_QUERY
-					
+
 						token_information = DL.malloc(DL.sizeof('L')); token_information.struct!('L', :info)
 						return_length = DL.malloc(DL.sizeof('L')); return_length.struct!('L', :length)
 						get_token_information.call(token_handle[:handle], 20, token_information, DL.sizeof('L'), return_length) # 20 = TokenElevation
@@ -7856,58 +8005,58 @@ main_thread = Thread.new {
 				website_order_entry_2.editable = false
 				website_order_entry_3 = Gtk::Entry.new
 				website_order_entry_3.editable = false
-	
+
 				website_order_box = Gtk::VBox.new
 				website_order_box.pack_start(website_order_entry_1, true, true, 5)
 				website_order_box.pack_start(website_order_entry_2, true, true, 5)
 				website_order_box.pack_start(website_order_entry_3, true, true, 5)
-	
+
 				website_order_frame = Gtk::Frame.new('Website Launch Order')
 				website_order_frame.add(website_order_box)
-	
+
 				sge_order_entry_1 = Gtk::Entry.new
 				sge_order_entry_1.editable = false
 				sge_order_entry_2 = Gtk::Entry.new
 				sge_order_entry_2.editable = false
 				sge_order_entry_3 = Gtk::Entry.new
 				sge_order_entry_3.editable = false
-	
+
 				sge_order_box = Gtk::VBox.new
 				sge_order_box.pack_start(sge_order_entry_1, true, true, 5)
 				sge_order_box.pack_start(sge_order_entry_2, true, true, 5)
 				sge_order_box.pack_start(sge_order_entry_3, true, true, 5)
-	
+
 				sge_order_frame = Gtk::Frame.new('SGE Launch Order')
 				sge_order_frame.add(sge_order_box)
-	
+
 				refresh_button = Gtk::Button.new(' Refresh ')
-	
+
 				refresh_box = Gtk::HBox.new
 				refresh_box.pack_end(refresh_button, false, false, 5)
-	
+
 				psinet_compatible_button = Gtk::CheckButton.new('Use PsiNet compatible install method')
-	
+
 				install_button = Gtk::Button.new('Install')
 				uninstall_button = Gtk::Button.new('Uninstall')
-				
+
 				install_table = Gtk::Table.new(1, 2, true)
 				install_table.attach(install_button, 0, 1, 0, 1, Gtk::EXPAND|Gtk::FILL, Gtk::EXPAND|Gtk::FILL, 5, 5)
 				install_table.attach(uninstall_button, 1, 2, 0, 1, Gtk::EXPAND|Gtk::FILL, Gtk::EXPAND|Gtk::FILL, 5, 5)
-	
+
 				install_tab = Gtk::VBox.new
 				install_tab.pack_start(website_order_frame, false, false, 5)
 				install_tab.pack_start(sge_order_frame, false, false, 5)
 				install_tab.pack_start(refresh_box, false, false, 5)
 				install_tab.pack_start(psinet_compatible_button, false, false, 5)
 				install_tab.pack_start(install_table, false, false, 5)
-	
+
 				psinet_installstate = nil
-	
+
 				refresh_button.signal_connect('clicked') {
 					install_tab_loaded = true
 					launch_cmd = registry_get('HKEY_LOCAL_MACHINE\\Software\\Classes\\Simutronics.Autolaunch\\Shell\\Open\\command\\').to_s
 					website_order_entry_1.text = launch_cmd
-	
+
 					if launch_cmd =~ /"(.*?)PsiNet2.exe"/i
 						website_order_entry_2.visible = true
 						psinet_dir = $1
@@ -7924,18 +8073,18 @@ main_thread = Thread.new {
 					else
 						website_order_entry_2.visible = false
 					end
-		
+
 					if launch_cmd =~ /lich/i
 						website_order_entry_3.visible = true
 						website_order_entry_3.text = registry_get('HKEY_LOCAL_MACHINE\\Software\\Classes\\Simutronics.Autolaunch\\Shell\\Open\\command\\RealCommand').to_s
 					else
 						website_order_entry_3.visible = false
 					end
-	
+
 					launch_cmd = registry_get('HKEY_LOCAL_MACHINE\\Software\\Simutronics\\Launcher\\Directory').to_s
 					sge_order_entry_1.text = launch_cmd
 					sge_order_entry_1.text += '\Launcher.exe' unless sge_order_entry_1.text[-1].chr == ' '
-		
+
 					if launch_cmd =~ /^"?(.*?)PsiNet2.exe/i
 						sge_order_entry_2.visible = true
 						psinet_dir = $1
@@ -7958,7 +8107,7 @@ main_thread = Thread.new {
 					else
 						sge_order_entry_2.visible = false
 					end
-	
+
 					if ENV['OCRA_EXECUTABLE']
 						psinet_compatible_button.active = true
 						psinet_compatible_button.sensitive = false
@@ -7973,7 +8122,7 @@ main_thread = Thread.new {
 					else
 						sge_order_entry_3.visible = false
 					end
-	
+
 					if (website_order_entry_1.text =~ /PsiNet/i) or (sge_order_entry_1.text =~ /PsiNet/i)
 						install_button.sensitive = false
 						uninstall_button.sensitive = false
@@ -8427,13 +8576,13 @@ main_thread = Thread.new {
 			end
 		end
 	end
-	
+
 	listener = timeout_thr = nil
 	undef :hack_hosts
 
 	#
 	# drop superuser privileges
-	#	
+	#
 	unless RUBY_PLATFORM =~ /win|mingw/i
 		$stderr.puts "info: dropping superuser privileges..."
 		begin
@@ -8452,7 +8601,7 @@ main_thread = Thread.new {
 			$stderr.puts $!.backtrace
 		end
 	end
-	
+
 	# backward compatibility
 	if $frontend == 'wizard'
 		$fake_stormfront = true
@@ -8495,7 +8644,7 @@ main_thread = Thread.new {
 		Gtk.queue {
 			input_box = Gtk::ComboBoxEntry.new()
 			input_box.child.modify_font(Pango::FontDescription.new('Courier New 12'))
-		
+
 			game_textview = Gtk::TextView.new
 			game_textview.wrap_mode = Gtk::TextTag::WRAP_WORD
 			game_textview.editable = false
@@ -8509,23 +8658,23 @@ main_thread = Thread.new {
 			game_textview.modify_text(Gtk::STATE_NORMAL, Gdk::Color.parse('gray'))
 			game_textview.modify_base(Gtk::STATE_NORMAL, Gdk::Color.parse('black'))
 			game_textview.buffer.create_mark('insert_position', game_textview.buffer.end_iter, true)
-			
+
 			game_textview_sw = Gtk::ScrolledWindow.new
 			game_textview_sw.border_width = 0
 			game_textview_sw.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
 			game_textview_sw.add(game_textview)
-		
+
 			box1 = Gtk::VBox.new(false, 5)
 			box1.pack_start(game_textview_sw, true, true, 0)
 			box1.pack_end(input_box, false, false, 0)
-		
+
 			game_window = Gtk::Window.new
 			game_window.resizable = true
 			game_window.title = "Super Ultra Kobold Smasher 3000"
 			game_window.border_width = 5
 			game_window.set_size_request(1000, 600)
 			game_window.add(box1)
-			
+
 			game_window.signal_connect('delete_event') {
 				# fixme: popup confirm box, send quit to game
 				Gtk.main_quit
@@ -8646,7 +8795,7 @@ main_thread = Thread.new {
 
 		client_thread = Thread.new {
 			$login_time = Time.now
-	
+
 			if $offline_mode
 				nil
 			elsif $frontend == 'wizard'
@@ -8739,8 +8888,8 @@ main_thread = Thread.new {
 					$_SERVER_.write(client_string)
 				end
 			end
-		
-			begin	
+
+			begin
 				while client_string = $_CLIENT_.gets
 					client_string = '<c>' + client_string if $frontend == 'wizard'
 					begin
@@ -8768,7 +8917,7 @@ main_thread = Thread.new {
 			server_thread.kill rescue()
 		}
 	end
-	
+
 	# fixme: bare bones
 
 	wait_while { $offline_mode }
@@ -8825,26 +8974,27 @@ main_thread = Thread.new {
 			retry unless $_CLIENT_.closed? or $_SERVER_.closed?
 		end
 	}
-	
+
 	server_thread.priority = 4
 	client_thread.priority = 3
-	
+
 	$_CLIENT_.puts "\n--- Lich v#{$version} is active.  Type #{$clean_lich_char}help for usage info.\n\n"
-	
+
 	unless LichSettings['seen_notice']
-		$_CLIENT_.puts ''
-		$_CLIENT_.puts "#{monsterbold_start}** NOTICE:"
-		$_CLIENT_.puts ''
-		$_CLIENT_.puts '** Lich is not intended to facilitate AFK scripting.'
-		$_CLIENT_.puts '** The authors do not condone violation of game policy,'
-		$_CLIENT_.puts '** nor are they in any way attempting to encourage it.'
-		$_CLIENT_.puts ''
-		$_CLIENT_.puts "** (this notice will not repeat)#{monsterbold_end} "
-		$_CLIENT_.puts ''
+		output      = "**\n"
+		output.concat "** NOTICE:\n"
+		output.concat "**\n"
+		output.concat "** Lich is not intended to facilitate AFK scripting.\n"
+		output.concat "** The authors do not condone violation of game policy,\n"
+		output.concat "** nor are they in any way attempting to encourage it.\n"
+		output.concat "**\n"
+		output.concat "** (this notice will not repeat) \n"
+		output.concat "**\n"
+		respond output
 		LichSettings['seen_notice'] = true
 		LichSettings.save
 	end
-	
+
 	server_thread.join
 	client_thread.kill rescue()
 
