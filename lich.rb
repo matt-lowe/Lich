@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.2.1'
+$version = '4.2.2'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -4782,7 +4782,9 @@ class Map
 		time
 	end
 	def Map.dijkstra(source, destination=nil)
-		if room = Map[source]
+		if source.class == Map
+			soruce.dijkstra(destination)
+		elsif room = Map[source]
 			room.dijkstra(destination)
 		else
 			echo "Map.dijkstra: error: invalid source room"
@@ -4862,7 +4864,9 @@ class Map
 		end
 	end
 	def Map.findpath(source, destination)
-		if room = Map[source]
+		if source.class == Map
+			source.path_to(destination)
+		elsif room = Map[source]
 			room.path_to(destination)
 		else
 			echo "Map.findpath: error: invalid source room"
@@ -7969,11 +7973,15 @@ def do_client(client_string)
 				end
 				unless global_vars.empty?
 					respond '--- Global settings'
-					global_vars.each_pair { |name,value| respond "   #{name}: #{value}" }
+					global_vars.each_pair { |name,value|
+						respond "   #{name}: #{if value.class == String; value; else; value.inspect; end}"
+					}
 				end
 				unless char_vars.empty?
 					respond "--- #{XMLData.name}'s settings"
-					char_vars.each_pair { |name,value| respond "   #{name}: #{value}" }
+					char_vars.each_pair { |name,value|
+						respond "   #{name}: #{if value.class == String; value; else; value.inspect; end}"
+					}
 				end
 			else
 				respond
