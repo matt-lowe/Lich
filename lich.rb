@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.46'
+$version = '4.1.47'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -5301,7 +5301,15 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			fput 'stand' unless standing?
 			waitrt?
 			put_dir.call
-		elsif line =~ /^You will have to climb that\.$|^You're going to have to climb that\./
+		elsif line == 'You are too injured to be doing any climbing!'
+			if (resolve = Spell[9704]) and resolve.known?
+				wait_until { resolve.affordable? }
+				resove.cast
+				put_dir.call
+			else
+				return nil
+			end
+		elsif line =~ /^You(?:'re going to| will) have to climb that\./
 			dir.gsub!('go', 'climb')
 			put_dir.call
 		elsif line =~ /^You can't climb that\./
@@ -9339,6 +9347,10 @@ main_thread = Thread.new {
 				begin
 					# The Rift, Scatter is broken...
 					$_SERVERSTRING_.sub!(/(.*)\s\s<compDef id='room text'><\/compDef>/)  { "<compDef id='room desc'>#{$1}</compDef>" }
+					# Cry For Help spell is broken...
+					if $_SERVERSTRING_ =~ /<pushStream id="familiar" \/><prompt time="[0-9]+">&gt;<\/prompt>/
+						$_SERVERSTRING_.sub!('<pushStream id="familiar" />', '')
+					end
 
 					$_SERVERBUFFER_.push($_SERVERSTRING_)
 					if alt_string = DownstreamHook.run($_SERVERSTRING_)
