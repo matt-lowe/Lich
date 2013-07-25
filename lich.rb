@@ -37,7 +37,7 @@
 
 =end
 
-$version = '4.1.11'
+$version = '4.1.12'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -200,7 +200,7 @@ num = Time.now.to_i
 debug_filename = "#{$temp_dir}debug-#{num}.txt"
 debug_filename = "#{$temp_dir}debug-#{num+=1}.txt" while File.exists?(debug_filename)
 $stderr = File.open(debug_filename, 'w')
-$stderr.sync
+$stderr.sync = true
 
 $stderr.puts "info: #{Time.now}"
 $stderr.puts "info: #{$version}"
@@ -482,6 +482,9 @@ class LimitedArray < Array
 	def shove(line)
 		push(line)
 	end
+	def history
+		Array.new
+	end
 end
 
 # fixme: causes slowdown on Windows (maybe)
@@ -493,22 +496,24 @@ class CachedArray < Array
 		num = Time.now.to_i-1
 		@filename = "#{$temp_dir}cache-#{num}.txt"
 		@filename = "#{$temp_dir}cache-#{num+=1}.txt" while File.exists?(@filename)
-		File.open(@filename, 'w') { |f| f.write '' }
+		@file = File.open(@filename, 'w')
 		super
 	end
 	def push(line)
 		if self.length >= @max_size
-			file = File.open(@filename, 'a')
-			file.puts(self.shift) while (self.length >= @min_size)
-			file.close
+			@file.puts(self.shift) while (self.length >= @min_size)
+			@file.flush
 		end
 		super
 	end
 	def history
-		file = File.open(@filename)
-		h = file.readlines
-		file.close
-		return h
+		@file.flush
+		@file.close
+		@file = File.open(@filename, 'r')
+		h = @file.readlines
+		@file.close
+		@file = File.open(@filename, 'a')
+		h
 	end
 end
 
@@ -2678,17 +2683,17 @@ end
 class CMan
 	def CMan.method_missing(arg1, arg2='')
 		if arg2.class == Array
-			instance_eval("@@#{arg1}[#{arg2.join(',')}]", if Script.self then Script.self.name else "Lich" end)
+			instance_eval("@@#{arg1}[#{arg2.join(',')}]", if Script.self then Script.self.name else 'Lich' end)
 		elsif arg2.to_s =~ /^\d+$/
-			instance_eval("@@#{arg1}#{arg2}", if Script.self then Script.self.name else "Lich" end)
+			instance_eval("@@#{arg1}#{arg2}", if Script.self then Script.self.name else 'Lich' end)
 		elsif arg2.empty?
 			begin
-				instance_eval("@@#{arg1}", if Script.self then Script.self.name else "Lich" end)
+				instance_eval("@@#{arg1}", if Script.self then Script.self.name else 'Lich' end)
 			rescue
 				nil
 			end
 		else
-			instance_eval("@@#{arg1}'#{arg2}'", if Script.self then Script.self.name else "Lich" end)
+			instance_eval("@@#{arg1}'#{arg2}'", if Script.self then Script.self.name else 'Lich' end)
 		end
 	end
 end
@@ -2696,28 +2701,27 @@ end
 class Spell
 	@@list ||= Array.new
 	@@cast_lock = false
-	attr_reader :timestamp, :num, :name, :duration, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :manaCost, :spiritCost, :staminaCost, :renewCost, :boltAS, :physicalAS, :boltDS, :physicalDS, :elementalCS, :spiritCS, :sorcererCS, :elementalTD, :spiritTD, :sorcererTD, :strength, :dodging, :active, :type, :command, :mana_cost_formula
+	attr_reader :timestamp, :num, :name, :time_per_formula, :timeleft, :msgup, :msgdn, :stacks, :circle, :circlename, :selfonly, :mana_cost_formula, :spirit_cost_formula, :stamina_cost_formula, :renew_cost_formula, :bolt_as_formula, :physical_as_formula, :bolt_ds_formula, :physical_ds_formula, :elemental_cs_formula, :spirit_cs_formula, :sorcerer_cs_formula, :elemental_td_formula, :spirit_td_formula, :sorcerer_td_formula, :strength_formula, :dodging_formula, :active, :type, :command
 	attr_accessor :stance, :channel
 	def initialize(num,name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel)
-		@name,@type,@duration,@manaCost,@spiritCost,@staminaCost,@renewCost,@stacks,@selfonly,@command,@msgup,@msgdn,@boltAS,@physicalAS,@boltDS,@physicalDS,@elementalCS,@spiritCS,@sorcererCS,@elementalTD,@spiritTD,@sorcererTD,@strength,@dodging,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
-		@duration.untaint
-		@manaCost.untaint
-		@mana_cost_formula = @manaCost
+		@name,@type,@time_per_formula,@mana_cost_formula,@spirit_cost_formula,@stamina_cost_formula,@renew_cost_formula,@stacks,@selfonly,@command,@msgup,@msgdn,@bolt_as_formula,@physical_as_formula,@bolt_ds_formula,@physical_ds_formula,@elemental_cs_formula,@spirit_cs_formula,@sorcerer_cs_formula,@elemental_td_formula,@spirit_td_formula,@sorcerer_td_formula,@strength_formula,@dodging_formula,@stance,@channel = name,type,duration,manaCost,spiritCost,staminaCost,renewCost,stacks,selfonly,command,msgup,msgdn,boltAS,physicalAS,boltDS,physicalDS,elementalCS,spiritCS,sorcererCS,elementalTD,spiritTD,sorcererTD,strength,dodging,stance,channel
+		@time_per_formula.untaint
 		@mana_cost_formula.untaint
-		@spiritCost.untaint
-		@staminaCost.untaint
-		@boltAS.untaint
-		@physicalAS.untaint
-		@boltDS.untaint
-		@physicalDS.untaint
-		@elementalCS.untaint
-		@spiritCS.untaint
-		@sorcererCS.untaint
-		@elementalTD.untaint
-		@spiritTD.untaint
-		@sorcererTD.untaint
-		@strength.untaint
-		@dodging.untaint
+		@spirit_cost_formula.untaint
+		@stamina_cost_formula.untaint
+		@renew_cost_formula.untaint
+		@bolt_as_formula.untaint
+		@physical_as_formula.untaint
+		@bolt_ds_formula.untaint
+		@physical_ds_formula.untaint
+		@elemental_cs_formula.untaint
+		@spirit_cs_formula.untaint
+		@sorcerer_cs_formula.untaint
+		@elemental_td_formula.untaint
+		@spirit_td_formula.untaint
+		@sorcerer_td_formula.untaint
+		@strength_formula.untaint
+		@dodging_formula.untaint
 		if num.to_i.nonzero? then @num = num.to_i else @num = num end
 		@timestamp = Time.now
 		@active = false
@@ -2804,9 +2808,133 @@ class Spell
 			eval(@mana_cost_formula)
 		end
 	end
+	def spirit_cost
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@spirit_cost_formula}") }.call
+		else
+			eval(@spirit_cost_formula)
+		end
+	end
+	def stamina_cost
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@stamina_cost_formula}") }.call
+		else
+			eval(@stamina_cost_formula)
+		end
+	end
+	def time_per(mod_skills=Hash.new)
+		if mod_skills.empty?
+			if $SAFE < 3
+				proc { eval("$SAFE=3\n#{@time_per_formula}") }.call
+			else
+				eval(@time_per_formula)
+			end
+		else
+			formula = @time_per_formula.dup
+			mod_skills.each_pair { |name,value| formula.gsub!(name, value.to_i.to_s) }
+			if $SAFE < 3
+				formula.untaint
+				proc { eval("$SAFE=3\n#{formula}") }.call
+			else
+				UNTRUSTED_UNTAINT.call(formula)
+				eval(formula)
+			end
+		end
+	end
+	def renew_cost
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@renew_cost_formula}") }.call
+		else
+			eval(@renew_cost_formula)
+		end
+	end
+	def bolt_as
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@bolt_as_formula}") }.call
+		else
+			eval(@bolt_as_cost_formula)
+		end
+	end
+	def physical_as
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@physical_as_formula}") }.call
+		else
+			eval(@physical_as_formula)
+		end
+	end
+	def bolt_ds
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@bolt_ds_formula}") }.call
+		else
+			eval(@bolt_ds_formula)
+		end
+	end
+	def physical_ds
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@physical_ds_formula}") }.call
+		else
+			eval(@physical_ds_formula)
+		end
+	end
+	def elemental_cs
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@elemental_cs_formula}") }.call
+		else
+			eval(@elemental_cs_formula)
+		end
+	end
+	def spirit_cs
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@spirit_cs_formula}") }.call
+		else
+			eval(@spirit_cs_formula)
+		end
+	end
+	def sorcerer_cs
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@sorcerer_cs_formula}") }.call
+		else
+			eval(@sorcerer_cs_formula)
+		end
+	end
+	def elemental_td
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@elemental_td_formula}") }.call
+		else
+			eval(@elemental_ds_formula)
+		end
+	end
+	def spirit_td
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@spirit_td_formula}") }.call
+		else
+			eval(@spirit_td_formula)
+		end
+	end
+	def sorcerer_td
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@sorcerer_td_formula}") }.call
+		else
+			eval(@sorcerer_td_formula)
+		end
+	end
+	def strength
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@strength_formula}") }.call.to_s
+		else
+			eval(@strength_formula).to_s
+		end
+	end
+	def dodging
+		if $SAFE < 3
+			proc { eval("$SAFE=3\n#{@dodging_formula}") }.call.to_s
+		else
+			eval(@dodging_formula).to_s
+		end
+	end
 	def timeleft
 		# this is just a copy and paste of the "touch" function.  For some reason, just calling touch here does not work correctly.
-		if @duration.to_s == "Spellsong.timeleft"
+		if @time_per_formula.to_s == "Spellsong.timeleft"
 			@timeleft = Spellsong.timeleft
 		else
 			@timeleft = @timeleft - ((Time.now - @timestamp) / "60.00".to_f)
@@ -2876,7 +3004,7 @@ class Spell
 		@timestamp = Time.now
 	end
 	def touch
-		if @duration.to_s == "Spellsong.timeleft"
+		if @time_per_formula.to_s == "Spellsong.timeleft"
 			@timeleft = Spellsong.timeleft
 		else
 			@timeleft = @timeleft - ((Time.now - @timestamp) / "60.00".to_f)
@@ -2897,13 +3025,16 @@ class Spell
 	def to_s
 		@name.to_s
 	end
-	def putup
+	def putup(mod_skills=Hash.new)
 		touch
-		@stacks ? @timeleft += eval(@duration).to_f : @timeleft = eval(@duration).to_f
-		if (@num == 9710) or (@num == 9711) or (@num == 9719)
-			if @timeleft > 3 then @timeleft = 2.983 end
+		if @stacks
+			if (@num == 9710) or (@num == 9711) or (@num == 9719)
+				@timeleft = [ @timeleft + self.time_per(mod_skills), 3.0].min
+			else
+				@timeleft = [ @timeleft + self.time_per(mod_skills), 250.0].min
+			end
 		else
-			if @timeleft > 250 then @timeleft = 249.983 end
+			@timeleft = self.time_per(mod_skills)
 		end
 		@active = true
 	end
@@ -2915,27 +3046,24 @@ class Spell
 	def remaining
 		self.touch.as_time
 	end
-	def cost
-		@manaCost
-	end
 	def affordable?
-		return false if Spell[9699].active? and (eval(@staminaCost).to_i > 0)
-		mana(eval(@manaCost).to_i) and checkspirit(eval(@spiritCost).to_i + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(eval(@staminaCost).to_i)
+		return false if Spell[9699].active? and (self.stamina_cost > 0)
+		checkmana(self.mana_cost) and checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end)) and checkstamina(self.stamina_cost)
 	end
 	def cast(target=nil)
 		if @type.nil?
 			echo "cast: spell missing type (#{@name})"
 			return false
 		end
-		unless checkmana(eval(@manaCost))
+		unless checkmana(self.mana_cost)
 			echo 'cast: not enough mana'
 			return false
 		end
-		unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+		unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 			echo 'cast: not enough spirit'
 			return false
 		end
-		unless checkstamina(eval(@staminaCost))
+		unless checkstamina(self.stamina_cost)
 			echo 'cast: not enough stamina'
 			return false
 		end
@@ -2947,15 +3075,15 @@ class Spell
 			sleep 0.1
 		}
 		@@cast_lock = Script.self.name
-		unless checkmana(eval(@manaCost))
+		unless checkmana(self.mana_cost)
 			echo 'cast: not enough mana'
 			return false
 		end
-		unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+		unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 			echo 'cast: not enough spirit'
 			return false
 		end
-		unless checkstamina(eval(@staminaCost))
+		unless checkstamina(self.stamina_cost)
 			echo 'cast: not enough stamina'
 			return false
 		end
@@ -2981,17 +3109,17 @@ class Spell
 			unless checkprep == @name
 				unless checkprep == 'None'
 					dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-					unless checkmana(eval(@manaCost))
+					unless checkmana(self.mana_cost)
 						@@cast_lock = false
 						echo 'cast: not enough mana'
 						return false
 					end
-					unless checkspirit(eval(@spiritCost) + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
+					unless checkspirit(self.spirit_cost + 1 + (if checkspell(9912) then 1 else 0 end) + (if checkspell(9913) then 1 else 0 end) + (if checkspell(9914) then 1 else 0 end) + (if checkspell(9916) then 5 else 0 end))
 						@@cast_lock = false
 						echo 'cast: not enough spirit'
 						return false
 					end
-					unless checkstamina(eval(@staminaCost))
+					unless checkstamina(self.stamina_cost)
 						@@cast_lock = false
 						echo 'cast: not enough stamina'
 						return false
@@ -3005,7 +3133,7 @@ class Spell
 						break
 					elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
 						dothistimeout 'release', 5, /^You feel the magic of your spell rush away from you\.$|^You don't have a prepared spell to release!$/
-						unless checkmana(eval(@manaCost))
+						unless checkmana(self.mana_cost)
 							echo 'cast: not enough mana'
 							@@cast_lock = false
 							return false
@@ -3030,6 +3158,22 @@ class Spell
 			cast_result
 		end
 	end
+	# for backwards compatiblity
+	def duration;		@time_per_formula;	end
+	def cost;		@mana_cost_formula;	end
+	def manaCost;		@mana_cost_formula;	end
+	def spiritCost;		@spirit_cost_formula;	end
+	def staminaCost;	@stamina_cost_formula;	end
+	def boltAS;		@bolt_as_formula;	end
+	def physicalAS;		@physical_as_formula;	end
+	def boltDS;		@bolt_ds_formula;	end
+	def physicalDS;		@physical_ds_formula;	end
+	def elementalCS;	@elemental_cs_formula;	end
+	def spiritCS;		@spirit_cs_formula;	end
+	def sorcererCS;		@sorcerer_cs_formula;	end
+	def elementalTD;	@elemental_td_formula;	end
+	def spiritTD;		@spirit_td_formula;	end
+	def sorcererTD;		@sorcerer_td_formula;	end
 end
 
 class Stats
@@ -3861,6 +4005,7 @@ def upstream_get
 	unless script = Script.self then echo 'upstream_get: cannot identify calling script.'; return nil; end
 	unless script.want_upstream
 		echo("This script wants to listen to the upstream, but it isn't set as receiving the upstream! This will cause a permanent hang, aborting (ask for the upstream with 'toggle_upstream' in the script)")
+		sleep 0.3
 		return false
 	end
 	script.upstream_gets
@@ -4602,7 +4747,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 			sleep 1
 			waitrt?
 			put_dir.call
-		elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$/
+		elsif line =~ /^Climbing.*you plunge towards the ground below\.|^Tentatively, you attempt to climb.*(?:fall|slip)|^You start.*but quickly realize|^You.*drop back to the ground|^You leap .* fall unceremoniously to the ground in a heap\.$|^You search for a way to make the climb .*? but without success\.$/
 			sleep 1
 			waitrt?
 			fput 'stand' unless standing?
