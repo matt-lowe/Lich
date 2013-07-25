@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.1.31'
+$version = '4.1.32'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -8451,7 +8451,7 @@ main_thread = Thread.new {
 			Gtk.queue {
 				mark = game_textview.buffer.get_mark('insert_position')
 				iter = game_textview.buffer.get_iter_at_mark(mark)
-				scroll = (game_textview_sw.vadjustment.value >= (game_textview_sw.vadjustment.upper - game_textview_sw.vadjustment.page_size - 1e-12))
+				scroll = (game_textview_sw.vadjustment.value >= (game_textview_sw.vadjustment.upper - game_textview_sw.vadjustment.page_size - "1e-12".to_f))
 				if text =~ /\btest\b/
 					game_textview.buffer.insert(iter, text, "monsterbold")
 				else
