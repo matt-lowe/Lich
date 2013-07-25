@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.5'
+$version = '4.4.6'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -3853,7 +3853,9 @@ class Spell
 	end
 	def affordable?(options={})
 		# fixme: deal with them dirty bards!
-		if (self.mana_cost > 0) and (  !checkmana(self.mana_cost(options)) or (Spell[515].active? and !checkmana(self.mana_cost(options) + [self.mana_cost(options)/4, 1].max))  )
+		release_options = options.dup
+		release_options[:multicast] = nil
+		if (self.mana_cost(options) > 0) and (  !checkmana(self.mana_cost(options)) or (Spell[515].active? and !checkmana(self.mana_cost(options) + [self.mana_cost(release_options)/4, 1].max))  )
 			false 
 		elsif (self.stamina_cost(options) > 0) and (Spell[9699].active? or not checkstamina(self.stamina_cost(options)))
 			false
@@ -4074,6 +4076,9 @@ class Spell
 				else
 					formula = @cost[args[0].to_s.sub(/_formula$/, '').sub(/_cost$/, '')]['self'].dup
 				end
+			end
+			if options[:multicast].to_i > 1
+				formula = "(#{formula})*#{options[:multicast].to_i}"
 			end
 			if args[0].to_s =~ /_formula$/
 				formula.dup
