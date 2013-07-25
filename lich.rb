@@ -48,7 +48,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.3.5'
+$version = '4.3.6'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -6244,9 +6244,9 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				Script.self.downstream_buffer.unshift(save_stream)
 				Script.self.downstream_buffer.flatten!
 				return false
-			elsif (dir =~ /^(?:go|climb) .+$/) and (drag_line = reget.reverse.find { |l| l =~ /^You grab .*?(?:'s body)? and drag/ })
+			elsif (dir =~ /^(?:go|climb) .+$/) and (drag_line = reget.reverse.find { |l| l =~ /^You grab .*?(?:'s body)? and drag|^You are now automatically attempting to drag .*? when/ })
 				tried_fix_drag = true
-				name = /^You grab (.*?)('s body)? and drag/.match(drag_line).captures.first
+				name = (/^You grab (.*?)('s body)? and drag/.match(drag_line).captures.first || /^You are now automatically attempting to drag (.*?) when/.match(drag_line).captures.first)
 				target = /^(?:go|climb) (.+)$/.match(dir).captures.first
 				fput "drag #{name}"
 				dir = "drag #{name} #{target}"
