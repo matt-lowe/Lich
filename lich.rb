@@ -8239,52 +8239,76 @@ end
 def registry_get(key)
 	if $SAFE == 0
 		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-			path = /^(.*)\\.*?$/.match(key).captures.first.split("\\")
-			value = /^.*\\(.*?)$/.match(key).captures.first
-			begin
-				advapi32 = DL.dlopen('advapi32.dll')
-				reg_open_key_ex = advapi32['RegOpenKeyEx', 'LLSLLP']
-				reg_query_value_ex = advapi32['RegQueryValueEx', 'LLSLPPP']
-				kernel32 = DL.dlopen('kernel32.dll')
-				close_handle = kernel32['CloseHandle', 'LL']
-				keys = Array.new
-				if path[0].downcase == 'hkey_classes_root'
-					keys.push -2147483648
-				elsif path[0].downcase == 'hkey_current_user'
-					keys.push -2147483647
-				elsif path[0].downcase == 'hkey_local_machine'
-					keys.push -2147483646
-				elsif path[0].downcase == 'hkey_users'
-					keys.push -2147483645
-				else
-					raise "bad top level key: #{key}"
-				end
-				path[1..-1].each { |key|
-					new_key = DL.malloc(DL.sizeof('L'))
-					new_key.struct!('L', :data)
-					result = reg_open_key_ex.call(keys[-1], key, 0, 131097, new_key) # 131097 = KEY_READ
-					unless result.first == 0
-						raise "failed to open key: #{key}"
+			if RUBY_VERSION =~ /^2\.\d+\.\d+$/
+				hkey, subkey, thingie = /(HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\\(.+)\\([^\\]*)/.match(key).captures
+				begin				
+					if hkey.downcase == 'hkey_classes_root'
+						registry = Win32::Registry::HKEY_CLASSES_ROOT
+					elsif hkey.downcase == 'hkey_current_user'
+						registry = Win32::Registry::HKEY_CURRENT_USER
+					elsif hkey.downcase == 'hkey_local_machine'
+						registry = Win32::Registry::HKEY_LOCAL_MACHINE
+					elsif hkey.downcase == 'hkey_users'
+						registry = Win32::Registry::HKEY_USERS
+					else
+						raise "bad top level key: #{key}"
 					end
-					keys.push(new_key[:data])
-				}
-				type = DL.malloc(DL.sizeof('L'))
-				buffer = DL.malloc(DL.sizeof('C256'))
-				buffer.struct!('C256', :data)
-				size = DL.malloc(DL.sizeof('L'))
-				size.struct!('L', :data)
-				size[:data] = 256
-				result = reg_query_value_ex.call(keys.last, value, 0, type, buffer, size)
-				unless result.first == 0
-					raise "failed to read value '#{value}' from key '#{path[-1]}'"
+					
+					type, value = registry.open(subkey).read(thingie)
+					value
+				rescue				
+					$stderr.puts $!
+					$stderr.puts $!.backtrace[0..1]
+					nil
 				end
-				buffer[:data][0..size[:data]].collect { |char| char.chr }.join('').sub(/\0.*/, '')
-			rescue
-				$stderr.puts $!
-				$stderr.puts $!.backtrace[0..1]
-				nil
-			ensure
-				keys[1..-1].each { |key| close_handle.call(key) rescue() }
+			else
+				path = /^(.*)\\.*?$/.match(key).captures.first.split("\\")
+				value = /^.*\\(.*?)$/.match(key).captures.first
+				begin
+					advapi32 = DL.dlopen('advapi32.dll')
+					reg_open_key_ex = advapi32['RegOpenKeyEx', 'LLSLLP']
+					reg_query_value_ex = advapi32['RegQueryValueEx', 'LLSLPPP']
+					kernel32 = DL.dlopen('kernel32.dll')
+					close_handle = kernel32['CloseHandle', 'LL']
+					keys = Array.new
+					if path[0].downcase == 'hkey_classes_root'
+						keys.push -2147483648
+					elsif path[0].downcase == 'hkey_current_user'
+						keys.push -2147483647
+					elsif path[0].downcase == 'hkey_local_machine'
+						keys.push -2147483646
+					elsif path[0].downcase == 'hkey_users'
+						keys.push -2147483645
+					else
+						raise "bad top level key: #{key}"
+					end
+					path[1..-1].each { |key|
+						new_key = DL.malloc(DL.sizeof('L'))
+						new_key.struct!('L', :data)
+						result = reg_open_key_ex.call(keys[-1], key, 0, 131097, new_key) # 131097 = KEY_READ
+						unless result.first == 0
+							raise "failed to open key: #{key}"
+						end
+						keys.push(new_key[:data])
+					}
+					type = DL.malloc(DL.sizeof('L'))
+					buffer = DL.malloc(DL.sizeof('C256'))
+					buffer.struct!('C256', :data)
+					size = DL.malloc(DL.sizeof('L'))
+					size.struct!('L', :data)
+					size[:data] = 256
+					result = reg_query_value_ex.call(keys.last, value, 0, type, buffer, size)
+					unless result.first == 0
+						raise "failed to read value '#{value}' from key '#{path[-1]}'"
+					end
+					buffer[:data][0..size[:data]].collect { |char| char.chr }.join('').sub(/\0.*/, '')
+				rescue
+					$stderr.puts $!
+					$stderr.puts $!.backtrace[0..1]
+					nil
+				ensure
+					keys[1..-1].each { |key| close_handle.call(key) rescue() }
+				end
 			end
 		else
 			hkey, subkey, thingie = /(HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\\(.+)\\([^\\]*)/.match(key).captures
@@ -8334,48 +8358,73 @@ end
 def registry_put(key, value)
 	if $SAFE == 0
 		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-			path = key.split("\\")
-			path.push('') if key =~ /\\$/
-			value.concat("\0")
-			begin
-				advapi32 = DL.dlopen('advapi32.dll')
-				reg_open_key_ex = advapi32['RegOpenKeyEx', 'LLSLLP']
-				reg_set_value_ex = advapi32['RegSetValueEx', 'LLSLLPL']
-				kernel32 = DL.dlopen('kernel32.dll')
-				close_handle = kernel32['CloseHandle', 'LL']
-				keys = Array.new
-				if path[0].downcase == 'hkey_classes_root'
-					keys.push -2147483648
-				elsif path[0].downcase == 'hkey_current_user'
-					keys.push -2147483647
-				elsif path[0].downcase == 'hkey_local_machine'
-					keys.push -2147483646
-				elsif path[0].downcase == 'hkey_users'
-					keys.push -2147483645
-				else
-					raise "bad top level key: #{key}"
-				end
-				path[1..-2].each_with_index { |key,index|
-					new_key = DL.malloc(DL.sizeof('L'))
-					new_key.struct!('L', :data)
-					result = reg_open_key_ex.call(keys[-1], key, 0, 983103, new_key) # 983103 = KEY_ALL_ACCESS
-					unless result.first == 0
-						raise "failed to open key: #{key} (#{result.first})"
+			if RUBY_VERSION =~ /^2\.\d+\.\d+$/
+				hkey, subkey, thingie = /(HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\\(.+)\\([^\\]*)/.match(key).captures
+				begin
+					if hkey.downcase == 'hkey_classes_root'
+						registry = Win32::Registry::HKEY_CLASSES_ROOT
+					elsif hkey.downcase == 'hkey_current_user'
+						registry = Win32::Registry::HKEY_CURRENT_USER
+					elsif hkey.downcase == 'hkey_local_machine'
+						registry = Win32::Registry::HKEY_LOCAL_MACHINE
+					elsif hkey.downcase == 'hkey_users'
+						registry = Win32::Registry::HKEY_USERS
+					else
+						raise "bad top level key: #{key}"
 					end
-					keys.push(new_key[:data])
-				}
-				result = reg_set_value_ex.call(keys.last, path[-1], 0, 1, value, DL.sizeof("C#{value.length+1}")) # 1 = REG_SZ
-				if result.first == 0
-					true
-				else
-					raise "failed to write to key '#{path[-1]}' (#{result.first})"
+					
+					reg = registry.open(subkey, Win32::Registry::KEY_WRITE)
+					reg.write_s(thingie, value)
+					return true
+				rescue			
+					$stderr.puts $!
+					$stderr.puts $!.backtrace[0..1]
+					false
 				end
-			rescue
-				$stderr.puts $!
-				$stderr.puts $!.backtrace[0..1]
-				false
-			ensure
-				keys[1..-1].each { |key| close_handle.call(key) rescue() }
+			else
+				path = key.split("\\")
+				path.push('') if key =~ /\\$/
+				value.concat("\0")
+				begin
+					advapi32 = DL.dlopen('advapi32.dll')
+					reg_open_key_ex = advapi32['RegOpenKeyEx', 'LLSLLP']
+					reg_set_value_ex = advapi32['RegSetValueEx', 'LLSLLPL']
+					kernel32 = DL.dlopen('kernel32.dll')
+					close_handle = kernel32['CloseHandle', 'LL']
+					keys = Array.new
+					if path[0].downcase == 'hkey_classes_root'
+						keys.push -2147483648
+					elsif path[0].downcase == 'hkey_current_user'
+						keys.push -2147483647
+					elsif path[0].downcase == 'hkey_local_machine'
+						keys.push -2147483646
+					elsif path[0].downcase == 'hkey_users'
+						keys.push -2147483645
+					else
+						raise "bad top level key: #{key}"
+					end
+					path[1..-2].each_with_index { |key,index|
+						new_key = DL.malloc(DL.sizeof('L'))
+						new_key.struct!('L', :data)
+						result = reg_open_key_ex.call(keys[-1], key, 0, 983103, new_key) # 983103 = KEY_ALL_ACCESS
+						unless result.first == 0
+							raise "failed to open key: #{key} (#{result.first})"
+						end
+						keys.push(new_key[:data])
+					}
+					result = reg_set_value_ex.call(keys.last, path[-1], 0, 1, value, DL.sizeof("C#{value.length+1}")) # 1 = REG_SZ
+					if result.first == 0
+						true
+					else
+						raise "failed to write to key '#{path[-1]}' (#{result.first})"
+					end
+				rescue
+					$stderr.puts $!
+					$stderr.puts $!.backtrace[0..1]
+					false
+				ensure
+					keys[1..-1].each { |key| close_handle.call(key) rescue() }
+				end
 			end
 		else
 			hkey, subkey, thingie = /(HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\\(.+)\\([^\\]*)/.match(key).captures
