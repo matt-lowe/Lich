@@ -49,7 +49,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.14'
+$version = '4.4.15'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -9900,7 +9900,7 @@ main_thread = Thread.new {
 		if File.exists?("#{$data_dir}entry.dat")
 			entry_data = File.open("#{$data_dir}entry.dat", 'r') { |file|
 				begin
-					Marshal.load(file.read.unpack('m').first).sort { |a,b| a[:char_name] <=> b[:char_name] }
+					Marshal.load(file.read.unpack('m').first).sort { |a,b| [a[:user_id].downcase, a[:char_name]] <=> [b[:user_id].downcase, b[:char_name]] }
 				rescue
 					Array.new
 				end
@@ -9932,9 +9932,15 @@ main_thread = Thread.new {
 				quick_game_entry_tab.border_width = 5
 				quick_game_entry_tab.pack_start(box, true, true, 0)
 			else
-				quick_box = Gtk::VBox.new
+				quick_box    = Gtk::VBox.new
+                last_user_id = nil
 				entry_data.each { |login_info|
-					label = Gtk::Label.new("#{login_info[:char_name]} (#{login_info[:game_name]})")
+                    if login_info[:user_id].downcase != last_user_id
+                        last_user_id = login_info[:user_id].downcase
+                        quick_box.pack_start(Gtk::Label.new("Account: " + last_user_id), false, false, 6)
+                    end
+                    
+					label = Gtk::Label.new("#{login_info[:char_name]} (#{login_info[:game_name]}, #{login_info[:frontend]})")
 					play_button = Gtk::Button.new('Play')
 					remove_button = Gtk::Button.new('X')
 					char_box = Gtk::HBox.new
