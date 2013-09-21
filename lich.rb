@@ -49,7 +49,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.16'
+$version = '4.4.17'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -1313,10 +1313,7 @@ class LichSettings
 	def LichSettings.load
 		if File.exists?("#{$data_dir}lich.sav")
 			begin
-				File.open("#{$data_dir}lich.sav", 'rb') { |f|
-					f.flock(File::LOCK_EX)
-					@@settings = Marshal.load(f.read)['lichsettings']
-				}
+				File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read)['lichsettings'] }
 			rescue
 				respond "--- error: LichSettings.load: #{$!}"
 				$stderr.puts "error: LichSettings.load: #{$!}"
@@ -1329,10 +1326,10 @@ class LichSettings
 		begin
 			all_settings = Hash.new
 			if File.exists?("#{$data_dir}lich.sav")
-				File.open("#{$data_dir}lich.sav", 'rb') { |f| f.flock(File::LOCK_EX); all_settings = Marshal.load(f.read) }
+				File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); all_settings = Marshal.load(f.read) }
 			end
 			all_settings['lichsettings'] = @@settings
-			File.open("#{$data_dir}lich.sav", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(all_settings)) }
+			File.open("#{$data_dir}lich.sav", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(all_settings)) }
 			true
 		rescue
 			false
@@ -1385,7 +1382,7 @@ class Settings
 					filename = "#{$data_dir}#{script.name}.sav"
 					if File.exists?(filename) and (@@timestamps[script.name].nil? or (@@timestamps[script.name] < File.mtime(filename)))
 						begin
-							File.open(filename, 'rb') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
+							File.open(filename, 'r') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
 							@@timestamps[script] = File.mtime(filename)
 							@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						rescue
@@ -1395,7 +1392,7 @@ class Settings
 							begin
 								filename.concat '~'
 								if File.exists?(filename)
-									File.open(filename, 'rb') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
+									File.open(filename, 'r') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
 									@@timestamps[script] = File.mtime(filename)
 									@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 								end
@@ -1432,7 +1429,7 @@ class Settings
 								if File.exists?(filename)
 									File.rename(filename, "#{filename}~")
 								end
-								File.open(filename, 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings[script.name])) }
+								File.open(filename, File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings[script.name])) }
 								@@timestamps[script.name] = File.mtime(filename)
 								@@md5[script.name] = md5
 							rescue
@@ -1463,7 +1460,7 @@ class Settings
 							if File.exists?(filename)
 								File.rename(filename, "#{filename}~")
 							end
-							File.open(filename, 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings[script_name])) }
+							File.open(filename, File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings[script_name])) }
 							@@timestamps[script_name] = File.mtime(filename)
 							@@md5[script_name] = md5
 						rescue
@@ -1542,7 +1539,7 @@ class GameSettings
 					filename = "#{$data_dir}#{XMLData.game}/#{script.name}.sav"
 					if File.exists?(filename) and (@@timestamps[script.name].nil? or (@@timestamps[script.name] < File.mtime(filename)))
 						begin
-							File.open(filename, 'rb') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
+							File.open(filename, 'r') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
 							@@timestamps[script] = File.mtime(filename)
 							@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						rescue
@@ -1552,7 +1549,7 @@ class GameSettings
 							begin
 								filename.concat '~'
 								if File.exists?(filename)
-									File.open(filename, 'rb') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
+									File.open(filename, 'r') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
 									@@timestamps[script] = File.mtime(filename)
 									@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 								end
@@ -1589,7 +1586,7 @@ class GameSettings
 								if File.exists?(filename)
 									File.rename(filename, "#{filename}~")
 								end
-								File.open(filename, 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings[script.name])) }
+								File.open(filename, File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings[script.name])) }
 								@@timestamps[script.name] = File.mtime(filename)
 								@@md5[script.name] = md5
 							rescue
@@ -1620,7 +1617,7 @@ class GameSettings
 							if File.exists?(filename)
 								File.rename(filename, "#{filename}~")
 							end
-							File.open(filename, 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings[script_name])) }
+							File.open(filename, File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings[script_name])) }
 							@@timestamps[script_name] = File.mtime(filename)
 							@@md5[script_name] = md5
 						rescue
@@ -1690,7 +1687,7 @@ class CharSettings
 					filename = "#{$data_dir}#{XMLData.game}/#{XMLData.name}/#{script.name}.sav"
 					if File.exists?(filename) and (@@timestamps[script.name].nil? or (@@timestamps[script.name] < File.mtime(filename)))
 						begin
-							File.open(filename, 'rb') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
+							File.open(filename, 'r') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
 							@@timestamps[script] = File.mtime(filename)
 							@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 						rescue
@@ -1700,7 +1697,7 @@ class CharSettings
 							begin
 								filename.concat '~'
 								if File.exists?(filename)
-									File.open(filename, 'rb') { |f| f.flock(File::LOCK_EX); @@settings[script.name] = Marshal.load(f.read) }
+									File.open(filename, File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); @@settings[script.name] = Marshal.load(f.read) }
 									@@timestamps[script] = File.mtime(filename)
 									@@md5[script.name] = Digest::MD5.hexdigest(@@settings[script.name].inspect)
 								end
@@ -1737,7 +1734,7 @@ class CharSettings
 								if File.exists?(filename)
 									File.rename(filename, "#{filename}~")
 								end
-								File.open(filename, 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings[script.name])) }
+								File.open(filename, File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings[script.name])) }
 								@@timestamps[script.name] = File.mtime(filename)
 								@@md5[script.name] = md5
 							rescue
@@ -1768,7 +1765,7 @@ class CharSettings
 							if File.exists?(filename)
 								File.rename(filename, "#{filename}~")
 							end
-							File.open(filename, 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings[script_name])) }
+							File.open(filename, File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings[script_name])) }
 							@@timestamps[script_name] = File.mtime(filename)
 							@@md5[script_name] = md5
 						rescue
@@ -1837,10 +1834,7 @@ class Favorites
 	def Favorites.load
 		if File.exists?("#{$data_dir}lich.sav")
 			begin
-				File.open("#{$data_dir}lich.sav", 'rb') { |f|
-					f.flock(File::LOCK_EX)
-					@@settings = Marshal.load(f.read)['favorites']
-				}
+				File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read)['favorites'] }
 			rescue
 				respond "--- error: Favorites.load: #{$!}"
 				$stderr.puts "error: Favorites.load: #{$!}"
@@ -1848,10 +1842,7 @@ class Favorites
 			end
 		end
 		if File.exists?("#{$data_dir}favs.sav")
-			File.open("#{$data_dir}favs.sav", 'rb') { |f|
-				f.flock(File::LOCK_EX)
-				@@settings = Marshal.load(f.read)
-			}
+			File.open("#{$data_dir}favs.sav", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
 			@@settings['global'].delete('alias')
 			@@settings['global'].delete('setting')
 			File.rename("#{$data_dir}favs.sav", "#{$temp_dir}favs.sav")
@@ -1864,10 +1855,10 @@ class Favorites
 	def Favorites.save
 		all_settings = Hash.new
 		if File.exists?("#{$data_dir}lich.sav")
-			File.open("#{$data_dir}lich.sav", 'rb') { |f| f.flock(File::LOCK_EX); all_settings = Marshal.load(f.read) }
+			File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); all_settings = Marshal.load(f.read) }
 		end
 		all_settings['favorites'] = @@settings
-		File.open("#{$data_dir}lich.sav", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(all_settings)) }
+		File.open("#{$data_dir}lich.sav", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(all_settings)) }
 	end
 	def Favorites.list
 		@@settings.dup
@@ -1919,10 +1910,7 @@ class Alias
 	def Alias.init
 		if File.exists?("#{$data_dir}lich.sav")
 			begin
-				File.open("#{$data_dir}lich.sav", 'rb') { |f|
-					f.flock(File::LOCK_EX)
-					@@settings = Marshal.load(f.read)['alias']
-				}
+				File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read)['alias'] }
 			rescue
 				respond "--- error: Alias.init: #{$!}"
 				$stderr.puts "error: Alias.init: #{$!}"
@@ -1930,10 +1918,7 @@ class Alias
 			end
 		end
 		if File.exists?("#{$data_dir}alias.sav")
-			File.open("#{$data_dir}alias.sav", 'rb') { |f|
-				f.flock(File::LOCK_EX)
-				@@settings = Marshal.load(f.read)
-			}
+			File.open("#{$data_dir}alias.sav", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
 			File.rename("#{$data_dir}alias.sav", "#{$temp_dir}alias.sav")
 			Alias.save
 		end
@@ -1946,10 +1931,10 @@ class Alias
 	def Alias.save
 		all_settings = Hash.new
 		if File.exists?("#{$data_dir}lich.sav")
-			File.open("#{$data_dir}lich.sav", 'rb') { |f| f.flock(File::LOCK_EX); all_settings = Marshal.load(f.read) }
+			File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); all_settings = Marshal.load(f.read) }
 		end
 		all_settings['alias'] = @@settings
-		File.open("#{$data_dir}lich.sav", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(all_settings)) }
+		File.open("#{$data_dir}lich.sav", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(all_settings)) }
 		true
 	end
 	def Alias.add(trigger, target, type = :char)
@@ -2045,10 +2030,7 @@ class UserVariables
 	def UserVariables.init
 		if File.exists?("#{$data_dir}uservars.dat")
 			begin
-				File.open("#{$data_dir}uservars.dat", 'rb') { |f|
-					f.flock(File::LOCK_EX)
-					@@settings = Marshal.load(f.read)
-				}
+				File.open("#{$data_dir}uservars.dat", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
 				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 			rescue
 				respond "--- error: UserVariables.init: #{$!}"
@@ -2057,11 +2039,8 @@ class UserVariables
 			end
 		elsif File.exists?("#{$data_dir}lich.sav")
 			begin
-				File.open("#{$data_dir}lich.sav", 'rb') { |f|
-					f.flock(File::LOCK_EX)
-					@@settings = Marshal.load(f.read)['uservariables']['global'] || Hash.new
-				}
-				File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings)) }
+				File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read)['uservariables']['global'] || Hash.new }
+				File.open("#{$data_dir}uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings)) }
 				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 			rescue
 				respond "--- error: UserVariables.init: #{$!}"
@@ -2071,10 +2050,7 @@ class UserVariables
 		end
 		if File.exists?("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat")
 			begin
-				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'rb') { |f|
-					f.flock(File::LOCK_EX)
-					@@char_settings = Marshal.load(f.read)
-				}
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'r') { |f| f.flock(File::LOCK_EX); @@char_settings = Marshal.load(f.read) }
 			rescue
 				respond "--- error: UserVariables.init: #{$!}"
 				$stderr.puts "error: UserVariables.init: #{$!}"
@@ -2082,10 +2058,7 @@ class UserVariables
 			end
 		elsif File.exists?("#{$data_dir}lich.sav")
 			begin
-				File.open("#{$data_dir}lich.sav", 'rb') { |f|
-					f.flock(File::LOCK_EX)
-					@@char_settings = Marshal.load(f.read)['uservariables'][XMLData.name] || Hash.new
-				}
+				File.open("#{$data_dir}lich.sav", 'r') { |f| f.flock(File::LOCK_EX); @@char_settings = Marshal.load(f.read)['uservariables'][XMLData.name] || Hash.new }
 			rescue
 				respond "--- error: UserVariables.init: #{$!}"
 				$stderr.puts "error: UserVariables.init: #{$!}"
@@ -2095,9 +2068,9 @@ class UserVariables
 	end
 	def UserVariables.save
 		if $SAFE == 0
-			File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings)) }
+			File.open("#{$data_dir}uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings)) }
 			@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
-			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@char_settings)) }
+			File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@char_settings)) }
 		else
 			UNTRUSTED_USERVARIABLES_SAVE.call
 		end
@@ -2106,14 +2079,14 @@ class UserVariables
 		if $SAFE == 0
 			if type == :char
 				@@char_settings[var_name] = value
-				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@char_settings)) }
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@char_settings)) }
 				true
 				elsif type == :global
 				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-					File.open("#{$data_dir}uservars.dat", 'rb') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
+					File.open("#{$data_dir}uservars.dat", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
 				end
 				@@settings[var_name] = value
-				File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings)) }
+				File.open("#{$data_dir}uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings)) }
 				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 				true
 			else
@@ -2128,14 +2101,14 @@ class UserVariables
 		if $SAFE == 0
 			if type == :char
 				@@char_settings[var_name] = @@char_settings[var_name].split(', ').push(value.strip).join(', ')
-				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@char_settings)) }
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@char_settings)) }
 				true
 			elsif type == :global
 				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-					File.open("#{$data_dir}uservars.dat", 'rb') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
+					File.open("#{$data_dir}uservars.dat", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
 				end
 				@@settings[var_name] = @@settings[var_name].split(', ').push(value.strip).join(', ')
-				File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings)) }
+				File.open("#{$data_dir}uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings)) }
 				@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 				true
 			else
@@ -2150,18 +2123,18 @@ class UserVariables
 		if $SAFE == 0
 			if type == :char
 				if @@char_settings.delete(var_name)
-					File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@char_settings)) }
+					File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@char_settings)) }
 					true
 				else
 					false
 				end
 			elsif type == :global
 				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-					File.open("#{$data_dir}uservars.dat", 'rb') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
+					File.open("#{$data_dir}uservars.dat", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
 					@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 				end
 				if @@settings.delete(var_name)
-					File.open("#{$data_dir}uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@settings)) }
+					File.open("#{$data_dir}uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@settings)) }
 					@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 					true
 				else
@@ -2184,12 +2157,12 @@ class UserVariables
 		if $SAFE == 0
 			if arg1.to_s.split('')[-1] == '='
 				@@char_settings[arg1.to_s.chop] = arg2
-				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", 'wb') { |f| f.flock(File::LOCK_EX); f.write(Marshal.dump(@@char_settings)) }
+				File.open("#{$data_dir}#{XMLData.game}/#{XMLData.name}/uservars.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump(@@char_settings)) }
 			elsif @@char_settings[arg1.to_s]
 				@@char_settings[arg1.to_s]
 			else
 				if @@settings_mtime < File.mtime("#{$data_dir}uservars.dat")
-					File.open("#{$data_dir}uservars.dat", 'rb') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
+					File.open("#{$data_dir}uservars.dat", 'r') { |f| f.flock(File::LOCK_EX); @@settings = Marshal.load(f.read) }
 					@@settings_mtime = File.mtime("#{$data_dir}uservars.dat")
 				end
 				@@settings[arg1.to_s]
@@ -3386,10 +3359,7 @@ class SpellRanks
 		if $SAFE == 0
 			if File.exists?("#{$data_dir}#{XMLData.game}/spell-ranks.dat")
 				begin
-					File.open("#{$data_dir}#{XMLData.game}/spell-ranks.dat", 'rb') { |f|
-						f.flock(File::LOCK_EX)
-						@@timestamp, @@list = Marshal.load(f.read)
-					}
+					File.open("#{$data_dir}#{XMLData.game}/spell-ranks.dat", 'r') { |f| f.flock(File::LOCK_EX); @@timestamp, @@list = Marshal.load(f.read) }
 					# minor mental circle added 2012-07-18; old data files will have @minormental as nil
 					@@list.each { |rank_info| rank_info.minormental ||= 0 }
 					# monk circle added 2013-01-15; old data files will have @minormental as nil
@@ -3413,10 +3383,7 @@ class SpellRanks
 	def SpellRanks.save
 		if $SAFE == 0
 			begin
-				File.open("#{$data_dir}#{XMLData.game}/spell-ranks.dat", 'wb') { |f|
-					f.flock(File::LOCK_EX)
-					f.write(Marshal.dump([@@timestamp, @@list]))
-				}
+				File.open("#{$data_dir}#{XMLData.game}/spell-ranks.dat", File::RDWR|FILE::CREAT) { |f| f.flock(File::LOCK_EX); f.truncate(0); f.write(Marshal.dump([@@timestamp, @@list])) }
 			rescue
 				respond "--- error: SpellRanks.save: #{$!}"
 				$stderr.puts "error: SpellRanks.save: #{$!}"
@@ -8514,10 +8481,11 @@ def hack_hosts(hosts_dir, game_host)
 	begin
 		begin
 			unless File.exists?("#{hosts_dir}hosts.bak")
-				File.open("#{hosts_dir}hosts") { |infile|
+				File.open("#{hosts_dir}hosts", 'r') { |infile|
 					infile.flock(File::LOCK_EX)
-					File.open("#{$temp_dir}hosts.sav", 'w') { |outfile|
+					File.open("#{$temp_dir}hosts.sav", File::RDWR|FILE::CREAT) { |outfile|
 						outfile.flock(File::LOCK_EX)
+						f.truncate(0)
 						outfile.write(infile.read)
 					}
 				}
@@ -8531,16 +8499,18 @@ def hack_hosts(hosts_dir, game_host)
 				heal_hosts(hosts_dir)
 			end
 		end
-		File.open("#{hosts_dir}hosts") { |file|
+		File.open("#{hosts_dir}hosts", 'r') { |file|
 			file.flock(File::LOCK_EX)
-			File.open("#{hosts_dir}hosts.bak", 'w') { |f|
+			File.open("#{hosts_dir}hosts.bak", File::RDWR|FILE::CREAT) { |f|
 				f.flock(File::LOCK_EX)
+				f.truncate(0)
 				f.write(file.read)
 			}
 		}
-		File.open("#{hosts_dir}hosts", 'w') { |file|
-			file.flock(File::LOCK_EX)
-			file.puts "127.0.0.1\t\tlocalhost\r\n127.0.0.1\t\t#{game_host}"
+		File.open("#{hosts_dir}hosts", File::RDWR|FILE::CREAT) { |f|
+			f.flock(File::LOCK_EX)
+			f.truncate(0)
+			f.puts "127.0.0.1\t\tlocalhost\r\n127.0.0.1\t\t#{game_host}"
 		}
 	rescue SystemCallError
 		$stdout.puts "--- error: hack_hosts: #{$!}"
@@ -8554,10 +8524,11 @@ def heal_hosts(hosts_dir)
 	hosts_dir += File::Separator unless hosts_dir[-1..-1] =~ /\/\\/
 	begin
 		if File.exists? "#{hosts_dir}hosts.bak"
-			File.open("#{hosts_dir}hosts.bak") { |infile|
+			File.open("#{hosts_dir}hosts.bak", 'r') { |infile|
 				infile.flock(File::LOCK_EX)
-				File.open("#{hosts_dir}hosts", 'w') { |outfile|
+				File.open("#{hosts_dir}hosts", File::RDWR|FILE::CREAT) { |outfile|
 					outfile.flock(File::LOCK_EX)
+					outfile.truncate(0)
 					outfile.write(infile.read)
 				}
 			}
@@ -10748,9 +10719,10 @@ main_thread = Thread.new {
 		wait_until { done }
 
 		if save_entry_data
-			File.open("#{$data_dir}entry.dat", 'w') { |file|
-				file.flock(File::LOCK_EX)
-				file.write([Marshal.dump(entry_data)].pack('m'))
+			File.open("#{$data_dir}entry.dat", File::RDWR|FILE::CREAT) { |f|
+				f.flock(File::LOCK_EX)
+				f.truncate(0)
+				f.write([Marshal.dump(entry_data)].pack('m'))
 			}
 		end
 		entry_data = nil
