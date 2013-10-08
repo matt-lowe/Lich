@@ -8250,7 +8250,7 @@ end
 def registry_get(key)
 	if $SAFE == 0
 		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-			if RUBY_VERSION =~ /^2\.\d+\.\d+$/
+			if RUBY_VERSION !~ /^1\.8\d*\.\d+$/
 				hkey, subkey, thingie = /(HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\\(.+)\\([^\\]*)/.match(key).captures
 				begin				
 					if hkey.downcase == 'hkey_classes_root'
@@ -8369,7 +8369,7 @@ end
 def registry_put(key, value)
 	if $SAFE == 0
 		if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
-			if RUBY_VERSION =~ /^2\.\d+\.\d+$/
+			if RUBY_VERSION !~ /^1\.8\d*\.\d+$/
 				hkey, subkey, thingie = /(HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER)\\(.+)\\([^\\]*)/.match(key).captures
 				begin
 					if hkey.downcase == 'hkey_classes_root'
