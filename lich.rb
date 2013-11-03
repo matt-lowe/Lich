@@ -10883,7 +10883,7 @@ main_thread = Thread.new {
 				$frontend = 'unknown'
 			end
 			begin
-				listener = TCPServer.new('127.0.0.1', 8000)
+				listener = TCPServer.new('127.0.0.1', nil)
 			rescue
 				$stdout.puts "--- error: cannot bind listen socket to local port: #{$!}"
 				$stderr.puts "error: cannot bind listen socket to local port: #{$!}"
