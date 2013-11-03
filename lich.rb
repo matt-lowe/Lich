@@ -49,7 +49,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.20'
+$version = '4.4.21'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -2844,6 +2844,7 @@ class Char
 			rescue
 			end
 		}
+        respond 'missing method: ' + meth
 		raise NoMethodError
 	end
 	def Char.info
@@ -4121,6 +4122,7 @@ class Spell
 				end
 			end
 		else
+            respond 'missing method: ' + args.inspect.to_s
 			raise NoMethodError
 		end
 	end
@@ -4156,63 +4158,64 @@ class Spell
 end
 
 class CMan
-	@@bearhug            ||= 0
-	@@berserk            ||= 0
-	@@block_mastery      ||= 0
-	@@bull_rush          ||= 0
-	@@charge             ||= 0
-	@@cheapshots         ||= 0
-	@@combat_focus       ||= 0
-	@@combat_mastery     ||= 0
-	@@combat_mobility    ||= 0
-	@@combat_movement    ||= 0
-	@@combat_toughness   ||= 0
-	@@coup_de_grace      ||= 0
-	@@crowd_press        ||= 0
-	@@cunning_defense    ||= 0
-	@@cutthroat          ||= 0
-	@@dirtkick           ||= 0
-	@@disarm_weapon      ||= 0
-	@@divert             ||= 0
-	@@dust_shroud        ||= 0
-	@@evade_mastery      ||= 0
-	@@feint              ||= 0
-	@@garrote            ||= 0
-	@@groin_kick         ||= 0
-	@@hamstring          ||= 0
-	@@haymaker           ||= 0
-	@@headbutt           ||= 0
-	@@mighty_blow        ||= 0
-	@@multi_fire         ||= 0
-	@@parry_mastery      ||= 0
-	@@precision          ||= 0
-	@@quickstrike        ||= 0
-	@@shadow_mastery     ||= 0
-	@@shield_bash        ||= 0
-	@@shield_charge      ||= 0
-	@@side_by_side       ||= 0
-	@@silent_strike      ||= 0
-	@@specialization_i   ||= 0
-	@@specialization_ii  ||= 0
-	@@specialization_iii ||= 0
-	@@spin_attack        ||= 0
-	@@staggering_blow    ||= 0
-	@@stun_maneuvers     ||= 0
-	@@subdual_strike     ||= 0
-	@@subdue             ||= 0
-	@@sucker_punch       ||= 0
-	@@sunder_shield      ||= 0
-	@@surge_of_strength  ||= 0
-	@@sweep              ||= 0
-	@@tackle             ||= 0
-	@@trip               ||= 0
-	@@truehand           ||= 0
-	@@twin_hammerfists   ||= 0
-	@@weapon_bonding     ||= 0
-	@@vanish             ||= 0
-	@@duck_and_weave     ||= 0
-	@@slipery_mind       ||= 0
-	@@predators_eye      ||= 0
+	@@bearhug                ||= 0
+	@@berserk                ||= 0
+	@@block_mastery          ||= 0
+	@@bull_rush              ||= 0
+	@@charge                 ||= 0
+	@@cheapshots             ||= 0
+	@@combat_focus           ||= 0
+	@@combat_mastery         ||= 0
+	@@combat_mobility        ||= 0
+	@@combat_movement        ||= 0
+	@@combat_toughness       ||= 0
+	@@coup_de_grace          ||= 0
+	@@crowd_press            ||= 0
+	@@cunning_defense        ||= 0
+	@@cutthroat              ||= 0
+	@@dirtkick               ||= 0
+	@@disarm_weapon          ||= 0
+	@@divert                 ||= 0
+	@@dust_shroud            ||= 0
+	@@evade_mastery          ||= 0
+	@@feint                  ||= 0
+	@@garrote                ||= 0
+	@@groin_kick             ||= 0
+	@@hamstring              ||= 0
+	@@haymaker               ||= 0
+	@@headbutt               ||= 0
+	@@mighty_blow            ||= 0
+	@@multi_fire             ||= 0
+	@@parry_mastery          ||= 0
+	@@precision              ||= 0
+	@@quickstrike            ||= 0
+	@@shadow_mastery         ||= 0
+	@@shield_bash            ||= 0
+	@@shield_charge          ||= 0
+	@@side_by_side           ||= 0
+	@@silent_strike          ||= 0
+	@@specialization_i       ||= 0
+	@@specialization_ii      ||= 0
+	@@specialization_iii     ||= 0
+	@@spin_attack            ||= 0
+	@@staggering_blow        ||= 0
+	@@stun_maneuvers         ||= 0
+	@@subdual_strike         ||= 0
+	@@subdue                 ||= 0
+	@@sucker_punch           ||= 0
+	@@sunder_shield          ||= 0
+	@@surge_of_strength      ||= 0
+	@@sweep                  ||= 0
+	@@tackle                 ||= 0
+	@@trip                   ||= 0
+	@@truehand               ||= 0
+	@@twin_hammerfists       ||= 0
+	@@weapon_bonding         ||= 0
+	@@vanish                 ||= 0
+	@@duck_and_weave         ||= 0
+	@@slipery_mind           ||= 0
+	@@predators_eye          ||= 0
+    @@burst_of_swiftness     ||= 0
 	@@rolling_krynch_stance  ||= 0
 	@@stance_of_the_mongoose ||= 0
 	@@slippery_mind          ||= 0
@@ -4223,6 +4226,7 @@ class CMan
 	def CMan.berserk;            @@berserk;            end
 	def CMan.block_mastery;      @@block_mastery;      end
 	def CMan.bull_rush;          @@bull_rush;          end
+    def CMan.burst_of_swiftness; @@burst_of_swiftness; end
 	def CMan.charge;             @@charge;             end
 	def CMan.cheapshots;         @@cheapshots;         end
 	def CMan.combat_focus;       @@combat_focus;       end
@@ -4281,6 +4285,7 @@ class CMan
 	def CMan.berserk=(val);            @@berserk=val;            end
 	def CMan.block_mastery=(val);      @@block_mastery=val;      end
 	def CMan.bull_rush=(val);          @@bull_rush=val;          end
+    def CMan.burst_of_swiftness=(val); @@burst_of_swiftness=val; end
 	def CMan.charge=(val);             @@charge=val;             end
 	def CMan.cheapshots=(val);         @@cheapshots=val;         end
 	def CMan.combat_focus=(val);       @@combat_focus=val;       end
@@ -10878,7 +10883,7 @@ main_thread = Thread.new {
 				$frontend = 'unknown'
 			end
 			begin
-				listener = TCPServer.new('127.0.0.1', nil)
+				listener = TCPServer.new('127.0.0.1', 8000)
 			rescue
 				$stdout.puts "--- error: cannot bind listen socket to local port: #{$!}"
 				$stderr.puts "error: cannot bind listen socket to local port: #{$!}"
