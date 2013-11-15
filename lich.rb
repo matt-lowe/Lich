@@ -49,7 +49,7 @@ rescue
 	STDOUT = $stderr rescue()
 end
 
-$version = '4.4.21'
+$version = '4.4.22'
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
 	puts 'Usage:  lich [OPTION]'
@@ -507,6 +507,26 @@ class NilClass
 	end
 	def closed?
 		true
+	end
+end
+
+class SynchronizedSocket
+	def initialize(o)
+		@delegate = o
+		@mutex = ::Mutex.new
+	end
+	def puts(*args, &block)
+		@mutex.synchronize {
+			@delegate.puts *args, &block
+		}
+	end
+	def write(*args)
+		@mutex.synchronize {
+			@delegate.write *args, &block
+		}
+	end
+	def method_missing(method, *args, &block)
+		@delegate.__send__ method, *args, &block
 	end
 end
 
@@ -11490,12 +11510,11 @@ main_thread = Thread.new {
 	end
 
 	if detachable_client_port
-		# fixme: script output is sometimes inserted in inappropriate places: <style id="roomName"/>[teh room]\n<stream id='thoughts'>teh thought\n</stream>\n<style id=""/>
 		detachable_client_thread = Thread.new {
 			loop {
 				begin
-					server = TCPServer.new('0.0.0.0', detachable_client_port)
-					$_DETACHABLE_CLIENT_ = server.accept
+					server = TCPServer.new('127.0.0.1', detachable_client_port)
+					$_DETACHABLE_CLIENT_ = SynchronizedSocket.new(server.accept)
 					$_DETACHABLE_CLIENT_.sync = true
 				rescue
 					$stderr.puts $!
