@@ -5824,8 +5824,17 @@ class GameObj
 	def GameObj.containers
 		@@contents.dup
 	end
-	def GameObj.load_data(filename="#{$script_dir}gameobj-data.xml")
+	def GameObj.load_data(filename=nil)
 		if $SAFE == 0
+			if filename.nil?
+				if File.exists?("#{$data_dir}gameobj-data.xml")
+					filename = "#{$data_dir}gameobj-data.xml"
+				elsif File.exists?("#{$script_dir}gameobj-data.xml") # depreciated
+					filename = "#{$script_dir}gameobj-data.xml"
+				else
+					filename = "#{$data_dir}gameobj-data.xml"
+				end
+			end
 			if File.exists?(filename)
 				begin
 					@@type_data = Hash.new
