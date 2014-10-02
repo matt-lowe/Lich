@@ -9,9 +9,11 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.10
+	     version: 2.11
 
 	Changelog:
+		2.11 (2014-10-02):
+			look in data directory when uploading xml files
 		2.10 (2014-10-01):
 			fix download-updates not checking update times correctly
 		2.9 (2014-10-01):
@@ -1015,6 +1017,9 @@ elsif (cmd[0] =~ /^upload$/i) and cmd[1]
 	elsif File.exists?("#{$script_dir}#{cmd[1]}.lic")
 		file = "#{cmd[1]}.lic"
 		filename = "#{$script_dir}#{cmd[1]}.lic"
+	elsif (cmd[1] =~ /\.xml$/i) and File.exists?("#{$data_dir}#{cmd[1]}")
+		file = "#{cmd[1]}"
+		filename = "#{$data_dir}#{cmd[1]}"
 	else
 		echo "error: could not find #{cmd[1]}"
 		exit
