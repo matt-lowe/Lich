@@ -11537,7 +11537,10 @@ main_thread = Thread.new {
 						init_str.concat "<progressBar id='encumlevel' value='#{XMLData.encumbrance_value}' text='#{XMLData.encumbrance_text}'/>"
 						init_str.concat "<progressBar id='pbarStance' value='#{XMLData.stance_value}'/>"
 						init_str.concat "<progressBar id='mindState' value='#{XMLData.mind_value}' text='#{XMLData.mind_text}'/>"
-						for indicator in [ 'IconBLEEDING', 'IconPOISONED', 'IconDISEASED' ]
+						init_str.concat "<spell>#{XMLData.prepared_spell}</spell>"
+						init_str.concat "<right>#{GameObj.right_hand.name}</right>"
+						init_str.concat "<left>#{GameObj.left_hand.name}</left>"
+						for indicator in [ 'IconBLEEDING', 'IconPOISONED', 'IconDISEASED', 'IconSTANDING', 'IconKNEELING', 'IconSITTING', 'IconPRONE' ]
 							init_str.concat "<indicator id='#{indicator}' visible='#{XMLData.indicator[indicator]}'/>"
 						end
 						for area in [ 'back', 'leftHand', 'rightHand', 'head', 'rightArm', 'abdomen', 'leftEye', 'leftArm', 'chest', 'rightLeg', 'neck', 'leftLeg', 'nsys', 'rightEye' ]
