@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.5'
+LICH_VERSION = '4.6.5a'
 $version = LICH_VERSION # depreciated
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
@@ -677,16 +677,16 @@ module Lich
 			if args[:buttons] == :ok_cancel
 				buttons = Win32::MB_OKCANCEL
 			elsif args[:buttons] == :yes_no
-				buttons = Win32::YESNO
+				buttons = Win32::MB_YESNO
 			else
 				buttons = Win32::MB_OK
 			end
 			if args[:icon] == :error
-				icon = MB_ICONERROR
+				icon = Win32::MB_ICONERROR
 			elsif args[:icon] == :question
-				icon = MB_ICONQUESTION
+				icon = Win32::MB_ICONQUESTION
 			elsif args[:icon] == :warning
-				icon = MB_ICONWARNING
+				icon = Win32::MB_ICONWARNING
 			else
 				icon = 0
 			end
@@ -10910,37 +10910,62 @@ main_thread = Thread.new {
 				launcher_cmd = launcher_cmd.sub('%1', sal_filename)
 				launcher_cmd = launcher_cmd.tr('/', "\\") if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 			end
-			Thread.new {
-				begin
-					if custom_launch_dir
-						Dir.chdir(custom_launch_dir)
-					end
-					if defined?(Win32) and launcher_cmd =~ /^"(.*?)"\s*(.*)$/
-						dir_file = $1
-						param = $2
-						dir = dir_file.slice(/^.*[\\\/]/)
-						file = dir_file.sub(/^.*[\\\/]/, '')
-						operation = (Win32.isXP? ? 'open' : 'runas')
-						Lich.log "info: launcher_cmd: Win32.ShellExecute(:lpOperation => #{operation.inspect}, :lpFile => #{file.inspect}, :lpDirectory => #{dir.inspect}, :lpParameters => #{param.inspect})"
-						r = Win32.ShellExecute(:lpOperation => operation, :lpFile => file, :lpDirectory => dir, :lpParameters => param)
-						if r < 33
-							Lich.log "error: Win32.ShellExecute returned #{r}; Win32.GetLastError: #{Win32.GetLastError}"
-						end
-					elsif defined?(Wine)
-						Lich.log "info: launcher_cmd: #{Wine::BIN} #{launcher_cmd}"
-						system("#{Wine::BIN} #{launcher_cmd}")
-					else
-						Lich.log "info: launcher_cmd: #{launcher_cmd}"
-						system(launcher_cmd)
-					end
-				rescue
-					Lich.log $!
+			accept_thread = Thread.new { $_CLIENT_ = SynchronizedSocket.new(listener.accept) }
+			begin
+				if custom_launch_dir
+					Dir.chdir(custom_launch_dir)
 				end
-			}
-			timeout_thr = Thread.new {
-				sleep 30
-				$stdout.puts "error: timeout waiting for client to connect"
+				if defined?(Win32) and launcher_cmd =~ /^"(.*?)"\s*(.*)$/
+					dir_file = $1
+					param = $2
+					dir = dir_file.slice(/^.*[\\\/]/)
+					file = dir_file.sub(/^.*[\\\/]/, '')
+					operation = (Win32.isXP? ? 'open' : 'runas')
+					Lich.log "info: launcher_cmd: Win32.ShellExecute(:lpOperation => #{operation.inspect}, :lpFile => #{file.inspect}, :lpDirectory => #{dir.inspect}, :lpParameters => #{param.inspect})"
+					r = Win32.ShellExecute(:lpOperation => operation, :lpFile => file, :lpDirectory => dir, :lpParameters => param)
+					if r < 33
+						Lich.log "error: Win32.ShellExecute returned #{r}; Win32.GetLastError: #{Win32.GetLastError}"
+						Lich.msgbox(:message => "error: Win32.ShellExecute returned #{r};  Win32.GetLastError: #{Win32.GetLastError}", :icon => :error)
+					end
+				elsif defined?(Wine)
+					Lich.log "info: launcher_cmd: #{Wine::BIN} #{launcher_cmd}"
+					spawn "#{Wine::BIN} #{launcher_cmd}"
+				else
+					Lich.log "info: launcher_cmd: #{launcher_cmd}"
+					spawn launcher_cmd
+				end
+			rescue
+				Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+				Lich.msgbox(:message => "error: #{$!}", :icon => :error)
+			end
+			Lich.log 'info: waiting for client to connect...'
+			300.times { sleep 0.1; break unless accept_thread.status }
+			if defined?(Win32) and not $_CLIENT_
 				Lich.log "error: timeout waiting for client to connect"
+				answer = Lich.msgbox(:message => "error: timed out waiting for client to connect\n\nWould you like to try a different method?", :buttons => :yes_no, :icon => :error)
+				if (answer == :yes)
+					Lich.log "info: launcher_cmd: #{launcher_cmd}"
+					spawn launcher_cmd
+					Lich.log 'info: waiting for client to connect...'
+					300.times { sleep 0.1; break unless accept_thread.status }
+				else
+					accept_thread.kill if accept_thread.status
+					Dir.chdir($lich_dir)
+					if sal_filename
+						File.delete(sal_filename) rescue()
+					end
+					listener.close rescue()
+					$_CLIENT_.close rescue()
+					reconnect_if_wanted.call
+					Lich.log "info: exiting..."
+					Gtk.queue { Gtk.main_quit } if defined?(Gtk)
+					exit
+				end
+			end
+			accept_thread.kill if accept_thread.status
+			unless $_CLIENT_
+				Lich.log "error: timeout waiting for client to connect"
+				Lich.msgbox(:message => "error: timeout waiting for client to connect", :icon => :error)
 				Dir.chdir($lich_dir)
 				if sal_filename
 					File.delete(sal_filename) rescue()
@@ -10951,9 +10976,7 @@ main_thread = Thread.new {
 				Lich.log "info: exiting..."
 				Gtk.queue { Gtk.main_quit } if defined?(Gtk)
 				exit
-			}
-			Lich.log 'info: waiting for client to connect...'
-			$_CLIENT_ = SynchronizedSocket.new(listener.accept)
+			end
 			Lich.log 'info: connected'
 			listener.close rescue()
 			Dir.chdir($lich_dir)
@@ -10961,7 +10984,6 @@ main_thread = Thread.new {
 				File.delete(sal_filename) rescue()
 			end
 			begin
-				timeout_thr.kill
 				listener.close
 			rescue
 				Lich.log "error: #{$!}"
