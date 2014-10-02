@@ -1,0 +1,52 @@
+#quiet
+=begin
+
+	edit variables shared by all scripts
+
+	author: Tillmen (tillmen@lichproject.org)
+	game: any
+	tags: core
+	required: Lich >= 4.6.0
+	version: 0.1
+
+=end
+
+if (script.vars[1] == 'set') and (script.vars[0] =~ /^set\s+([^\s]+)\s*=\s*(.+)/)
+	name = $1
+	value = $2.strip
+	if Vars.send(name).nil?
+		Vars.send("#{name}=", value)
+		respond "\n--- variable \"#{name}\" set to: \"#{value}\"\n\n"
+	else
+		old_value = Vars.send(name)
+		Vars.send("#{name}=", value)
+		respond "\n--- variable #{name} changed to: #{value} (was #{old_value})\n\n"
+	end
+elsif (script.vars[1] =~ /^del(ete)?$|^rem(?:ove)?$/) and script.vars[2]
+	if Vars.send(script.vars[2]).nil?
+		respond "\n--- variable #{script.vars[2]} does not exist\n\n"
+	else
+		Vars.send("#{script.vars[2]}=", nil)
+		respond "\n--- variable #{script.vars[2]} is deleted\n\n"
+	end
+elsif script.vars[1] == 'list'
+	if Vars.list.empty?
+		respond "\n--- no variables are set\n\n"
+	else
+		output = "\n--- #{XMLData.name}'s variables:\n\n"
+		max_name = 0
+		Vars.list.keys.each { |k| max_name = [max_name,k.length].max }
+		Vars.list.each { |name,value|
+			output.concat "   #{name.rjust(max_name)}:  #{value}\n"
+		}
+		output.concat "\n"
+		respond output
+	end
+else
+	output = "\n"
+	output.concat "   #{$clean_lich_char}#{script.name} set NAME=VALUE\n"
+	output.concat "   #{$clean_lich_char}#{script.name} delete NAME\n"
+	output.concat "   #{$clean_lich_char}#{script.name} list\n"
+	output.concat "\n"
+	respond output
+end
