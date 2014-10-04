@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.5a'
+LICH_VERSION = '4.6.6'
 $version = LICH_VERSION # depreciated
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
@@ -1849,6 +1849,39 @@ DISTRUST_SCRIPT = proc { |script_name|
 	end
 }
 
+ALT_WIN32_LAUNCH_METHOD = proc {
+	begin
+		val = lich_db.get_first_value("SELECT value FROM lich_settings WHERE name='alt_win32_launch_method';")
+	rescue SQLite3::BusyException
+		sleep 0.1
+		retry
+	end
+	if val.nil? or (val == 'no')
+		false
+	else
+		true
+	end
+}
+
+TOGGLE_WIN32_LAUNCH_METHOD = proc {
+	if ALT_WIN32_LAUNCH_METHOD.call
+		begin
+			val = lich_db.execute("INSERT OR REPLACE INTO lich_settings(name,value) values('alt_win32_launch_method','no');")
+		rescue SQLite3::BusyException
+			sleep 0.1
+			retry
+		end
+	else
+		begin
+			val = lich_db.execute("INSERT OR REPLACE INTO lich_settings(name,value) values('alt_win32_launch_method','yes');")
+		rescue SQLite3::BusyException
+			sleep 0.1
+			retry
+		end
+	end
+	nil
+}
+
 #
 # import Lich 4.4 settings to Lich 4.5
 #
@@ -1876,7 +1909,7 @@ if did_import.nil?
 	Dir.entries($data_dir).find_all { |fn| fn =~ /\.sav$/i }.each { |fn|
 		next if fn == 'lich.sav'
 		s = fn.match(/^(.+)\.sav$/i).captures.first
-		data = File.open("#{$data_dir}#{fn}") { |f| f.read }
+		data = File.open("#{$data_dir}#{fn}", 'rb') { |f| f.read }
 		blob = SQLite3::Blob.new(data)
 		begin
 			lich_db.execute("INSERT OR REPLACE INTO script_auto_settings(script,scope,hash) VALUES(?,':',?);", s.encode('UTF-8'), blob)
@@ -1891,7 +1924,7 @@ if did_import.nil?
 		Dir.mkdir("#{backup_dir}#{game}") unless File.exists?("#{backup_dir}#{game}")
 		Dir.entries("#{$data_dir}#{game}").find_all { |fn| fn =~ /\.sav$/i }.each { |fn|
 			s = fn.match(/^(.+)\.sav$/i).captures.first
-			data = File.open("#{$data_dir}#{game}/#{fn}") { |f| f.read }
+			data = File.open("#{$data_dir}#{game}/#{fn}", 'rb') { |f| f.read }
 			blob = SQLite3::Blob.new(data)
 			begin
 				lich_db.execute('INSERT OR REPLACE INTO script_auto_settings(script,scope,hash) VALUES(?,?,?);', s.encode('UTF-8'), game.encode('UTF-8'), blob)
@@ -1906,7 +1939,7 @@ if did_import.nil?
 			Dir.mkdir("#{backup_dir}#{game}/#{char}") unless File.exists?("#{backup_dir}#{game}/#{char}")
 			Dir.entries("#{$data_dir}#{game}/#{char}").find_all { |fn| fn =~ /\.sav$/i }.each { |fn|
 				s = fn.match(/^(.+)\.sav$/i).captures.first
-				data = File.open("#{$data_dir}#{game}/#{char}/#{fn}") { |f| f.read }
+				data = File.open("#{$data_dir}#{game}/#{char}/#{fn}", 'rb') { |f| f.read }
 				blob = SQLite3::Blob.new(data)
 				begin
 					lich_db.execute('INSERT OR REPLACE INTO script_auto_settings(script,scope,hash) VALUES(?,?,?);', s.encode('UTF-8'), "#{game}:#{char}".encode('UTF-8'), blob)
@@ -1918,7 +1951,7 @@ if did_import.nil?
 				File.rename("#{$data_dir}#{game}/#{char}/#{fn}~", "#{backup_dir}#{game}/#{char}/#{fn}~") if File.exists?("#{$data_dir}#{game}/#{char}/#{fn}~")
 			}
 			if File.exists?("#{$data_dir}#{game}/#{char}/uservars.dat")
-				blob = SQLite3::Blob.new(File.open("#{$data_dir}#{game}/#{char}/uservars.dat") { |f| f.read })
+				blob = SQLite3::Blob.new(File.open("#{$data_dir}#{game}/#{char}/uservars.dat", 'rb') { |f| f.read })
 				begin
 					lich_db.execute('INSERT OR REPLACE INTO uservars(scope,hash) VALUES(?,?);', "#{game}:#{char}".encode('UTF-8'), blob)
 				rescue SQLite3::BusyException
@@ -1945,7 +1978,7 @@ if did_import.nil?
 		retry
 	end
 	if File.exists?("#{$data_dir}lich.sav")
-		data = File.open("#{$data_dir}lich.sav") { |f| Marshal.load(f.read) }
+		data = File.open("#{$data_dir}lich.sav", 'rb') { |f| Marshal.load(f.read) }
 		favs = data['favorites']
 		aliases = data['alias']
 		trusted = data['lichsettings']['trusted_scripts']
@@ -3158,14 +3191,14 @@ class Script
 		end
 	end
 	def Script.running?(name)
-		(Script.running + Script.hidden).any? { |i| (i.name =~ /^#{name}$/i) }
+		@@running.any? { |i| (i.name =~ /^#{name}$/i) }
 	end
 	def Script.pause(name=nil)
 		if name.nil?
 			Script.current.pause
 			Script.current
 		else
-			if s = ((Script.running + Script.hidden).find { |i| (i.name == name) and not i.paused? }) || ((Script.running + Script.hidden).find { |i| (i.name =~ /^#{name}$/i) and not i.paused? })
+			if s = (@@running.find { |i| (i.name == name) and not i.paused? }) || (@@running.find { |i| (i.name =~ /^#{name}$/i) and not i.paused? })
 				s.pause
 				true
 			else
@@ -3174,7 +3207,7 @@ class Script
 		end
 	end
 	def Script.unpause(name)
-		if s = ((Script.running + Script.hidden).find { |i| (i.name == name) and i.paused? }) || ((Script.running + Script.hidden).find { |i| (i.name =~ /^#{name}$/i) and i.paused? })
+		if s = (@@running.find { |i| (i.name == name) and i.paused? }) || (@@running.find { |i| (i.name =~ /^#{name}$/i) and i.paused? })
 			s.unpause
 			true
 		else
@@ -3182,7 +3215,7 @@ class Script
 		end
 	end
 	def Script.kill(name)
-		if s = ((Script.running + Script.hidden).find { |i| (i.name == name) }) || ((Script.running + Script.hidden).find { |i| (i.name =~ /^#{name}$/i) })
+		if s = (@@running.find { |i| i.name == name }) || (@@running.find { |i| i.name =~ /^#{name}$/i })
 			s.kill
 			true
 		else
@@ -3190,7 +3223,7 @@ class Script
 		end
 	end
 	def Script.paused?(name)
-		if s = ((Script.running + Script.hidden).find { |i| (i.name == name) }) || ((Script.running + Script.hidden).find { |i| (i.name =~ /^#{name}$/i) })
+		if s = (@@running.find { |i| i.name == name }) || (@@running.find { |i| i.name =~ /^#{name}$/i })
 			s.paused?
 		else
 			nil
@@ -4893,7 +4926,7 @@ class Spell
 		until (@@cast_lock.first == script) or @@cast_lock.empty?
 			sleep 0.1
 			Script.current # allows this loop to be paused
-			@@cast_lock.delete_if { |s| s.paused or not (Script.running + Script.hidden).include?(s) }
+			@@cast_lock.delete_if { |s| s.paused or not Script.list.include?(s) }
 		end
 	end
 	def Spell.unlock_cast
@@ -4930,7 +4963,7 @@ class Spell
 			until (@@cast_lock.first == script) or @@cast_lock.empty?
 				sleep 0.1
 				Script.current # allows this loop to be paused
-				@@cast_lock.delete_if { |s| s.paused or not (Script.running + Script.hidden).include?(s) }
+				@@cast_lock.delete_if { |s| s.paused or not Script.list.include?(s) }
 			end
 			unless (self.mana_cost <= 0) or checkmana(self.mana_cost)
 				echo 'cast: not enough mana'
@@ -6896,7 +6929,7 @@ def pause_script(*names)
 		Script.current
 	else
 		names.each { |scr|
-			fnd = (Script.running + Script.hidden).find { |nm| nm.name =~ /^#{scr}/i }
+			fnd = Script.list.find { |nm| nm.name =~ /^#{scr}/i }
 			fnd.pause unless (fnd.paused || fnd.nil?)
 		}
 	end
@@ -6905,7 +6938,7 @@ end
 def unpause_script(*names)
 	names.flatten!
 	names.each { |scr| 
-		fnd = (Script.running + Script.hidden).find { |nm| nm.name =~ /^#{scr}/i }
+		fnd = Script.list.find { |nm| nm.name =~ /^#{scr}/i }
 		fnd.unpause if (fnd.paused and not fnd.nil?)
 	}
 end
@@ -7161,7 +7194,7 @@ end
 
 def send_to_script(*values)
 	values.flatten!
-	if script = (Script.running + Script.hidden).find { |val| val.name =~ /^#{values.first}/i }
+	if script = Script.list.find { |val| val.name =~ /^#{values.first}/i }
 		if script.want_downstream
 			values[1..-1].each { |val| script.downstream_buffer.push(val) }
 		else
@@ -7177,7 +7210,7 @@ end
 
 def unique_send_to_script(*values)
 	values.flatten!
-	if script = (Script.running + Script.hidden).find { |val| val.name =~ /^#{values.first}/i }
+	if script = Script.list.find { |val| val.name =~ /^#{values.first}/i }
 		values[1..-1].each { |val| script.unique_buffer.push(val) }
 		echo("sent to #{script}: #{values[1..-1].join(' ; ')}")
 		return true
@@ -8359,7 +8392,7 @@ end
 def stop_script(*target_names) # depreciated
 	numkilled = 0
 	target_names.each { |target_name| 
-		condemned = (Script.running + Script.hidden).find { |s_sock| s_sock.name =~ /^#{target_name}/i }
+		condemned = Script.list.find { |s_sock| s_sock.name =~ /^#{target_name}/i }
 		if condemned.nil?
 			respond("--- Lich: '#{Script.current}' tried to stop '#{target_name}', but it isn't running!")
 		else
@@ -9414,6 +9447,112 @@ class SharedBuffer
 	def cleanup_threads
 		@buffer_index.delete_if { |k,v| not Thread.list.any? { |t| t.object_id == k } }
 		return self
+	end
+end
+
+module Game
+	@@test_output_raw = File.open("test-output-raw.txt", 'a')
+	@@test_output = File.open("test-output.txt", 'a')
+	@@test_output_raw.sync = true
+	@@test_output.sync = true
+	@@subscribables = Hash.new
+	@@subscribers = Hash.new
+	def Game._dump
+		echo "@@subscribables: #{@@subscribables.inspect}"
+	end
+	def Game.update(line)
+		@@test_output_raw.write(line) if $test_output
+		line = line.chomp
+		if line.empty?
+			@@test_output.write("#{line}\n") if $test_output
+		else
+			while (start_pos = (line =~ /(<(prompt|spell|right|left|inv|compass|component).*?\2>|<.*?>)/))
+				xml = $1
+				line.slice!(start_pos, xml.length)
+				if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
+					Game.update_subscribable('server-time' => $2.to_i, 'prompt' => $3)
+				elsif xml =~ /^<spell.*?>(.*?)<\/spell>$/
+					Game.update_subscribable('prepared-spell' => $1)
+				elsif xml =~ /^<right exist="(.*?)" noun="(.*?)">(.*?)<\/right>/
+					Game.update_subscribable('right-hand-id' => $1, 'right-hand-noun' => $2, 'right-hand-name' => $3)
+				elsif xml =~ /^<right>(.*?)<\/right>/
+					Game.update_subscribable('right-hand-id' => nil, 'right-hand-noun' => nil, 'right-hand-name' => $1)
+				elsif xml =~ /^<left exist="(.*?)" noun="(.*?)">(.*?)<\/left>/
+					Game.update_subscribable('left-hand-id' => $1, 'left-hand-noun' => $2, 'left-hand-name' => $3)
+				elsif xml =~ /^<left>(.*?)<\/left>/
+					Game.update_subscribable('left-hand-id' => nil, 'left-hand-noun' => nil, 'left-hand-name' => $1)
+				elsif xml =~ /^<roundTime value=('|")([0-9]+)\1/
+					Game.update_subscribable('roundtime-end' => $2.to_i)
+				elsif xml =~ /^<castTime value=('|")([0-9]+)\1/
+					Game.update_subscribable('cast-roundtime-end' => $2.to_i)
+				elsif xml =~ /^<compass/
+					Game.update_subscribable('compass-xml' => xml.scan(/<dir value="(.*?)"/).flatten)
+				elsif xml =~ /^<progressBar id='(.*?)' value='[0-9]+' text='\1 (\-?[0-9]+)\/([0-9]+)'/
+					Game.update_subscribable($1 => $2.to_i, "max-#{$1}" => $3.to_i)
+				elsif xml =~ /^<progressBar id='encumlevel' value='([0-9]+)' text='(.*?)'/
+					Game.update_subscribable('encumbrance-text' => $2, 'encumbrance-value' => $1.to_i)
+				elsif xml =~ /^<progressBar id='pbarStance' value='([0-9]+)'/
+					Game.update_subscribable('stance' => $1.to_i)
+				elsif xml =~ /^<progressBar id='mindState' value='(.*?)' text='(.*?)'/
+					Game.update_subscribable('mind-text' => $2, 'mind-value' => $1)
+				elsif xml =~ /^<dropDownBox id='dDBTarget' value="(.*?)".*?content_value="(.*?)" /
+					Game.update_subscribable('target-name' => $1, 'target-id' => $2)
+				elsif xml =~ /^<component id='(.*?)'>(.*?)<\/component>/
+					Game.update_subscribable($1 => $2)
+				elsif xml =~ /^<compDef id='(.*?)'>(.*?)<\/compDef>/
+					Game.update_subscribable($1 => $2)
+				elsif xml =~ /^<dialogData id='ActiveSpells'.*?<\/dialogData>/
+					Game.update_subscribable('active-spells-time' => Time.now, 'active-spells-xml' => xml)
+				end
+			end
+			@@test_output.write("#{line}\n") if $test_output and not line.empty?
+		end
+	end
+	def Game.update_subscribable(args)
+		args.each { |key,value|
+			unless @@subscribables[key] == value
+				@@subscribables[key] = value
+				unless @@subscribers[key].empty?
+					delete_list = Array.new
+					@@subscribers[key].each { |foo|
+						if foo[1]
+							if Script.list.find { |s| s == foo[1] }
+								Thread.new {
+									foo[2].add(Thread.current)
+									script = Script.current
+									report_errors { foo[0].call(value) }
+								}
+							else
+								delete_list.push(foo)
+							end
+						else
+							report_errors { foo[0].call(value) }
+						end
+					}
+					delete_list.each { |d| @@subscribers[key].delete(d) }
+				end
+			end
+		}
+	end
+	def Game.subscribe(key, p=nil, &b)
+		if script = Script.list.find { |s| s.has_thread?(Thread.current) }
+			group = Thread.current.group
+		else
+			group = nil
+		end
+		if p
+			@@subscribers[key] ||= Array.new
+			@@subscribers[key].push([p, script, group])
+			return p.object_id
+		elsif b
+			@@subscribers[key] ||= Array.new
+			@@subscribers[key].push([b, script, group])
+			return b.object_id
+		end
+	end
+	def Game.unsubscribe(id)
+		@@subscribables.values.each { |foo| foo.delete_if { |bar| bar[0].object_id == id } }
+		nil
 	end
 end
 
@@ -10759,6 +10898,7 @@ main_thread = Thread.new {
 			window.border_width = 5
 			window.add(notebook)
 			window.signal_connect('delete_event') { window.destroy; done = true }
+			window.default_width = 400
 
 			window.show_all
 
@@ -10915,7 +11055,7 @@ main_thread = Thread.new {
 				if custom_launch_dir
 					Dir.chdir(custom_launch_dir)
 				end
-				if defined?(Win32) and launcher_cmd =~ /^"(.*?)"\s*(.*)$/
+				if defined?(Win32) and ALT_WIN32_LAUNCH_METHOD.call and (launcher_cmd =~ /^"(.*?)"\s*(.*)$/)
 					dir_file = $1
 					param = $2
 					dir = dir_file.slice(/^.*[\\\/]/)
@@ -10942,10 +11082,35 @@ main_thread = Thread.new {
 			300.times { sleep 0.1; break unless accept_thread.status }
 			if defined?(Win32) and not $_CLIENT_
 				Lich.log "error: timeout waiting for client to connect"
-				answer = Lich.msgbox(:message => "error: timed out waiting for client to connect\n\nWould you like to try a different method?", :buttons => :yes_no, :icon => :error)
+				if ALT_WIN32_LAUNCH_METHOD.call
+					answer = Lich.msgbox(:message => "error: launch method 2 timed out waiting for client to connect\n\nWould you like to try method 1?", :buttons => :yes_no, :icon => :error)
+				else
+					answer = Lich.msgbox(:message => "error: launch method 1 timed out waiting for client to connect\n\nWould you like to try method 2?", :buttons => :yes_no, :icon => :error)
+				end
 				if (answer == :yes)
-					Lich.log "info: launcher_cmd: #{launcher_cmd}"
-					spawn launcher_cmd
+					TOGGLE_WIN32_LAUNCH_METHOD.call
+					begin
+						if ALT_WIN32_LAUNCH_METHOD.call
+							launcher_cmd =~ /^"(.*?)"\s*(.*)$/
+							dir_file = $1
+							param = $2
+							dir = dir_file.slice(/^.*[\\\/]/)
+							file = dir_file.sub(/^.*[\\\/]/, '')
+							operation = (Win32.isXP? ? 'open' : 'runas')
+							Lich.log "info: launcher_cmd: Win32.ShellExecute(:lpOperation => #{operation.inspect}, :lpFile => #{file.inspect}, :lpDirectory => #{dir.inspect}, :lpParameters => #{param.inspect})"
+							r = Win32.ShellExecute(:lpOperation => operation, :lpFile => file, :lpDirectory => dir, :lpParameters => param)
+							if r < 33
+								Lich.log "error: Win32.ShellExecute returned #{r}; Win32.GetLastError: #{Win32.GetLastError}"
+								Lich.msgbox(:message => "error: Win32.ShellExecute returned #{r};  Win32.GetLastError: #{Win32.GetLastError}", :icon => :error)
+							end
+						else
+							Lich.log "info: launcher_cmd: #{launcher_cmd}"
+							spawn launcher_cmd
+						end
+					rescue
+						Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+						Lich.msgbox(:message => "error: #{$!}", :icon => :error)
+					end
 					Lich.log 'info: waiting for client to connect...'
 					300.times { sleep 0.1; break unless accept_thread.status }
 				else
@@ -10963,10 +11128,10 @@ main_thread = Thread.new {
 				end
 			end
 			accept_thread.kill if accept_thread.status
+			Dir.chdir($lich_dir)
 			unless $_CLIENT_
 				Lich.log "error: timeout waiting for client to connect"
 				Lich.msgbox(:message => "error: timeout waiting for client to connect", :icon => :error)
-				Dir.chdir($lich_dir)
 				if sal_filename
 					File.delete(sal_filename) rescue()
 				end
@@ -10979,7 +11144,6 @@ main_thread = Thread.new {
 			end
 			Lich.log 'info: connected'
 			listener.close rescue()
-			Dir.chdir($lich_dir)
 			if sal_filename
 				File.delete(sal_filename) rescue()
 			end
@@ -11428,6 +11592,7 @@ main_thread = Thread.new {
 	server_thread = Thread.new {
 		begin
 			while $_SERVERSTRING_ = $_SERVER_.gets
+				Game.update($_SERVERSTRING_)
 				last_server_thread_recv = Time.now
 				begin
 					$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
