@@ -11603,7 +11603,7 @@ main_thread = Thread.new {
 	server_thread = Thread.new {
 		begin
 			while $_SERVERSTRING_ = $_SERVER_.gets
-				Game.update($_SERVERSTRING_)
+#				Game.update($_SERVERSTRING_)
 				last_server_thread_recv = Time.now
 				begin
 					$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
