@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.6'
+LICH_VERSION = '4.6.7'
 $version = LICH_VERSION # depreciated
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
@@ -114,7 +114,16 @@ require 'zlib'
 require 'drb'
 require 'resolv'
 require 'digest/md5'
-
+begin
+	# stupid workaround for Windows
+	# seems to avoid a 10 second lag when starting lnet, without adding a 10 second lag at startup
+	require 'openssl'
+	OpenSSL::PKey::RSA.new(512)
+rescue LoadError
+	nil
+rescue
+	nil
+end
 if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 	#
 	# Windows API made slightly less annoying
@@ -9450,6 +9459,7 @@ class SharedBuffer
 	end
 end
 
+=begin
 module Game
 	@@test_output_raw = File.open("test-output-raw.txt", 'a')
 	@@test_output = File.open("test-output.txt", 'a')
@@ -9555,6 +9565,7 @@ module Game
 		nil
 	end
 end
+=end
 
 =begin
 module Game
