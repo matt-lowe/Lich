@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.8'
+LICH_VERSION = '4.6.9'
 $version = LICH_VERSION # depreciated
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
@@ -8527,31 +8527,31 @@ def empty_hands
 			}
 		else
 			actions.unshift proc {
-				dothistimeout "get ##{left_hand.id}", 3, /^You remove|^You reach into|^Get what\?|^You already have/
+				dothistimeout "get ##{left_hand.id}", 3, /^You (?:remove|draw|grab|reach into)|^Get what\?|^You already have/
 				20.times { break if (GameObj.left_hand.id == left_hand.id) or (GameObj.right_hand.id == left_hand.id); sleep 0.1 }
 				if GameObj.right_hand.id == left_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
 			if lootsack
-				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
 					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				end
 			else
 				result = nil
 			end
 			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
 				for container in other_containers.call
-					result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You (?:put|absent-mindedly drop|slip)|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					if result =~ /^You can't .+ It's closed!$/
 						actions.push proc { fput "close ##{container.id}" }
 						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
-						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You (?:put|absent-mindedly drop|slip)|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					end
-					break if result =~ /^You put|^You slip/
+					break if result =~ /^You (?:put|absent-mindedly drop|slip)/
 				end
 			end
 		end
@@ -8573,31 +8573,31 @@ def empty_hands
 			fput 'stop 1012'
 		else
 			actions.unshift proc {
-				dothistimeout "get ##{right_hand.id}", 3, /^You remove|^You reach into|^Get what\?|^You already have/
+				dothistimeout "get ##{right_hand.id}", 3, /^You (?:remove|draw|grab|reach into)|^Get what\?|^You already have/
 				20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
 				if GameObj.left_hand.id == right_hand.id
 					dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
 				end
 			}
 			if lootsack
-				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
 					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				end
 			else
 				result = nil
 			end
 			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
 				for container in other_containers.call
-					result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You (?:put|absent-mindedly drop|slip)|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					if result =~ /^You can't .+ It's closed!$/
 						actions.push proc { fput "close ##{container.id}" }
 						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
-						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You (?:put|absent-mindedly drop|slip)|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					end
-					break if result =~ /^You put|^You slip/
+					break if result =~ /^You (?:put|absent-mindedly drop|slip)/
 				end
 			end
 		end
@@ -8660,24 +8660,24 @@ def empty_hand
 					end
 				}
 				if lootsack
-					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					if result =~ /^You can't .+ It's closed!$/
 						actions.push proc { fput "close ##{lootsack.id}" }
 						dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-						result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					end
 				else
 					result = nil
 				end
 				if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
 					for container in other_containers.call
-						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You (?:put|absent-mindedly drop|slip)|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 						if result =~ /^You can't .+ It's closed!$/
 							actions.push proc { fput "close ##{container.id}" }
 							dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
-							result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+							result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You (?:put|absent-mindedly drop|slip)|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 						end
-						break if result =~ /^You put|^You slip/
+						break if result =~ /^You (?:put|absent-mindedly drop|slip)/
 					end
 				end
 			end
@@ -8700,24 +8700,24 @@ def empty_hand
 					end
 				}
 				if lootsack
-					result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					if result =~ /^You can't .+ It's closed!$/
 						actions.push proc { fput "close ##{lootsack.id}" }
 						dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-						result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					end
 				else
 					result = nil
 				end
 				if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
 					for container in other_containers.call
-						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You (?:put|absent-mindedly drop|slip)|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 						if result =~ /^You can't .+ It's closed!$/
 							actions.push proc { fput "close ##{container.id}" }
 							dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
-							result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+							result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You (?:put|absent-mindedly drop|slip)|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 						end
-						break if result =~ /^You put|^You slip/
+						break if result =~ /^You (?:put|absent-mindedly drop|slip)/
 					end
 				end
 			end
@@ -8779,24 +8779,24 @@ def empty_right_hand
 				end
 			}
 			if lootsack
-				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 4, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
 					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{right_hand.id} in ##{lootsack.id}", 3, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				end
 			else
 				result = nil
 			end
 			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
 				for container in other_containers.call
-					result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 4, /^You (?:put|absent-mindedly drop|slip)|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					if result =~ /^You can't .+ It's closed!$/
 						actions.push proc { fput "close ##{container.id}" }
 						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
-						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{right_hand.id} in ##{container.id}", 3, /^You (?:put|absent-mindedly drop|slip)|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					end
-					break if result =~ /^You put|^You slip/
+					break if result =~ /^You (?:put|absent-mindedly drop|slip)/
 				end
 			end
 		end
@@ -8851,24 +8851,24 @@ def empty_left_hand
 				end
 			}
 			if lootsack
-				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You put|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+				result = dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 4, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				if result =~ /^You can't .+ It's closed!$/
 					actions.push proc { fput "close ##{lootsack.id}" }
 					dothistimeout "open ##{lootsack.id}", 3, /^You open|^That is already open\./
-					dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You put|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					dothistimeout "put ##{left_hand.id} in ##{lootsack.id}", 3, /^You (?:put|absent-mindedly drop)|^You slip .*? into|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 				end
 			else
 				result = nil
 			end
 			if result.nil? or result =~ /^Your .*? won't fit in .*?\.$/
 				for container in other_containers.call
-					result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You put|^You slip|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+					result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 4, /^You (?:put|absent-mindedly drop|slip)|^You can't .+ It's closed!$|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					if result =~ /^You can't .+ It's closed!$/
 						actions.push proc { fput "close ##{container.id}" }
 						dothistimeout "open ##{container.id}", 3, /^You open|^That is already open\./
-						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You put|^You slip|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
+						result = dothistimeout "put ##{left_hand.id} in ##{container.id}", 3, /^You (?:put|absent-mindedly drop|slip)|^I could not find what you were referring to\.|^Your .*? won't fit in .*?\.$/
 					end
-					break if result =~ /^You put|^You slip/
+					break if result =~ /^You (?:put|absent-mindedly drop|slip)/
 				end
 			end
 		end
