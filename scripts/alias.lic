@@ -9,6 +9,11 @@
 	game: any
 	tags: core
 	required: Lich >= 4.6.0
+	version: 0.2
+
+	changelog:
+		0.2 (2014-10-05):
+			don't crash from recursive aliases 
 
 =end
 
@@ -138,54 +143,58 @@ hook_proc = proc { |client_string|
 			respond output
 		end
 		nil
-	elsif character_regex and (client_string =~ character_regex)
-		trigger, extra = $1, $2
-		if target = db.get_first_value("SELECT target FROM #{character} WHERE trigger=?;", trigger.encode('UTF-8'))
-			target = target.split('\\r')
-			if extra.empty?
-				target.collect! { |line| line.gsub('\\?', '') }
-			elsif target.any? { |line| line.include?('\\?') }
-				target.collect! { |line|
-					if line =~ /^;e.*"\\\?"/
-						line.gsub('"\\?"', extra.inspect)
-					elsif line.include?('\\?')
-						line.gsub('\\?', extra)
-					else
-						line
-					end
-				}
-			elsif target.length == 1
-				target.first.concat(" #{extra}")
+	elsif caller.count { |x| x =~ /do_client/ } < 2
+		if character_regex and (client_string =~ character_regex)
+			trigger, extra = $1, $2
+			if target = db.get_first_value("SELECT target FROM #{character} WHERE trigger=?;", trigger.encode('UTF-8'))
+				target = target.split('\\r')
+				if extra.empty?
+					target.collect! { |line| line.gsub('\\?', '') }
+				elsif target.any? { |line| line.include?('\\?') }
+					target.collect! { |line|
+						if line =~ /^;e.*"\\\?"/
+							line.gsub('"\\?"', extra.inspect)
+						elsif line.include?('\\?')
+							line.gsub('\\?', extra)
+						else
+							line
+						end
+					}
+				elsif target.length == 1
+					target.first.concat(" #{extra}")
+				end
+				target.each { |line| do_client("#{line.chomp}\n") }
+			else
+				respond "[alias: fixme 1]"
 			end
-			target.each { |line| do_client("#{line.chomp}\n") }
-		else
-			respond "[alias: fixme 1]"
-		end
-		nil
-	elsif global_regex and (client_string =~ global_regex)
-		trigger, extra = $1, $2
-		if target = db.get_first_value("SELECT target FROM global WHERE trigger=?;", trigger.encode('UTF-8'))
-			target = target.split('\\r')
-			if extra.empty?
-				target.collect! { |line| line.gsub('\\?', '') }
-			elsif target.any? { |line| line.include?('\\?') }
-				target.collect! { |line|
-					if line =~ /^;e.*"\\\?"/
-						line.gsub('"\\?"', extra.inspect)
-					elsif line.include?('\\?')
-						line.gsub('\\?', extra)
-					else
-						line
-					end
-				}
-			elsif target.length == 1
-				target.first.concat(" #{extra}")
+			nil
+		elsif global_regex and (client_string =~ global_regex)
+			trigger, extra = $1, $2
+			if target = db.get_first_value("SELECT target FROM global WHERE trigger=?;", trigger.encode('UTF-8'))
+				target = target.split('\\r')
+				if extra.empty?
+					target.collect! { |line| line.gsub('\\?', '') }
+				elsif target.any? { |line| line.include?('\\?') }
+					target.collect! { |line|
+						if line =~ /^;e.*"\\\?"/
+							line.gsub('"\\?"', extra.inspect)
+						elsif line.include?('\\?')
+							line.gsub('\\?', extra)
+						else
+							line
+						end
+					}
+				elsif target.length == 1
+					target.first.concat(" #{extra}")
+				end
+				target.each { |line| do_client("#{line.chomp}\n") }
+			else
+				respond "[alias: fixme 2]"
 			end
-			target.each { |line| do_client("#{line.chomp}\n") }
+			nil
 		else
-			respond "[alias: fixme 2]"
+			client_string
 		end
-		nil
 	else
 		client_string
 	end
