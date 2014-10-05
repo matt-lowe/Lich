@@ -9,9 +9,11 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.12
+	     version: 2.13
 
 	Changelog:
+		2.13 (2014-10-05):
+			automatically download-mapdb after checkout-mapdb
 		2.12 (2014-10-05):
 			alias --sort=date to --sort=age
 			improve error reporting for bad commands and options
@@ -1468,7 +1470,9 @@ elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
 				Settings["password:#{author.downcase.gsub(/[^a-z]/, '')}"] = cmd_password
 				echo "password saved for author #{author}"
 			end
-			echo "success: now you should (within 24 horus):     ;#{script.name} download-mapdb     edit your map database     ;#{script.name} upload-mapdb"
+			echo 'success;  running download-mapdb now...'
+			download_mapdb.call
+			echo "edit your map database and     ;#{script.name} upload-mapdb     within 24 hours."
 		end
 	ensure
 		ssl_socket.close
