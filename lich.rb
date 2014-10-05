@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.7'
+LICH_VERSION = '4.6.8'
 $version = LICH_VERSION # depreciated
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
@@ -1657,21 +1657,11 @@ START_SCRIPT = proc { |args|
 		script_args = (options[:args] || String.new)
 	end
 	# fixme: look in wizard script directory
-	if File.exists?("#{$script_dir}#{script_name}.lic")
-		file_name = "#{script_name}.lic"
-	elsif File.exists?("#{$script_dir}#{script_name}.rb")
-		file_name = "#{script_name}.rb"
-	elsif File.exists?("#{$script_dir}#{script_name}.cmd")
-		file_name = "#{script_name}.cmd"
-	elsif File.exists?("#{$script_dir}#{script_name}.wiz")
-		file_name = "#{script_name}.wiz"
-	else
-		file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }.sort
-		if file_name = (file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?i:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i })
-			script_name = file_name.sub(/\..{1,3}$/, '')
-		end
-		file_list = nil
+	file_list = Dir.entries($script_dir).delete_if { |fn| (fn == '.') or (fn == '..') }.sort
+	if file_name = (file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ || val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?i:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i })
+		script_name = file_name.sub(/\..{1,3}$/, '')
 	end
+	file_list = nil
 	if file_name.nil?
 		respond "--- Lich: could not find script '#{script_name}' in directory #{$script_dir}"
 		next nil
