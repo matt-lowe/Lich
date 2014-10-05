@@ -9,9 +9,13 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.11
+	     version: 2.12
 
 	Changelog:
+		2.12 (2014-10-05):
+			alias --sort=date to --sort=age
+			improve error reporting for bad commands and options
+			add options to show/hide columns in list
 		2.11 (2014-10-02):
 			look in data directory when uploading xml files
 		2.10 (2014-10-01):
@@ -39,24 +43,31 @@ end
 require 'openssl'
 require 'digest/md5'
 
-hostname        = 'lichproject.org'
-port            = 7157
-ca_cert_data    = "-----BEGIN CERTIFICATE-----\nMIIDlTCCAn2gAwIBAgIJAKuu65i5NsruMA0GCSqGSIb3DQEBCwUAMGExCzAJBgNV\nBAYTAlVTMREwDwYDVQQIDAhJbGxpbm9pczESMBAGA1UECgwJTWF0dCBMb3dlMQ8w\nDQYDVQQDDAZSb290Q0ExGjAYBgkqhkiG9w0BCQEWC21hdHRAaW80LnVzMB4XDTE0\nMDYwNzE3NDUwMFoXDTI0MDYwNDE3NDUwMFowYTELMAkGA1UEBhMCVVMxETAPBgNV\nBAgMCElsbGlub2lzMRIwEAYDVQQKDAlNYXR0IExvd2UxDzANBgNVBAMMBlJvb3RD\nQTEaMBgGCSqGSIb3DQEJARYLbWF0dEBpbzQudXMwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQCcIRn0IMCNYeL5agKmkdedgJXsIyTJS8qKrY6EvQsq4tt0\nmO3Or9K8IaDl7qFdQ9nfSJ5phNgoCy9wZ9rDWv5FhY5MnnVHGr3fCa7RkMxJFR/N\nwiD4ihQlixOUly76glceyc/6QQS9bNe96evZDstERGAFfzgHY4qAlyurR6mBu9Mb\nyyCRok6xMRnjrbTMNkvvOsuG0sY9ot+SLHGgU3qT7+wVh/CbWcjeF7/Qwa//fbFk\nmq5c1FuvhU3DanSSz+VuWudPFSyZ3r5pYrLMJWsyomDa4gkL2bJ5jya2BWDMXvSS\nCpdQgPDIlClMfAFLd/Ss8ZIGa6uNFcSK6Xca51ClAgMBAAGjUDBOMB0GA1UdDgQW\nBBScbglRiGzz9yzuhgBwFYjgimeByDAfBgNVHSMEGDAWgBScbglRiGzz9yzuhgBw\nFYjgimeByDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA7MLZYfqam\n5aaSBqQpT6sOGDtVc9koIok59oTQmNXqe+awg2VUnAiesxtLd+FWGUMp8XzHdGWw\nH3O6kAUkPm/in001X7TRAhbgDujfTRbTzxND0XrjuEzDMALs3YpDM1pMXqC7RXWA\n7z+N0gRaUgmh1rMbk/qA3cAfC2dwf2j3NYy3bDw3lMpdyIwAfOQxiZVglYgX3dgT\nU9b//gsUyPCvlpL0mYcmhOOLt6oqQhMJaw1I6A9xMe2kO2L+8KPGK2u1B+P5/Sx0\nFE8LIp5KA3a7yRbOty19NsGR+yW7WwV7BL6c6GOKb/iKJBLYzTmNG6m16hRrxDGj\ntGu91I0ORptB\n-----END CERTIFICATE-----"
-cmd             = Array.new
-cmd_author      = nil
-cmd_password    = nil
-cmd_tags        = nil
-cmd_sort        = nil
-cmd_reverse     = nil
-cmd_limit       = nil
-cmd_force       = nil
-cmd_name        = nil
-cmd_game        = nil
-cmd_size        = nil
-cmd_downloads   = nil
-cmd_rating      = nil
-cmd_updated     = nil
-no_more_options = nil
+hostname           = 'lichproject.org'
+port               = 7157
+ca_cert_data       = "-----BEGIN CERTIFICATE-----\nMIIDlTCCAn2gAwIBAgIJAKuu65i5NsruMA0GCSqGSIb3DQEBCwUAMGExCzAJBgNV\nBAYTAlVTMREwDwYDVQQIDAhJbGxpbm9pczESMBAGA1UECgwJTWF0dCBMb3dlMQ8w\nDQYDVQQDDAZSb290Q0ExGjAYBgkqhkiG9w0BCQEWC21hdHRAaW80LnVzMB4XDTE0\nMDYwNzE3NDUwMFoXDTI0MDYwNDE3NDUwMFowYTELMAkGA1UEBhMCVVMxETAPBgNV\nBAgMCElsbGlub2lzMRIwEAYDVQQKDAlNYXR0IExvd2UxDzANBgNVBAMMBlJvb3RD\nQTEaMBgGCSqGSIb3DQEJARYLbWF0dEBpbzQudXMwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQCcIRn0IMCNYeL5agKmkdedgJXsIyTJS8qKrY6EvQsq4tt0\nmO3Or9K8IaDl7qFdQ9nfSJ5phNgoCy9wZ9rDWv5FhY5MnnVHGr3fCa7RkMxJFR/N\nwiD4ihQlixOUly76glceyc/6QQS9bNe96evZDstERGAFfzgHY4qAlyurR6mBu9Mb\nyyCRok6xMRnjrbTMNkvvOsuG0sY9ot+SLHGgU3qT7+wVh/CbWcjeF7/Qwa//fbFk\nmq5c1FuvhU3DanSSz+VuWudPFSyZ3r5pYrLMJWsyomDa4gkL2bJ5jya2BWDMXvSS\nCpdQgPDIlClMfAFLd/Ss8ZIGa6uNFcSK6Xca51ClAgMBAAGjUDBOMB0GA1UdDgQW\nBBScbglRiGzz9yzuhgBwFYjgimeByDAfBgNVHSMEGDAWgBScbglRiGzz9yzuhgBw\nFYjgimeByDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA7MLZYfqam\n5aaSBqQpT6sOGDtVc9koIok59oTQmNXqe+awg2VUnAiesxtLd+FWGUMp8XzHdGWw\nH3O6kAUkPm/in001X7TRAhbgDujfTRbTzxND0XrjuEzDMALs3YpDM1pMXqC7RXWA\n7z+N0gRaUgmh1rMbk/qA3cAfC2dwf2j3NYy3bDw3lMpdyIwAfOQxiZVglYgX3dgT\nU9b//gsUyPCvlpL0mYcmhOOLt6oqQhMJaw1I6A9xMe2kO2L+8KPGK2u1B+P5/Sx0\nFE8LIp5KA3a7yRbOty19NsGR+yW7WwV7BL6c6GOKb/iKJBLYzTmNG6m16hRrxDGj\ntGu91I0ORptB\n-----END CERTIFICATE-----"
+cmd                = Array.new
+cmd_author         = nil
+cmd_password       = nil
+cmd_tags           = nil
+cmd_show_tags      = nil
+cmd_sort           = nil
+cmd_reverse        = nil
+cmd_limit          = nil
+cmd_force          = nil
+cmd_name           = nil
+cmd_game           = nil
+cmd_size           = nil
+cmd_downloads      = nil
+cmd_rating         = nil
+cmd_updated        = nil
+no_more_options    = nil
+cmd_show_tags      = nil
+cmd_hide_age       = nil
+cmd_hide_size      = nil
+cmd_hide_author    = nil
+cmd_hide_downloads = nil
+cmd_hide_rating    = nil
 
 for var in script.vars[1..-1]
 	if no_more_options
@@ -64,58 +75,125 @@ for var in script.vars[1..-1]
 	elsif var == '--'
 		no_more_options = true
 	elsif var =~ /^--/
-		if var =~ /^--author\s*=\s*(.+)/i
-			cmd_author = $1
-		elsif var =~ /^--password\s*=\s*(.+)/i
-			cmd_password = $1
-		elsif var =~ /^--sort\s*=\s*(.+)/i
-			cmd_sort = $1
+		if var =~ /^--author/i
+			if var =~ /^--author\s*=\s*(.+)/i
+				cmd_author = $1
+			else
+				echo 'error: --author option not complete; e.g. --author=Bob'
+				exit
+			end
+		elsif var =~ /^--password/i
+			if var =~ /^--password\s*=\s*(.+)/i
+				cmd_password = $1
+			else
+				echo 'error: --password option not complete; e.g. --password=12345'
+				exit
+			end
+		elsif var =~ /^--sort/i
+			if var =~ /^--sort\s*=\s*(.+)/i
+				cmd_sort = $1
+			else
+				echo 'error: --sort option not complete; e.g. --sort=age'
+				exit
+			end
 		elsif var =~ /^--reverse$/i
 			cmd_reverse = true
-		elsif var =~ /^--limit\s*=\s*(.+)/i
-			cmd_limit = $1
+		elsif var =~ /^--limit/i
+			if var =~ /^--limit\s*=\s*(.+)/i
+				cmd_limit = $1
+			else
+				echo 'error: --limit option not complete; e.g. --limit=10'
+				exit
+			end
 		elsif var =~ /^--force$/i
 			cmd_force = true
-		elsif var =~ /^--game\s*=\s*(.+)/i
-			cmd_game = $1
-		elsif var =~ /^--name\s*=\s*(.+)/i
-			cmd_name ||= Array.new
-			cmd_name.push($1)
-		elsif var =~ /^--tags?\s*=\s*(.+)/i
-			cmd_tags ||= Array.new
-			cmd_tags.push($1)
-		elsif var =~ /^--size\s*(>|<|=)\s*([0-9\.]+)(k|m|g)?b?/i
-			cmd_size ||= Array.new
-			if $3 == 'g'
-				cmd_size.push [ $1, ($2.to_f*1073741824).to_i ]
-			elsif $3 == 'm'
-				cmd_size.push [ $1, ($2.to_f*1048576).to_i ]
-			elsif $3 == 'k'
-				cmd_size.push [ $1, ($2.to_f*1024).to_i ]
+		elsif var =~ /^--game/i
+			if var =~ /^--game\s*=\s*(.+)/i
+				cmd_game = $1
 			else
-				cmd_size.push [ $1, $2.to_i ]
+				echo 'error: --game option not complete; e.g. --game=gs'
+				exit
 			end
-		elsif var =~ /^--age\s*(>|<)\s*([0-9\.]+)(m|h|d|w|y)?$/i
-			cmd_age ||= Array.new
-			if $3 == 'y'
-				cmd_age.push [ $1, ($2.to_f*60*60*24*365).to_i ]
-			elsif $3 == 'w'
-				cmd_age.push [ $1, ($2.to_f*60*60*24*7).to_i ]
-			elsif $3 == 'd'
-				cmd_age.push [ $1, ($2.to_f*60*60*24).to_i ]
-			elsif $3 == 'h'
-				cmd_age.push [ $1, ($2.to_f*60*60).to_i ]
-			elsif $3 == 'm'
-				cmd_age.push [ $1, ($2.to_f*60).to_i ]
+		elsif var =~ /^--name/i
+			if var =~ /^--name\s*=\s*(.+)/i
+				cmd_name ||= Array.new
+				cmd_name.push($1)
 			else
-				cmd_age.push [ $1, $2.to_i ]
+				echo 'error: --name option not complete; e.g. --name=loot'
+				exit
 			end
-		elsif var =~ /^--downloads?\s*(>|<|=)\s*([0-9]+)/i
-			cmd_downloads ||= Array.new
-			cmd_downloads.push [ $1, $2.to_i ]
-		elsif var =~ /^--rating\s*(>|<|=)\s*([0-9\.]+)/i
-			cmd_rating ||= Array.new
-			cmd_rating.push [ $1, $2.to_f ]
+		elsif var =~ /^--show-?tags$/i
+			cmd_show_tags = true
+		elsif var =~ /^--hide-?(?:age|date|updated|last-update)$/i
+			cmd_hide_age = true
+		elsif var =~ /^--hide-?size$/i
+			cmd_hide_size = true
+		elsif var =~ /^--hide-?author$/i
+			cmd_hide_author = true
+		elsif var =~ /^--hide-?downloads?$/i
+			cmd_hide_downloads = true
+		elsif var =~ /^--hide-?rating$/i
+			cmd_hide_rating = true
+		elsif var =~ /^--tags/i
+			if var =~ /^--tags?\s*=\s*(.+)/i
+				cmd_tags ||= Array.new
+				cmd_tags.push($1)
+			else
+				echo 'error: --tags option not complete; e.g. --tags=core'
+				exit
+			end
+		elsif var =~ /^--size/i
+			if var =~ /^--size\s*(>|<|=)\s*([0-9\.]+)(k|m|g)?b?/i
+				cmd_size ||= Array.new
+				if $3 == 'g'
+					cmd_size.push [ $1, ($2.to_f*1073741824).to_i ]
+				elsif $3 == 'm'
+					cmd_size.push [ $1, ($2.to_f*1048576).to_i ]
+				elsif $3 == 'k'
+					cmd_size.push [ $1, ($2.to_f*1024).to_i ]
+				else
+					cmd_size.push [ $1, $2.to_i ]
+				end
+			else
+				echo 'error: --size option not complete; e.g. --size>15k'
+				exit
+			end
+		elsif var =~ /^--age/i
+			if var =~ /^--age\s*(>|<)\s*([0-9\.]+)(m|h|d|w|y)?$/i
+				cmd_age ||= Array.new
+				if $3 == 'y'
+					cmd_age.push [ $1, ($2.to_f*60*60*24*365).to_i ]
+				elsif $3 == 'w'
+					cmd_age.push [ $1, ($2.to_f*60*60*24*7).to_i ]
+				elsif $3 == 'd'
+					cmd_age.push [ $1, ($2.to_f*60*60*24).to_i ]
+				elsif $3 == 'h'
+					cmd_age.push [ $1, ($2.to_f*60*60).to_i ]
+				elsif $3 == 'm'
+					cmd_age.push [ $1, ($2.to_f*60).to_i ]
+				else
+					cmd_age.push [ $1, $2.to_i ]
+				end
+			else
+				echo 'error: --age option not complete; e.g. --age<24h'
+				exit
+			end
+		elsif var =~ /^--downloads/i
+			if var =~ /^--downloads?\s*(>|<|=)\s*([0-9]+)/i
+				cmd_downloads ||= Array.new
+				cmd_downloads.push [ $1, $2.to_i ]
+			else
+				echo 'error: --downloads option not complete; e.g. --downloads>50'
+				exit
+			end
+		elsif var =~ /^--rating/i
+			if var =~ /^--rating\s*(>|<|=)\s*([0-9\.]+)/i
+				cmd_rating ||= Array.new
+				cmd_rating.push [ $1, $2.to_f ]
+			else
+				echo 'error: --rating option not complete; e.g. --rating>8.5'
+				exit
+			end
 		else
 			echo "error: unknown option: #{var}"
 			exit
@@ -398,7 +476,7 @@ format_list = proc { |list|
 	if cmd_sort
 		if cmd_sort == 'name'
 			cmd_sort = 'file'
-		elsif cmd_sort =~ /^(?:last\-?)?updated?$|^age$/
+		elsif cmd_sort =~ /^(?:last\-?)?updated?$|^age$|^date$/
 			cmd_sort = 'last update'
 		end
 		if i = headers.index(cmd_sort)
@@ -435,15 +513,40 @@ format_list = proc { |list|
 			list.each { |r| r.delete_at(c) }
 		end
 	end
-	if (ti = headers.index('tags'))
-		list.each_index { |ri|
-			if list[ri][ti].length > 15
-				list[ri][ti] = "#{list[ri][ti][0,14]}>"
-			end
-		}
-	end
 	if (di = headers.index('downloads'))
 		headers[di] = 'DLs'
+	end
+	if cmd_tags.nil? and not cmd_show_tags and (ti = headers.index('tags'))
+		list.each_index { |ri| list[ri].delete_at(ti) }
+		headers.delete_at(ti)
+	else
+		if (ti = headers.index('tags'))
+			list.each_index { |ri|
+				if list[ri][ti].length > 20
+					list[ri][ti] = "#{list[ri][ti][0,19]}>"
+				end
+			}
+		end
+	end
+	if cmd_hide_rating and (i = headers.index('rating'))
+		list.each_index { |ri| list[ri].delete_at(i) }
+		headers.delete_at(i)
+	end
+	if cmd_hide_downloads and (di = headers.index('DLs'))
+		list.each_index { |ri| list[ri].delete_at(di) }
+		headers.delete_at(di)
+	end
+	if cmd_hide_author and (ai = headers.index('author'))
+		list.each_index { |ri| list[ri].delete_at(ai) }
+		headers.delete_at(ai)
+	end
+	if cmd_hide_size and (si = headers.index('size'))
+		list.each_index { |ri| list[ri].delete_at(si) }
+		headers.delete_at(si)
+	end
+	if cmd_hide_age and (lui = headers.index('last update'))
+		list.each_index { |ri| list[ri].delete_at(lui) }
+		headers.delete_at(lui)
 	end
 	list.unshift headers
 	column_width = Array.new
@@ -460,9 +563,16 @@ format_list = proc { |list|
 			list = list[0,(cmd_limit.to_i)]
 		end
 	end
+	ti = headers.index('tags') || -1
 	list.unshift column_width.collect { |c| ''.rjust(c, '-') }
 	list.unshift headers
-	list.each { |row| row.each_index { |i| row[i] = row[i].rjust(column_width[i]) } }
+	list.each { |row| row.each_index { |i|
+		if i == ti
+			row[i] = row[i].ljust(column_width[i])
+		else
+			row[i] = row[i].rjust(column_width[i])
+		end
+	} }
 	list.collect { |row| row.join('   ') }.join("\n")
 }
 
@@ -739,12 +849,20 @@ download_file = proc { |file,game|
 # list
 #
 if cmd[0] =~ /^list$/i
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	respond "\n#{format_list.call(filter_list.call(get_list.call))}\n\n"
 
 #
 # list-updates
 #
 elsif cmd[0] =~ /^list-?update[sd]$/i
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless (lui = headers.index('last update')) and (fi = headers.index('file'))
@@ -766,6 +884,10 @@ elsif cmd[0] =~ /^list-?update[sd]$/i
 # list-new
 #
 elsif cmd[0] =~ /^list-?new$/i
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless (fi = headers.index('file'))
@@ -787,6 +909,10 @@ elsif cmd[0] =~ /^list-?new$/i
 # list-tags
 #
 elsif cmd[0] =~ /^list-?tags?$/i
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless ti = headers.index('tags')
@@ -805,7 +931,15 @@ elsif cmd[0] =~ /^list-?tags?$/i
 #
 # info
 #
-elsif (cmd[0] =~ /^info$/i) and cmd[1]
+elsif (cmd[0] =~ /^info$/i)
+	unless cmd[1]
+		echo 'error: missing script name on command line'
+		exit
+	end
+	if cmd[2]
+		echo "error: extra words on command line: #{cmd[2..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless (fi = headers.index('file')) and (gi = headers.index('game'))
@@ -850,7 +984,15 @@ elsif (cmd[0] =~ /^info$/i) and cmd[1]
 #
 # download
 #
-elsif (cmd[0] =~ /^download$/i) and cmd[1]
+elsif (cmd[0] =~ /^download$/i)
+	unless cmd[1]
+		echo 'error: missing script name on command line'
+		exit
+	end
+	if cmd[2]
+		echo "error: extra words on command line: #{cmd[2..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless (fi = headers.index('file')) and (gi = headers.index('game'))
@@ -881,6 +1023,10 @@ elsif (cmd[0] =~ /^download$/i) and cmd[1]
 # download-updates
 #
 elsif (cmd[0] =~ /^download-?update[ds]$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	if Settings['updatable'].nil?
 		echo "error: download-updates has not been set up; look for set-updatable and unset-updatable commands in ;#{script.name} help"
 		exit
@@ -936,6 +1082,10 @@ elsif (cmd[0] =~ /^download-?update[ds]$/i)
 # settings for download-updates
 #
 elsif (cmd[0] =~ /^show-?updat(?:e|able)$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	Settings['updatable'] ||= Hash.new
 	Settings['updatable'][:scripts] ||= Array.new
 	Settings['updatable'][:mapdb] ||= Hash.new
@@ -949,7 +1099,15 @@ elsif (cmd[0] =~ /^show-?updat(?:e|able)$/i)
 	end
 	output.concat "\n"
 	respond output
-elsif (cmd[0] =~ /^set-?updat(?:e|able)$/i) and cmd[1]
+elsif (cmd[0] =~ /^set-?updat(?:e|able)$/i)
+	unless cmd[1]
+		echo 'error: missing script name on command line'
+		exit
+	end
+	if cmd[2]
+		echo "error: extra words on command line: #{cmd[2..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless (fi = headers.index('file')) and (gi = headers.index('game')) and (ai = headers.index('author'))
@@ -978,7 +1136,15 @@ elsif (cmd[0] =~ /^set-?updat(?:e|able)$/i) and cmd[1]
 			echo "the download-updates command will download #{info[:filename]} when there's and update"
 		end
 	end
-elsif (cmd[0] =~ /^unset-?updat(?:e|able)$/i) and cmd[1]
+elsif (cmd[0] =~ /^unset-?updat(?:e|able)$/i)
+	unless cmd[1]
+		echo 'error: missing script name on command line'
+		exit
+	end
+	if cmd[2]
+		echo "error: extra words on command line: #{cmd[2..-1].join(' ')}"
+		exit
+	end
 	Settings['updatable'] ||= Hash.new
 	Settings['updatable'][:scripts] ||= Array.new
 	if info = (Settings['updatable'][:scripts].find { |i| i[:filename] == cmd[1] } || Settings['updatable'][:scripts].find { |i| i[:filename] =~ /^#{cmd[1]}/i })
@@ -988,19 +1154,35 @@ elsif (cmd[0] =~ /^unset-?updat(?:e|able)$/i) and cmd[1]
 		echo "could not find #{cmd[1]} in the updatable list"
 	end
 elsif (cmd[0] =~ /^set-?lich-?updat(?:e|able)$|^set-?updat(?:e|able)-?lich$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	Settings['updatable'] ||= Hash.new
 	Settings['updatable'][:lich] = true
 	echo "the download-updates command will download Lich when there's an update"
 elsif (cmd[0] =~ /^unset-?lich-?updat(?:e|able)$|^unset-?updat(?:e|able)-?lich$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	Settings['updatable'] ||= Hash.new
 	Settings['updatable'][:lich] = false
 	echo 'the download-updates command will ignore updates for Lich'
 elsif (cmd[0] =~ /^set-?map(?:db)?-?updat(?:e|able)$|^set-?updat(?:e|able)-?map(?:db)?$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	Settings['updatable'] ||= Hash.new
 	Settings['updatable'][:mapdb] ||= Hash.new
 	Settings['updatable'][:mapdb][XMLData.game] = true
 	echo "the download-updates command will download the #{XMLData.game} map database when there's an update"
 elsif (cmd[0] =~ /^unset-?map(?:db)?-?updat(?:e|able)$|^unset-?updat(?:e|able)-?map(?:db)?$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	Settings['updatable'] ||= Hash.new
 	Settings['updatable'][:mapdb] ||= Hash.new
 	Settings['updatable'][:mapdb][XMLData.game] = false
@@ -1010,7 +1192,15 @@ elsif (cmd[0] =~ /^unset-?map(?:db)?-?updat(?:e|able)$|^unset-?updat(?:e|able)-?
 #
 # upload
 #
-elsif (cmd[0] =~ /^upload$/i) and cmd[1]
+elsif (cmd[0] =~ /^upload$/i)
+	unless cmd[1]
+		echo 'error: missing script name on command line'
+		exit
+	end
+	if cmd[2]
+		echo "error: extra words on command line: #{cmd[2..-1].join(' ')}"
+		exit
+	end
 	if File.exists?("#{$script_dir}#{cmd[1]}")
 		file = cmd[1]
 		filename = "#{$script_dir}#{cmd[1]}"
@@ -1093,7 +1283,15 @@ elsif (cmd[0] =~ /^upload$/i) and cmd[1]
 #
 # delete
 #
-elsif (cmd[0] =~ /^delete$/i) and cmd[1]
+elsif (cmd[0] =~ /^delete$/i)
+	unless cmd[1]
+		echo 'error: missing script name on command line'
+		exit
+	end
+	if cmd[2]
+		echo "error: extra words on command line: #{cmd[2..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless (fi = headers.index('file')) and (gi = headers.index('game')) and (ai = headers.index('author'))
@@ -1147,7 +1345,23 @@ elsif (cmd[0] =~ /^delete$/i) and cmd[1]
 #
 # rate
 #
-elsif (cmd[0] =~ /^rate$/i) and cmd[1] and (cmd[2] =~ /^(?:[1-9]|10)$/)
+elsif (cmd[0] =~ /^rate$/i)
+	unless cmd[1]
+		echo 'error: missing script name on command line'
+		exit
+	end
+	unless cmd[2]
+		echo 'error: missing rating on command line'
+		exit
+	end
+	unless cmd[2] =~ /^(?:[1-9]|10)$/
+		echo 'error: rating needs to be 1-10'
+		exit
+	end
+	if cmd[3]
+		echo "error: extra words on command line: #{cmd[3..-1].join(' ')}"
+		exit
+	end
 	list = filter_list.call(get_list.call)
 	headers = list.shift
 	unless (fi = headers.index('file')) and (gi = headers.index('game'))
@@ -1189,7 +1403,15 @@ elsif (cmd[0] =~ /^rate$/i) and cmd[1] and (cmd[2] =~ /^(?:[1-9]|10)$/)
 #
 # change password
 #
-elsif cmd[0] =~ /^(?:new|change)-?password$/i and cmd[1]
+elsif cmd[0] =~ /^(?:new|change)-?password$/i
+	unless cmd[1]
+		echo 'error: missing new password on command line'
+		exit
+	end
+	if cmd[2]
+		echo "error: extra words on command line: #{cmd[2..-1].join(' ')}"
+		exit
+	end
 	author = (cmd_author || Char.name)
 	password = (cmd_password || Settings["password:#{author.downcase.gsub(/[^a-z]/, '')}"])
 	if password.nil?
@@ -1217,6 +1439,10 @@ elsif cmd[0] =~ /^(?:new|change)-?password$/i and cmd[1]
 # checkout-mapdb
 #
 elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	if XMLData.game =~ /^GSF$|^GSPlat$|^GSIV$|^DR$|^DRX$|^DRPlat$/i
 		game = XMLData.game.downcase
 	else
@@ -1254,6 +1480,10 @@ elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
 # relase-mapdb
 #
 elsif (cmd[0] =~ /^release-?map(?:db)?$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	author = (cmd_author || Char.name)
 	password = (cmd_password || Settings["password:#{author.downcase.gsub(/[^a-z]/, '')}"])
 	if password.nil?
@@ -1285,6 +1515,14 @@ elsif (cmd[0] =~ /^release-?map(?:db)?$/i)
 # approve-mapdb
 #
 elsif (cmd[0] =~ /^approve-?map(?:db)?$/i)
+	unless cmd[1] and cmd[2]
+		echo 'error: missing game and timestamp on command line'
+		exit
+	end
+	if cmd[3]
+		echo "error: extra words on command line: #{cmd[3..-1].join(' ')}"
+		exit
+	end
 	author = (cmd_author || Char.name)
 	password = (cmd_password || Settings["password:#{author.downcase.gsub(/[^a-z]/, '')}"])
 	unless (game = cmd[1]) and (timestamp = cmd[2])
@@ -1320,6 +1558,10 @@ elsif (cmd[0] =~ /^approve-?map(?:db)?$/i)
 # upload-mapdb
 #
 elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	if XMLData.game =~ /^GSF$|^GSPlat$|^GSIV$|^DR$|^DRX$|^DRPlat$/i
 		game = XMLData.game.downcase
 	else
@@ -1452,6 +1694,10 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 # download-mapdb
 #
 elsif (cmd[0] =~ /^download-?map(?:db)?$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	download_mapdb.call
 	
 
@@ -1459,6 +1705,10 @@ elsif (cmd[0] =~ /^download-?map(?:db)?$/i)
 # upload-lich
 #
 elsif (cmd[0] =~ /^upload-?lich$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	filename = "#{$lich_dir}#{File.basename($PROGRAM_NAME)}"
 	unless File.exists?(filename)
 		echo "error: file not found: #{filename}"
@@ -1514,6 +1764,10 @@ elsif (cmd[0] =~ /^upload-?lich$/i)
 # download-lich
 #
 elsif (cmd[0] =~ /^download-?lich$/i)
+	if cmd[1]
+		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
+		exit
+	end
 	download_lich.call
 
 
@@ -1582,6 +1836,13 @@ elsif cmd[0] =~ /^help$/i
 		output.concat "   --rating=NUMBER           only list files with a rating equal to NUMBER\n"
 		output.concat "   --tags=TEXT[,TEXT]        only list files with the specified tags\n"
 		output.concat "   --force                   ignore md5sum checks and script requirements\n"
+   		output.concat "\n"
+		output.concat "   --show-tags               show tags in the list\n"
+		output.concat "   --hide-last-update        hide last update in the list\n"
+		output.concat "   --hide-size               hide file size in the list\n"
+		output.concat "   --hide-author             hide author in the list\n"
+		output.concat "   --hide-downloads          hide downloads in the list\n"
+		output.concat "   --hide-rating             hide rating in the list\n"
    		output.concat "\n"
 		respond output
 
