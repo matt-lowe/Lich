@@ -9,11 +9,19 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.13
+	     version: 2.15
 
 	Changelog:
+		2.15 (2014-10-07):
+			don't look in data directory for xml files on Lich 4.4
+		2.14 (2014-10-07):
+			fix Invalid cross-device link error (when temp directory is on a different disk)
 		2.13 (2014-10-05):
 			automatically download-mapdb after checkout-mapdb
+
+=end
+=begin
+
 		2.12 (2014-10-05):
 			alias --sort=date to --sort=age
 			improve error reporting for bad commands and options
@@ -620,7 +628,16 @@ download_lich = proc {
 								data = nil
 							}
 						}
-						File.rename(ungzipname, tempfilename)
+						begin
+							File.rename(ungzipname, tempfilename)
+						rescue
+							if $!.to_s =~ /Invalid cross-device link/
+								File.open(ungzipname, 'rb') { |r| File.open(tempfilename, 'wb') { |w| w.write(r.read) } }
+								File.delete(ungzipname)
+							else
+								raise $!
+							end
+						end
 					end
 					md5sum_mismatch = (Digest::MD5.file(tempfilename).to_s != response['md5sum'])
 					if md5sum_mismatch and not cmd_force
@@ -631,8 +648,26 @@ download_lich = proc {
 							echo "warning: md5sum mismatch: file likely corrupted in transit"
 						end
 						if defined?(Win32)
-							File.rename(filename, backupfilename)
-							File.rename(tempfilename, filename)
+							begin
+								File.rename(filename, backupfilename)
+							rescue
+								if $!.to_s =~ /Invalid cross-device link/
+									File.open(filename, 'rb') { |r| File.open(backupfilename, 'wb') { |w| w.write(r.read) } }
+									File.delete(filename)
+								else
+									raise $!
+								end
+							end
+							begin
+								File.rename(tempfilename, filename)
+							rescue
+								if $!.to_s =~ /Invalid cross-device link/
+									File.open(tempfilename, 'rb') { |r| File.open(filename, 'wb') { |w| w.write(r.read) } }
+									File.delete(tempfilename)
+								else
+									raise $!
+								end
+							end
 						else
 							# perserves file mode, which might be suid and we can't set that here
 							File.open(filename, 'rb') { |r| File.open(backupfilename, 'wb') { |w| w.write(r.read) } }
@@ -704,7 +739,16 @@ download_mapdb = proc {
 						data = nil
 					}
 				}
-				File.rename(ungzipname, tempfilename)
+				begin
+					File.rename(ungzipname, tempfilename)
+				rescue
+					if $!.to_s =~ /Invalid cross-device link/
+						File.open(ungzipname, 'rb') { |r| File.open(tempfilename, 'wb') { |w| w.write(r.read) } }
+						File.delete(ungzipname)
+					else
+						raise $!
+					end
+				end
 			end
 			md5sum_mismatch = (Digest::MD5.file(tempfilename).to_s != response['md5sum'])
 			if md5sum_mismatch and not cmd_force
@@ -714,7 +758,16 @@ download_mapdb = proc {
 				if md5sum_mismatch
 					echo "warning: md5sum mismatch: file likely corrupted in transit"
 				end
-				File.rename(tempfilename, newfilename)
+				begin
+					File.rename(tempfilename, newfilename)
+				rescue
+					if $!.to_s =~ /Invalid cross-device link/
+						File.open(tempfilename, 'rb') { |r| File.open(newfilename, 'wb') { |w| w.write(r.read) } }
+						File.delete(tempfilename)
+					else
+						raise $!
+					end
+				end
 				failed = false
 			end
 		end
@@ -726,7 +779,16 @@ download_mapdb = proc {
 		# rename map files with a higher timestamp than the just downloaded map, because the user probably wants to use the map they just downloaded
 		Dir.entries("#{$data_dir}#{XMLData.game}").each { |fn|
 			if (fn =~ /^map\-([0-9]+)\.(?:dat|xml)$/) and ($1.to_i > response['timestamp'].to_i)
-				File.rename("#{$data_dir}#{XMLData.game}/#{fn}", "#{$data_dir}#{XMLData.game}/#{fn}.bak")
+				begin
+					File.rename("#{$data_dir}#{XMLData.game}/#{fn}", "#{$data_dir}#{XMLData.game}/#{fn}.bak")
+				rescue
+					if $!.to_s =~ /Invalid cross-device link/
+						File.open("#{$data_dir}#{XMLData.game}/#{fn}", 'rb') { |r| File.open("#{$data_dir}#{XMLData.game}/#{fn}.bak", 'wb') { |w| w.write(r.read) } }
+						File.delete("#{$data_dir}#{XMLData.game}/#{fn}")
+					else
+						raise $!
+					end
+				end
 			end
 		}
 		echo 'loading map database...'
@@ -766,7 +828,16 @@ download_mapdb = proc {
 						if md5sum_mismatch
 							echo "warning: md5sum mismatch: file likely corrupted in transit"
 						end
-						File.rename(tempfilename, "#{$lich_dir}maps/#{response['file']}")
+						begin
+							File.rename(tempfilename, "#{$lich_dir}maps/#{response['file']}")
+						rescue
+							if $!.to_s =~ /Invalid cross-device link/
+								File.open(tempfilename, 'rb') { |r| File.open("#{$lich_dir}maps/#{response['file']}", 'wb') { |w| w.write(r.read) } }
+								File.delete(tempfilename)
+							else
+								raise $!
+							end
+						end
 					end
 				}
 			ensure
@@ -794,7 +865,7 @@ download_file = proc { |file,game|
 			false
 		else
 			response['size'] = response['size'].to_i
-			if file =~ /\.xml$/i
+			if (file =~ /\.xml$/i) and (LICH_VERSION.split('.').collect { |num| num.rjust(5, '0') }.join('.') >= '00004.00006.00000')
 				newfilename = "#{$data_dir}#{file}"
 			else
 				newfilename = "#{$script_dir}#{file}"
@@ -814,7 +885,16 @@ download_file = proc { |file,game|
 						data = nil
 					}
 				}
-				File.rename(ungzipname, tempfilename)
+				begin
+					File.rename(ungzipname, tempfilename)
+				rescue
+					if $!.to_s =~ /Invalid cross-device link/
+						File.open(ungzipname, 'rb') { |r| File.open(tempfilename, 'wb') { |w| w.write(r.read) } }
+						File.delete(ungzipname)
+					else
+						raise $!
+					end
+				end
 			end
 			md5sum_mismatch = (Digest::MD5.file(tempfilename).to_s != response['md5sum'])
 			if md5sum_mismatch and not cmd_force
@@ -834,7 +914,16 @@ download_file = proc { |file,game|
 					if failed_requirement
 						echo "warning: #{file} requires Lich version #{failed_requirement}; your current Lich version is #{LICH_VERSION}"
 					end
-					File.rename(tempfilename, newfilename)
+					begin
+						File.rename(tempfilename, newfilename)
+					rescue
+						if $!.to_s =~ /Invalid cross-device link/
+							File.open(tempfilename, 'rb') { |r| File.open(newfilename, 'wb') { |w| w.write(r.read) } }
+							File.delete(tempfilename)
+						else
+							raise $!
+						end
+					end
 					true
 				end
 			end
@@ -897,7 +986,7 @@ elsif cmd[0] =~ /^list-?new$/i
 		exit
 	end
 	list.delete_if { |row|
-		if row[fi] =~ /\.xml$/i
+		if (row[fi] =~ /\.xml$/i) and (LICH_VERSION.split('.').collect { |num| num.rjust(5, '0') }.join('.') >= '00004.00006.00000')
 			File.exists?("#{$data_dir}#{row[fi]}")
 		else
 			File.exists?("#{$script_dir}#{row[fi]}")
@@ -1209,7 +1298,7 @@ elsif (cmd[0] =~ /^upload$/i)
 	elsif File.exists?("#{$script_dir}#{cmd[1]}.lic")
 		file = "#{cmd[1]}.lic"
 		filename = "#{$script_dir}#{cmd[1]}.lic"
-	elsif (cmd[1] =~ /\.xml$/i) and File.exists?("#{$data_dir}#{cmd[1]}")
+	elsif (cmd[1] =~ /\.xml$/i) and (LICH_VERSION.split('.').collect { |num| num.rjust(5, '0') }.join('.') >= '00004.00006.00000') and File.exists?("#{$data_dir}#{cmd[1]}")
 		file = "#{cmd[1]}"
 		filename = "#{$data_dir}#{cmd[1]}"
 	else
