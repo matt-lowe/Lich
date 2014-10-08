@@ -2,12 +2,19 @@
 
 	movement script based on Shaelun's goto.lic
 	attempts to find the shortest route between any two rooms in the game
-	requires map.dat (use updater.lic to get it)
+	requires a map database (;repository download-mapdb)
+
+	;go2 help
 
 	         author: Tillmen (tillmen@lichproject.org)
 	original author: Shaelun
 	           game: any
 	           tags: core, movement
+			version: 1.1
+
+	changelog:
+		1.1 (2014-10-07):
+			only automatically reduce typeahead setting if there's a typeahead message in the buffer
 
 =end
 
@@ -784,9 +791,11 @@ loop {
 					break if ($room_count >= moves_sent)
 					sleep 0.05
 				}
-				unless $room_count >= moves_sent
-					echo 'reducing typeahead setting...'
-					setting_typeahead -= 1
+				unless ($room_count >= moves_sent)
+					if $_SERVERBUFFER_.any? { |line| line =~ /Sorry, you may only type ahead/ }
+						echo 'reducing typeahead setting...'
+						setting_typeahead -= 1
+					end
 					$go2_restart = true
 					break
 				end
@@ -816,13 +825,17 @@ loop {
 			end
 		else
 			if setting_typeahead > 0
-				50.times {
-					break if (($room_count + setting_typeahead) >= moves_sent)
-					sleep 0.05
+				time = Time.now + 3
+				moves = moves_sent - setting_typeahead
+				loop {
+					break if ($room_count >= moves) or (Time.now > time)
+					get? or sleep 0.005
 				}
 				unless ($room_count + setting_typeahead) >= moves_sent
-					echo 'reducing typeahead setting...'
-					setting_typeahead -= 1
+					if $_SERVERBUFFER_.any? { |line| line =~ /Sorry, you may only type ahead/ }
+						echo 'reducing typeahead setting...'
+						setting_typeahead -= 1
+					end
 					$go2_restart = true
 					break
 				end
