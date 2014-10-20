@@ -512,7 +512,7 @@
       <cost type='mana'>5</cost>
    </spell>
    <spell availability='all' name='Haste' number='506' type='utility'>
-      <duration>d = 60; r = 0; s = 3; d += 2 while (Skills.elair &gt;= (r += (s += 1))); d/60.0</duration>
+      <duration>((((2*(Skills.elair+6)+0.25)**0.5 - 3.5).floor*2)+60)/60.0</duration>
       <cost type='mana'>6</cost>
       <message type='start'>You begin to notice the world slow down around you\.  Strange\.</message>
       <message type='end'>You notice that things have returned to their normal speed\.</message>
