@@ -10,9 +10,11 @@
 	original author: Shaelun
 	           game: any
 	           tags: core, movement
-			version: 1.1
+			version: 1.2
 
 	changelog:
+		1.2 (2014-10-16):
+			don't use typeaheads for first move: makes it easier to find problems
 		1.1 (2014-10-07):
 			only automatically reduce typeahead setting if there's a typeahead message in the buffer
 
@@ -641,15 +643,17 @@ if start_room.id == destination.id
 	exit
 end
 
-start_time = nil
-error_count = 0
+start_time   = nil
+error_count  = 0
 $go2_restart = false
+first_move   = true
 
 loop {
 
 	moves_sent = $room_count
 
 	if $go2_restart
+		first_move = true
 		break if Room.current.id == destination.id
 		echo 'restarting script...'
 		if error_count > 1
@@ -824,7 +828,7 @@ loop {
 				end
 			end
 		else
-			if setting_typeahead > 0
+			if (setting_typeahead > 0) and not first_move
 				time = Time.now + 3
 				moves = moves_sent - setting_typeahead
 				loop {
@@ -842,6 +846,7 @@ loop {
 				put room.wayto[next_id]
 				moves_sent += 1
 			else
+				first_move = false
 				result = move room.wayto[next_id]
 				if result
 					if $fix_map_db
