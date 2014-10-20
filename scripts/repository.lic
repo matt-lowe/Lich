@@ -9,19 +9,23 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.15
+	     version: 2.17
 
 	Changelog:
+		2.17 (2014-10-12):
+			started on gui
+		2.16 (2014-10-12):
+			delete old map databases after downloading a new one
 		2.15 (2014-10-07):
 			don't look in data directory for xml files on Lich 4.4
 		2.14 (2014-10-07):
 			fix Invalid cross-device link error (when temp directory is on a different disk)
-		2.13 (2014-10-05):
-			automatically download-mapdb after checkout-mapdb
 
 =end
 =begin
 
+		2.13 (2014-10-05):
+			automatically download-mapdb after checkout-mapdb
 		2.12 (2014-10-05):
 			alias --sort=date to --sort=age
 			improve error reporting for bad commands and options
@@ -67,10 +71,10 @@ cmd_limit          = nil
 cmd_force          = nil
 cmd_name           = nil
 cmd_game           = nil
+cmd_age            = nil
 cmd_size           = nil
 cmd_downloads      = nil
 cmd_rating         = nil
-cmd_updated        = nil
 no_more_options    = nil
 cmd_show_tags      = nil
 cmd_hide_age       = nil
@@ -78,140 +82,6 @@ cmd_hide_size      = nil
 cmd_hide_author    = nil
 cmd_hide_downloads = nil
 cmd_hide_rating    = nil
-
-for var in script.vars[1..-1]
-	if no_more_options
-		cmd.push(var)
-	elsif var == '--'
-		no_more_options = true
-	elsif var =~ /^--/
-		if var =~ /^--author/i
-			if var =~ /^--author\s*=\s*(.+)/i
-				cmd_author = $1
-			else
-				echo 'error: --author option not complete; e.g. --author=Bob'
-				exit
-			end
-		elsif var =~ /^--password/i
-			if var =~ /^--password\s*=\s*(.+)/i
-				cmd_password = $1
-			else
-				echo 'error: --password option not complete; e.g. --password=12345'
-				exit
-			end
-		elsif var =~ /^--sort/i
-			if var =~ /^--sort\s*=\s*(.+)/i
-				cmd_sort = $1
-			else
-				echo 'error: --sort option not complete; e.g. --sort=age'
-				exit
-			end
-		elsif var =~ /^--reverse$/i
-			cmd_reverse = true
-		elsif var =~ /^--limit/i
-			if var =~ /^--limit\s*=\s*(.+)/i
-				cmd_limit = $1
-			else
-				echo 'error: --limit option not complete; e.g. --limit=10'
-				exit
-			end
-		elsif var =~ /^--force$/i
-			cmd_force = true
-		elsif var =~ /^--game/i
-			if var =~ /^--game\s*=\s*(.+)/i
-				cmd_game = $1
-			else
-				echo 'error: --game option not complete; e.g. --game=gs'
-				exit
-			end
-		elsif var =~ /^--name/i
-			if var =~ /^--name\s*=\s*(.+)/i
-				cmd_name ||= Array.new
-				cmd_name.push($1)
-			else
-				echo 'error: --name option not complete; e.g. --name=loot'
-				exit
-			end
-		elsif var =~ /^--show-?tags$/i
-			cmd_show_tags = true
-		elsif var =~ /^--hide-?(?:age|date|updated|last-update)$/i
-			cmd_hide_age = true
-		elsif var =~ /^--hide-?size$/i
-			cmd_hide_size = true
-		elsif var =~ /^--hide-?author$/i
-			cmd_hide_author = true
-		elsif var =~ /^--hide-?downloads?$/i
-			cmd_hide_downloads = true
-		elsif var =~ /^--hide-?rating$/i
-			cmd_hide_rating = true
-		elsif var =~ /^--tags/i
-			if var =~ /^--tags?\s*=\s*(.+)/i
-				cmd_tags ||= Array.new
-				cmd_tags.push($1)
-			else
-				echo 'error: --tags option not complete; e.g. --tags=core'
-				exit
-			end
-		elsif var =~ /^--size/i
-			if var =~ /^--size\s*(>|<|=)\s*([0-9\.]+)(k|m|g)?b?/i
-				cmd_size ||= Array.new
-				if $3 == 'g'
-					cmd_size.push [ $1, ($2.to_f*1073741824).to_i ]
-				elsif $3 == 'm'
-					cmd_size.push [ $1, ($2.to_f*1048576).to_i ]
-				elsif $3 == 'k'
-					cmd_size.push [ $1, ($2.to_f*1024).to_i ]
-				else
-					cmd_size.push [ $1, $2.to_i ]
-				end
-			else
-				echo 'error: --size option not complete; e.g. --size>15k'
-				exit
-			end
-		elsif var =~ /^--age/i
-			if var =~ /^--age\s*(>|<)\s*([0-9\.]+)(m|h|d|w|y)?$/i
-				cmd_age ||= Array.new
-				if $3 == 'y'
-					cmd_age.push [ $1, ($2.to_f*60*60*24*365).to_i ]
-				elsif $3 == 'w'
-					cmd_age.push [ $1, ($2.to_f*60*60*24*7).to_i ]
-				elsif $3 == 'd'
-					cmd_age.push [ $1, ($2.to_f*60*60*24).to_i ]
-				elsif $3 == 'h'
-					cmd_age.push [ $1, ($2.to_f*60*60).to_i ]
-				elsif $3 == 'm'
-					cmd_age.push [ $1, ($2.to_f*60).to_i ]
-				else
-					cmd_age.push [ $1, $2.to_i ]
-				end
-			else
-				echo 'error: --age option not complete; e.g. --age<24h'
-				exit
-			end
-		elsif var =~ /^--downloads/i
-			if var =~ /^--downloads?\s*(>|<|=)\s*([0-9]+)/i
-				cmd_downloads ||= Array.new
-				cmd_downloads.push [ $1, $2.to_i ]
-			else
-				echo 'error: --downloads option not complete; e.g. --downloads>50'
-				exit
-			end
-		elsif var =~ /^--rating/i
-			if var =~ /^--rating\s*(>|<|=)\s*([0-9\.]+)/i
-				cmd_rating ||= Array.new
-				cmd_rating.push [ $1, $2.to_f ]
-			else
-				echo 'error: --rating option not complete; e.g. --rating>8.5'
-				exit
-			end
-		else
-			echo "error: unknown option: #{var}"
-			exit
-		end
-	else
-		cmd.push(var)
-	end
-end
 
 get_comments_from_data = proc { |data|
 	begin
@@ -339,9 +209,9 @@ connect = proc {
 			puts h.to_a.flatten.join("\t")
 		end
 	rescue
+		echo "error connecting to server: #{$!}"
 		ssl_socket.close
 		socket.close
-		echo "error connecting to server: #{$!}"
 		exit
 	end
 	[ ssl_socket, socket ]
@@ -349,16 +219,19 @@ connect = proc {
 
 get_list = proc {
 	request = { 'action' => 'list', 'supported compressions' => 'gzip' }
-	request['cached-md5sum'] = Digest::MD5.new.update(Settings['cached-list']).to_s if Settings['cached-list']
+	request['current-md5sum'] = Digest::MD5.new.update(Settings['cached-list']).to_s if Settings['cached-list']
 	begin
 		ssl_socket, socket = connect.call
 		ssl_socket.puth(request)
 		response = ssl_socket.geth
 		if response['error']
-			echo "error: server says: #{response['error']}"
-			exit
-		elsif response['use-cache']
-			nil
+			if response['error'] == 'already up-to-date'
+				echo 'list up-to-date' if $repository_debug
+				nil
+			else
+				echo "error: server says: #{response['error']}"
+				exit
+			end
 		else
 			if response['size'].nil? or (response['size'] !~ /^[0-9]+$/) or not response['server time']
 				echo "error: unrecognized response from server: #{response.inspect}"
@@ -370,6 +243,7 @@ get_list = proc {
 			data = ssl_socket.read(response['size'].to_i)
 			if response['compression'] == 'gzip'
 				data_gz = data
+				echo "list data_gz: #{data_gz.length}" if $repository_debug
 				StringIO.open(data_gz) { |data_gz_io|
 					begin
 						gz_reader = Zlib::GzipReader.new(data_gz_io)
@@ -383,12 +257,82 @@ get_list = proc {
 			Settings['cached-list'] = data
 			Settings['cached-list-offset'] = Time.now.to_i - response['server time'].to_i
 		end
+		echo "list data: #{Settings['cached-list'].length}" if $repository_debug
 		list = Array.new
 		Settings['cached-list'].split("\n").each { |d| list.push(d.split("\t", -1)) }
 		headers = list.shift
 		if lui = headers.index('last update')
 			list.each { |row| row[lui] = row[lui].to_i + Settings['cached-list-offset'] }
 		end
+		list.unshift(headers)
+		list
+	ensure
+		ssl_socket.close
+		socket.close
+	end
+}
+
+add_comments_to_list = proc { |list|
+	request = { 'action' => 'list-comments', 'supported compressions' => 'gzip' }
+	request['current-md5sum'] = Digest::MD5.new.update(Settings['cached-list-comments']).to_s if Settings['cached-list-comments']
+	begin
+		ssl_socket, socket = connect.call
+		ssl_socket.puth(request)
+		response = ssl_socket.geth
+		if response['error']
+			if response['error'] == 'already up-to-date'
+				echo 'comments up-to-date' if $repository_debug
+				nil
+			else
+				echo "error: server says: #{response['error']}"
+				exit
+			end
+		else
+			if response['size'].nil? or (response['size'] !~ /^[0-9]+$/) or not response['server time']
+				echo "error: unrecognized response from server: #{response.inspect}"
+				exit
+			elsif response['compression'] and response['compression'] != 'gzip'
+				echo "error: unsupported compression method: #{response['compression']}"
+				exit
+			end
+			data = ssl_socket.read(response['size'].to_i)
+			if response['compression'] == 'gzip'
+				data_gz = data
+				echo "comments data_gz: #{data_gz.length}" if $repository_debug
+				StringIO.open(data_gz) { |data_gz_io|
+					begin
+						gz_reader = Zlib::GzipReader.new(data_gz_io)
+						data = gz_reader.read
+					ensure
+						gz_reader.close
+					end
+				}
+				data_gz = nil
+			end
+			Settings['cached-list-comments'] = data
+		end
+		echo "comments data: #{Settings['cached-list-comments'].length}" if $repository_debug
+		headers = list.shift
+		fi = headers.index('file')
+		gi = headers.index('game')
+		ci = headers.length
+		headers[ci] = 'comments'
+		foist = true
+		headers2 = fi2 = gi2 = ci2 = nil
+		Settings['cached-list-comments'].split("\n").each { |d|
+			if foist
+				foist = false
+				headers2 = d.split("\t", -1)
+				fi2 = headers2.index('file')
+				gi2 = headers2.index('game')
+				ci2 = headers2.index('comments')
+			else
+				row2 = d.split("\t", -1)
+				if row = list.find { |r| (r[fi] == row2[fi2]) and (r[gi] == row2[gi2]) }
+					row[ci] = row2[ci2].gsub("\x14", "\t").gsub("\x12", "\n")
+				end
+			end
+		}
 		list.unshift(headers)
 		list
 	ensure
@@ -776,6 +720,16 @@ download_mapdb = proc {
 		socket.close
 	end
 	unless failed
+		old_maps = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |fn| (fn =~ /^map\-([0-9]+)\.(?:dat|xml)$/) and ($1 != response['timestamp']) }[0...-3]
+		unless old_maps.empty?
+			echo "deleting old map databases..."
+			begin
+				old_maps.each { |fn| File.delete("#{$data_dir}#{XMLData.game}/#{fn}") }
+			rescue
+				echo "error: #{$!}"
+			end
+			old_maps = nil
+		end
 		# rename map files with a higher timestamp than the just downloaded map, because the user probably wants to use the map they just downloaded
 		Dir.entries("#{$data_dir}#{XMLData.game}").each { |fn|
 			if (fn =~ /^map\-([0-9]+)\.(?:dat|xml)$/) and ($1.to_i > response['timestamp'].to_i)
@@ -934,6 +888,140 @@ download_file = proc { |file,game|
 	end
 }
 
+
+for var in script.vars[1..-1]
+	if no_more_options
+		cmd.push(var)
+	elsif var == '--'
+		no_more_options = true
+	elsif var =~ /^--/
+		if var =~ /^--author/i
+			if var =~ /^--author\s*=\s*(.+)/i
+				cmd_author = $1
+			else
+				echo 'error: --author option not complete; e.g. --author=Bob'
+				exit
+			end
+		elsif var =~ /^--password/i
+			if var =~ /^--password\s*=\s*(.+)/i
+				cmd_password = $1
+			else
+				echo 'error: --password option not complete; e.g. --password=12345'
+				exit
+			end
+		elsif var =~ /^--sort/i
+			if var =~ /^--sort\s*=\s*(.+)/i
+				cmd_sort = $1
+			else
+				echo 'error: --sort option not complete; e.g. --sort=age'
+				exit
+			end
+		elsif var =~ /^--reverse$/i
+			cmd_reverse = true
+		elsif var =~ /^--limit/i
+			if var =~ /^--limit\s*=\s*(.+)/i
+				cmd_limit = $1
+			else
+				echo 'error: --limit option not complete; e.g. --limit=10'
+				exit
+			end
+		elsif var =~ /^--force$/i
+			cmd_force = true
+		elsif var =~ /^--game/i
+			if var =~ /^--game\s*=\s*(.+)/i
+				cmd_game = $1
+			else
+				echo 'error: --game option not complete; e.g. --game=gs'
+				exit
+			end
+		elsif var =~ /^--name/i
+			if var =~ /^--name\s*=\s*(.+)/i
+				cmd_name ||= Array.new
+				cmd_name.push($1)
+			else
+				echo 'error: --name option not complete; e.g. --name=loot'
+				exit
+			end
+		elsif var =~ /^--show-?tags$/i
+			cmd_show_tags = true
+		elsif var =~ /^--hide-?(?:age|date|updated|last-update)$/i
+			cmd_hide_age = true
+		elsif var =~ /^--hide-?size$/i
+			cmd_hide_size = true
+		elsif var =~ /^--hide-?author$/i
+			cmd_hide_author = true
+		elsif var =~ /^--hide-?downloads?$/i
+			cmd_hide_downloads = true
+		elsif var =~ /^--hide-?rating$/i
+			cmd_hide_rating = true
+		elsif var =~ /^--tags/i
+			if var =~ /^--tags?\s*=\s*(.+)/i
+				cmd_tags ||= Array.new
+				cmd_tags.push($1)
+			else
+				echo 'error: --tags option not complete; e.g. --tags=core'
+				exit
+			end
+		elsif var =~ /^--size/i
+			if var =~ /^--size\s*(>|<|=)\s*([0-9\.]+)(k|m|g)?b?/i
+				cmd_size ||= Array.new
+				if $3 == 'g'
+					cmd_size.push [ $1, ($2.to_f*1073741824).to_i ]
+				elsif $3 == 'm'
+					cmd_size.push [ $1, ($2.to_f*1048576).to_i ]
+				elsif $3 == 'k'
+					cmd_size.push [ $1, ($2.to_f*1024).to_i ]
+				else
+					cmd_size.push [ $1, $2.to_i ]
+				end
+			else
+				echo 'error: --size option not complete; e.g. --size>15k'
+				exit
+			end
+		elsif var =~ /^--age/i
+			if var =~ /^--age\s*(>|<)\s*([0-9\.]+)(m|h|d|w|y)?$/i
+				cmd_age ||= Array.new
+				if $3 == 'y'
+					cmd_age.push [ $1, ($2.to_f*60*60*24*365).to_i ]
+				elsif $3 == 'w'
+					cmd_age.push [ $1, ($2.to_f*60*60*24*7).to_i ]
+				elsif $3 == 'd'
+					cmd_age.push [ $1, ($2.to_f*60*60*24).to_i ]
+				elsif $3 == 'h'
+					cmd_age.push [ $1, ($2.to_f*60*60).to_i ]
+				elsif $3 == 'm'
+					cmd_age.push [ $1, ($2.to_f*60).to_i ]
+				else
+					cmd_age.push [ $1, $2.to_i ]
+				end
+			else
+				echo 'error: --age option not complete; e.g. --age<24h'
+				exit
+			end
+		elsif var =~ /^--downloads/i
+			if var =~ /^--downloads?\s*(>|<|=)\s*([0-9]+)/i
+				cmd_downloads ||= Array.new
+				cmd_downloads.push [ $1, $2.to_i ]
+			else
+				echo 'error: --downloads option not complete; e.g. --downloads>50'
+				exit
+			end
+		elsif var =~ /^--rating/i
+			if var =~ /^--rating\s*(>|<|=)\s*([0-9\.]+)/i
+				cmd_rating ||= Array.new
+				cmd_rating.push [ $1, $2.to_f ]
+			else
+				echo 'error: --rating option not complete; e.g. --rating>8.5'
+				exit
+			end
+		else
+			echo "error: unknown option: #{var}"
+			exit
+		end
+	else
+		cmd.push(var)
+	end
+end
 
 
 #
@@ -1224,7 +1312,7 @@ elsif (cmd[0] =~ /^set-?updat(?:e|able)$/i)
 			echo "#{info[:filename]} is already set as updatable"
 		else
 			Settings['updatable'][:scripts].push(info)
-			echo "the download-updates command will download #{info[:filename]} when there's and update"
+			echo "the download-updates command will download #{info[:filename]} when there's an update"
 		end
 	end
 elsif (cmd[0] =~ /^unset-?updat(?:e|able)$/i)
@@ -1868,7 +1956,171 @@ elsif (cmd[0] =~ /^download-?lich$/i)
 # gui
 #
 elsif cmd[0] =~ /^gui$/i
-	echo 'fixme'
+	unless defined?(Gtk)
+		echo "error: no gtk"
+		exit
+	end
+	file_ls = nil
+	thread_group = Thread.current.group
+	populate_liststore = proc {
+		file_ls.clear
+		list = nil
+		get_list_thread = Thread.new {
+			report_errors {
+				thread_group.add(Thread.current)
+				list = add_comments_to_list.call(get_list.call)
+			}
+		}
+		get_list_thread.join
+		headers = list.shift
+		fi = headers.index('file')
+		ai = headers.index('author')
+		gi = headers.index('game')
+		si = headers.index('size')
+		ui = headers.index('last update')
+		di = headers.index('downloads')
+		ti = headers.index('tags')
+		rti = headers.index('rating total')
+		rci = headers.index('rating count')
+		ci = headers.index('comments')
+		for info in list
+			iter = file_ls.append
+			iter[0] = info[fi] if fi
+			iter[1] = info[ai] if ai
+			if gi
+				if info[gi] == 'gs'
+					iter[2] = 'GS'
+				elsif info[gi] == 'dr'
+					iter[2] = 'DR'
+				else
+					iter[2] = info[gi]
+				end
+			end
+			if si
+				iter[3] = "#{(info[si].to_f / 1024).to_s.slice(/^[0-9]+(?:\.[0-9])?/)}k"
+				iter[4] = info[si].to_i
+			end
+			if ui
+				iter[5] = "#{Time.at(info[ui].to_i).strftime("%Y-%m-%d %I:%M%p").downcase.gsub(/\s0/,'  ')}"
+				iter[6] = info[ui].to_i
+			end
+			iter[7] = info[di].to_i if di
+			if rti and rci
+				if (info[rti] =~ /^[0-9]+$/) and (info[rci].to_i > 0)
+					iter[8] = "#{(info[rti].to_f / info[rci].to_f).to_s.slice(/^[0-9]+(?:\.[0-9])?/)}"
+				else
+					iter[8] = ''
+				end
+				iter[9] = info[rci].to_i
+			end
+			iter[10] = info[ti] if ti
+			iter[11] = info[ci] if ci
+		end
+	}
+	window = nil
+	window_done = false
+	load_window_position = Settings['window_position']
+	load_window_width    = Settings['window_width']
+	load_window_height   = Settings['window_height']
+	save_window_position = nil
+	save_window_width    = nil
+	save_window_height   = nil
+	sort_ascending = true
+	begin
+		Gtk.queue {
+			renderer = Gtk::CellRendererText.new
+			renderer.background = 'white'
+			tmp = Array.new
+			headers.each { |head|
+				if head =~ /file|game|author|tags/
+					tmp.push String
+				elsif head =~ /downloads/
+					tmp.push Fixnum
+				end
+			}
+			# Filename, Author, Game, Size, Last Update, Downloads, Rating, Votes, Tags, Comments
+			file_ls = Gtk::ListStore.new(String, String, String, String, Fixnum, String, Fixnum, Fixnum, String, Fixnum, String, String)
+			file_ls.set_sort_column_id(0, Gtk::SORT_ASCENDING)
+			file_tv = Gtk::TreeView.new(file_ls)
+			foo = Gtk::TreeViewColumn.new('Filename',    renderer, :text => 0, :background_set => 2)
+			foo.sort_column_id = 0
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('Author',      renderer, :text => 1, :background_set => 2)
+			foo.sort_column_id = 1
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('Game',        renderer, :text => 2, :background_set => 2)
+			foo.sort_column_id = 2
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('Size',        renderer, :text => 3, :background_set => 2)
+			foo.sort_column_id = 4
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('Last Update', renderer, :text => 5, :background_set => 2)
+			foo.sort_column_id = 6
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('DLs',         renderer, :text => 7, :background_set => 2)
+			foo.sort_column_id = 7
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('Rating',      renderer, :text => 8, :background_set => 2)
+			foo.sort_column_id = 8
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('Votes',       renderer, :text => 9, :background_set => 2)
+			foo.sort_column_id = 9
+			file_tv.append_column(foo)
+			foo = Gtk::TreeViewColumn.new('Tags',        renderer, :text => 10, :background_set => 2)
+			foo.sort_column_id = 10
+			file_tv.append_column(foo)
+			file_tv.headers_visible = true
+
+			file_sw = Gtk::ScrolledWindow.new
+			file_sw.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
+			file_sw.add(file_tv)
+
+			comments_tv = Gtk::TextView.new
+			comments_sw = Gtk::ScrolledWindow.new
+			comments_sw.add(comments_tv)
+
+			vbox = Gtk::VBox.new
+			vbox.pack_start(file_sw)
+			vbox.pack_start(comments_sw)
+
+			window              = Gtk::Window.new
+			window.title        = 'Repository'
+			window.border_width = 5
+			if load_window_height and load_window_width
+				window.resize(load_window_width, load_window_height)
+			else
+				window.resize(600, 800)
+			end
+			if load_window_position
+				window.move(load_window_position[0], load_window_position[1])
+			end
+			window.add(vbox)
+
+			# fixme: download script, refresh list, filter list, rate
+			# maybe fixme: upload, delete, updatable settings, download-lich, download-mapdb, checkout-mapdb
+
+			file_tv.signal_connect('cursor-changed') {
+				report_errors {
+					comments_tv.buffer.text = (file_tv.selection.selected[11] || String.new)
+				}
+			}
+			window.signal_connect('delete_event') {
+				save_window_position = window.position
+				save_window_width    = window.allocation.width
+				save_window_height   = window.allocation.height
+				window_done = true
+			}
+			window.show_all
+		}
+		sleep 0.1
+		Gtk.queue { populate_liststore.call }
+		wait_until { window_done }
+	ensure
+		Settings['window_position'] = save_window_position if (save_window_position.class == Array) and (save_window_position[0].to_i >= 0) and (save_window_position[1].to_i >= 0)
+		Settings['window_width']    = save_window_width    if (save_window_width.class == Fixnum) and (save_window_width > 100)
+		Settings['window_height']   = save_window_height   if (save_window_height.class == Fixnum) and (save_window_height > 100)
+		Gtk.queue { window.destroy }
+	end
 
 
 #
