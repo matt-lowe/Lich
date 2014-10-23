@@ -2,6 +2,10 @@
 	<type name="reagent">
 		<name>^some powdered |^some ground |^some mashed |^(?:vial of viscous liquid|small troll tooth|large troll tooth|ayanad crystal|s'ayanad crystal|t'ayanad crystal|n'ayanad crystal|glimmering blue essence shard|glowing violet essence shard|some essence of earth|some essence of air|some essence of fire|some glimmering blue essence dust|some glowing violet essence dust|radiant crimson essence shard|perfect myklian belly scale|crystalline globe|pepperthorn root|ayana weed|flask of pure oil|vial of pearlescent oil|essence shard|some essence of water|flask of pure water|flask of clear water|ayana leaf|ayana lichen|ayana root|empty flask|some faintly glowing dust|elemental core|crystal core|pristine nymph's hair|tiny golden seed|vial of farlook vitreous humor|inky necrotic core|some radiant crimson essence dust|glowing violet mote of essence|glimmering blue mote of essence|radiant crimson mote of essence|ayana berry|pristine sprite's hair|pristine siren's hair|dark glimmering crystal|some faintly radiant dust|vial of faintly glowing aelotoi tears|handful of sea salt)$</name>
 	</type>
+	<type name="spirit beast talismans">
+		<name>^(?:painted clay talisman|colorful clay talisman|rippled clay talisman|charred clay talisman)$</name>
+	</type>
+	
 	<type name="alchemy product">
 		<name>^(?:minor|lesser|greater|full) (?:mana|mana regeneration|mana\-well) potion|(?:glowing moonstone talisman|mottled malachite talisman|dark murky potion|clear potion|hazy glass vial|glowing brilliant silver potion|silvery potion|diaphanous eight\-sided crystal|dark translucent crystal)$</name>
 	</type>
@@ -24,8 +28,8 @@
 		<exclude>^polished modwir box$</exclude>
 	</type>
 	<type name="gem">
-		<name>^(?:rough slab of silver|milky quartz eye|piece of petrified haon|piece of rosespar|polished shark tooth|fiery ruby talon|obsidian eye|murky shadowglass orb|petrified tiger tooth|chalky yellow cube|deep blue sapphire talon|sparkling emerald talon|iron fang|silver fang|steel fang|copper fang|bronze fang|mithril fang|platinum fang|gold fang|glaesine crystal|rock crystal|quartz crystal|petrified mammoth tusk|piece of petrified maoral|shimmertine shard|shard of dragonmist crystal|golden firemote orb|petrified aivren egg|piece of petrified modwir|pinch of platinum dust|glistening onyx talon|shard of tigerfang crystal|urglaes fang)$|gold dust$|glaes dust$</name>
-		<noun>^(?:mithril|faenor|rhimar|ora|vultite)\-bloom$|^(?:thunderstone|doomstone|soulstone|riftshard|geode|rosepar|firestone|bloodjewel|pearl|corestone|shell|sard|sphene|jasper|marble|eostone|maoral|agate|amber|amethyst|blazestar|carbuncle|chalcedony|coral|despanal|diamond|emerald|feystone|garnet|gem|mica|thanot|glimaerstone|heliodor|hyacinth|jacinth|moonstone|onyx|quartz|ruby|sapphire|spinel|topaz|tourmaline|turquoise|zircon|peridot|starstone|dreamstone|deathstone|sunstone|sandsilver|bluerock|diopside|ivory|nugget|jade|bloodstone|cordierite|sardonyx|opal|stone|lapis|obsidian|beryl|mother\-of\-pearl|azurite|spherine|wyrdshard|riftstone|aetherstone|pyrite)$</noun>
+		<name>^(?:shimmertine shard|shard of dragonmist crystal|petrified aivren egg|shard of tigerfang crystal|milky quartz eye|obsidian eye)$</name>
+		<noun>^(?:mithril|faenor|rhimar|ora|vultite)\-bloom$|^(?:thunderstone|doomstone|soulstone|riftshard|geode|rosepar|firestone|bloodjewel|pearl|corestone|shell|sard|sphene|jasper|marble|eostone|maoral|agate|amber|amethyst|blazestar|carbuncle|chalcedony|coral|despanal|diamond|emerald|feystone|garnet|gem|mica|thanot|glimaerstone|heliodor|hyacinth|jacinth|moonstone|onyx|quartz|ruby|sapphire|spinel|topaz|tourmaline|turquoise|zircon|peridot|starstone|dreamstone|deathstone|sunstone|sandsilver|bluerock|diopside|ivory|jade|bloodstone|cordierite|sardonyx|opal|stone|lapis|obsidian|beryl|mother\-of\-pearl|azurite|spherine|wyrdshard|riftstone|aetherstone|pyrite)$</noun>
 		<exclude>^smooth stone$|^some powdered |^scaly burgee shell$|^faceted crystal crab shell$</exclude>
 	</type>
 	<type name="herb">
@@ -41,9 +45,9 @@
 		<exclude>(?:mithril|faenor|rhimar|ora|vultite)\-bloom$| (?:box|chest|coffer|strongbox|trunk|jar)$|^(?:piece of iron|slender mithril wand|twisted modwir short\-staff|flame-singed modwir tree|mithril fang|silver fang|steel fang|iron fang|bronze fang|iron wand|black iron cauldron|(?:sea\-green|sky\-blue) glaes scarab|green alexandrite stone|piece of spiderweb obsidian|urglaes fang|obsidian eye)$</exclude>
 	</type>
 	<type name="jewelry">
-		<name>^(?:small crystal\-spoked wheel|dark\-spoked crystalline wheel)$</name>
-		<noun>^(?:pin|necklace|crown|talisman|pendant|ring|tiara|anklet|earring|earrings|clasp|bracelet|medallion|amulet|chalice|stickpin|brooch|badge|circlet|buckle|neckchain|band|earcuff|bracer|bowl|torc|ewer|barrette|flagon|urn|tray|cup|platter|stein)$</noun>
-		<exclude>^(?:dingy|plain|braided|twisted|intricate|large|thin|wide|polished|scratched|thick|dull|faded|small|flawless|inlaid|dirt\-caked|ornate|exquisite|shiny|bright|narrow) gold ring$|^(?:gold ring|glowing moonstone talisman|mottled malachite talisman|dimly glowing enruned bone talisman)$|^(?:bent|corroded|dented|polished|rusty|scratched|shiny|tarnished) (?:anklet|bracelet|coin|cup|doorknob|earring|fork|horseshoe|medallion|nail|plate|ring|spoon)$</exclude>
+		<name>^(?:small crystal\-spoked wheel|dark\-spoked crystalline wheel|rough slab of silver|piece of petrified haon|piece of rosespar|polished shark tooth|fiery ruby talon|murky shadowglass orb|petrified tiger tooth|chalky yellow cube|deep blue sapphire talon|sparkling emerald talon|iron fang|silver fang|steel fang|copper fang|bronze fang|mithril fang|platinum fang|gold fang|glaesine crystal|rock crystal|quartz crystal|petrified mammoth tusk|piece of petrified maoral|golden firemote orb|piece of petrified modwir|pinch of platinum dust|glistening onyx talon|gold dust|glaes dust|urglaes fang)$</name>
+		<noun>^(?:pin|necklace|crown|talisman|pendant|ring|tiara|anklet|earring|earrings|clasp|bracelet|medallion|amulet|chalice|stickpin|brooch|badge|circlet|buckle|neckchain|band|earcuff|bracer|bowl|torc|ewer|barrette|flagon|urn|tray|cup|platter|stein|nugget)$</noun>
+		<exclude>^(?:dingy|plain|braided|twisted|intricate|large|thin|wide|polished|scratched|thick|dull|faded|small|flawless|inlaid|dirt\-caked|ornate|exquisite|shiny|bright|narrow) gold ring$|^(?:painted clay talisman|colorful clay talisman|rippled clay talisman|charred clay talisman|gold ring|glowing moonstone talisman|mottled malachite talisman|dimly glowing enruned bone talisman|ruby amulet)$|^(?:bent|corroded|dented|polished|rusty|scratched|shiny|tarnished) (?:anklet|bracelet|coin|cup|doorknob|earring|fork|horseshoe|medallion|nail|plate|ring|spoon)$</exclude>
 	</type>
 	<type name="junk">
 		<name>^(?:smooth stone|steel shield|scratched steel helm|spirit shard|small block of salt|table leg|some tree bark|piece of iron|moldy bone|chipped brick|some tattered cloth)$|^(?:scratched|corroded|polished|shiny|tarnished|dented|rusty|bent) (?:ring|medallion|earring|anklet|bracelet|fork|plate|coin|cup|nail|spoon|doorknob|horseshoe)$</name>
@@ -53,9 +57,9 @@
 		<noun>^(?:lockpick)$</noun>
 	</type>
 	<type name="magic">
-		<name>^(?:crystal amulet|gold\-framed clear crystal lens|dull gold coin|white flask|impure potion|pure potion|small glowing vial|grot t'kel potion|dirtokh potion|ayveneh potion|shiny vor'taz horn|dimly glowing enruned bone talisman)$|(?:light violet|emerald|reddish-brown|wavering|icy blue|stone grey|amethyst|dark red) sphere$|^(?:dingy|plain|braided|twisted|intricate|large|thin|wide|polished|scratched|thick|dull|faded|small|flawless|inlaid|dirt\-caked|ornate|exquisite|shiny|bright|narrow) gold ring$|^gold ring$</name>
+		<name>^(?:ruby amulet|crystal amulet|gold\-framed clear crystal lens|dull gold coin|white flask|impure potion|pure potion|small glowing vial|grot t'kel potion|dirtokh potion|ayveneh potion|shiny vor'taz horn|dimly glowing enruned bone talisman)$|(?:light violet|emerald|reddish-brown|wavering|icy blue|stone grey|amethyst|dark red) sphere$|^(?:dingy|plain|braided|twisted|intricate|large|thin|wide|polished|scratched|thick|dull|faded|small|flawless|inlaid|dirt\-caked|ornate|exquisite|shiny|bright|narrow) gold ring$|^gold ring$</name>
 		<noun>^(?:crystal|statue|filings|triangle|granules|square|cube|sculpture|figurine|prism|statuette|orb|statuette|miniature)$</noun>
-		<exclude>^(?:murky shadowglass orb|chalky yellow cube|glaesine crystal|shard of tigerfang crystal|dark glimmering crystal|dark translucent crystal|diaphanous eight\-sided crystal|rock crystal|quartz crystal|ayanad crystal|s'ayanad crystal|t'ayanad crystal|n'ayanad crystal|golden firemote orb|small crystal flask|shard of dragonmist crystal)$</exclude>
+		<exclude>^(?:painted clay talisman|colorful clay talisman|rippled clay talisman|charred clay talisman|murky shadowglass orb|chalky yellow cube|glaesine crystal|shard of tigerfang crystal|dark glimmering crystal|dark translucent crystal|diaphanous eight\-sided crystal|rock crystal|quartz crystal|ayanad crystal|s'ayanad crystal|t'ayanad crystal|n'ayanad crystal|golden firemote orb|small crystal flask|shard of dragonmist crystal)$</exclude>
 	</type>
 	<type name="scroll">
 		<noun>^(?:palimpsest|paper|papyrus|parchment|scroll|vellum)$</noun>
