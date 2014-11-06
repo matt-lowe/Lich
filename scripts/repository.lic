@@ -9,9 +9,11 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.17
+	     version: 2.18
 
 	Changelog:
+		2.18 (2014-11-06):
+			workaround to deal with the plat_updater script disabling OpenSSL::SSL::VERIFY_PEER
 		2.17 (2014-10-12):
 			started on gui
 		2.16 (2014-10-12):
@@ -60,6 +62,7 @@ require 'digest/md5'
 hostname           = 'lichproject.org'
 port               = 7157
 ca_cert_data       = "-----BEGIN CERTIFICATE-----\nMIIDlTCCAn2gAwIBAgIJAKuu65i5NsruMA0GCSqGSIb3DQEBCwUAMGExCzAJBgNV\nBAYTAlVTMREwDwYDVQQIDAhJbGxpbm9pczESMBAGA1UECgwJTWF0dCBMb3dlMQ8w\nDQYDVQQDDAZSb290Q0ExGjAYBgkqhkiG9w0BCQEWC21hdHRAaW80LnVzMB4XDTE0\nMDYwNzE3NDUwMFoXDTI0MDYwNDE3NDUwMFowYTELMAkGA1UEBhMCVVMxETAPBgNV\nBAgMCElsbGlub2lzMRIwEAYDVQQKDAlNYXR0IExvd2UxDzANBgNVBAMMBlJvb3RD\nQTEaMBgGCSqGSIb3DQEJARYLbWF0dEBpbzQudXMwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQCcIRn0IMCNYeL5agKmkdedgJXsIyTJS8qKrY6EvQsq4tt0\nmO3Or9K8IaDl7qFdQ9nfSJ5phNgoCy9wZ9rDWv5FhY5MnnVHGr3fCa7RkMxJFR/N\nwiD4ihQlixOUly76glceyc/6QQS9bNe96evZDstERGAFfzgHY4qAlyurR6mBu9Mb\nyyCRok6xMRnjrbTMNkvvOsuG0sY9ot+SLHGgU3qT7+wVh/CbWcjeF7/Qwa//fbFk\nmq5c1FuvhU3DanSSz+VuWudPFSyZ3r5pYrLMJWsyomDa4gkL2bJ5jya2BWDMXvSS\nCpdQgPDIlClMfAFLd/Ss8ZIGa6uNFcSK6Xca51ClAgMBAAGjUDBOMB0GA1UdDgQW\nBBScbglRiGzz9yzuhgBwFYjgimeByDAfBgNVHSMEGDAWgBScbglRiGzz9yzuhgBw\nFYjgimeByDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA7MLZYfqam\n5aaSBqQpT6sOGDtVc9koIok59oTQmNXqe+awg2VUnAiesxtLd+FWGUMp8XzHdGWw\nH3O6kAUkPm/in001X7TRAhbgDujfTRbTzxND0XrjuEzDMALs3YpDM1pMXqC7RXWA\n7z+N0gRaUgmh1rMbk/qA3cAfC2dwf2j3NYy3bDw3lMpdyIwAfOQxiZVglYgX3dgT\nU9b//gsUyPCvlpL0mYcmhOOLt6oqQhMJaw1I6A9xMe2kO2L+8KPGK2u1B+P5/Sx0\nFE8LIp5KA3a7yRbOty19NsGR+yW7WwV7BL6c6GOKb/iKJBLYzTmNG6m16hRrxDGj\ntGu91I0ORptB\n-----END CERTIFICATE-----"
+client_version     = '2.18'
 cmd                = Array.new
 cmd_author         = nil
 cmd_password       = nil
@@ -186,7 +189,12 @@ connect = proc {
 		cert_store.add_cert(OpenSSL::X509::Certificate.new(ca_cert_data))
 		ssl_context             = OpenSSL::SSL::SSLContext.new
 		ssl_context.cert_store  = cert_store
-		ssl_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
+		if OpenSSL::SSL::VERIFY_PEER == OpenSSL::SSL::VERIFY_NONE
+			# the plat_updater script redefines OpenSSL::SSL::VERIFY_PEER, disabling it for everyone
+			ssl_context.verify_mode = 1 # probably right
+		else
+			ssl_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
+		end
 		socket                  = TCPSocket.new(hostname, port)
 		ssl_socket              = OpenSSL::SSL::SSLSocket.new(socket, ssl_context)
 		ssl_socket.connect
@@ -218,7 +226,7 @@ connect = proc {
 }
 
 get_list = proc {
-	request = { 'action' => 'list', 'supported compressions' => 'gzip' }
+	request = { 'action' => 'list', 'supported compressions' => 'gzip', 'client' => client_version }
 	request['current-md5sum'] = Digest::MD5.new.update(Settings['cached-list']).to_s if Settings['cached-list']
 	begin
 		ssl_socket, socket = connect.call
@@ -273,7 +281,7 @@ get_list = proc {
 }
 
 add_comments_to_list = proc { |list|
-	request = { 'action' => 'list-comments', 'supported compressions' => 'gzip' }
+	request = { 'action' => 'list-comments', 'supported compressions' => 'gzip', 'client' => client_version }
 	request['current-md5sum'] = Digest::MD5.new.update(Settings['cached-list-comments']).to_s if Settings['cached-list-comments']
 	begin
 		ssl_socket, socket = connect.call
@@ -540,7 +548,7 @@ download_lich = proc {
 		else
 			begin
 				ssl_socket, socket = connect.call
-				ssl_socket.puth('action' => 'download-lich', 'current-md5sum' => Digest::MD5.file(filename).to_s, 'supported compressions' => 'gzip')
+				ssl_socket.puth('action' => 'download-lich', 'current-md5sum' => Digest::MD5.file(filename).to_s, 'supported compressions' => 'gzip', 'client' => client_version)
 				response = ssl_socket.geth
 				if response['error']
 					if response['error'] == 'already up-to-date'
@@ -647,7 +655,7 @@ download_mapdb = proc {
 	else
 		game = XMLData.game.downcase
 	end
-	request = { 'action' => 'download-mapdb', 'game' => game, 'supported compressions' => 'gzip' }
+	request = { 'action' => 'download-mapdb', 'game' => game, 'supported compressions' => 'gzip', 'client' => client_version }
 	if (current_map = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |fn| fn =~ /^map\-[0-9]+\.(?:dat|xml)$/ }.sort[-1])
 		request['current-md5sum'] = Digest::MD5.file("#{$data_dir}#{XMLData.game}/#{current_map}").to_s
 	end
@@ -755,7 +763,7 @@ download_mapdb = proc {
 			echo 'downloading missing map images...'
 			begin
 				ssl_socket, socket = connect.call
-				ssl_socket.puth('action' => 'download-mapdb-images', 'files' => image_filenames.join('/'))
+				ssl_socket.puth('action' => 'download-mapdb-images', 'files' => image_filenames.join('/'), 'client' => client_version)
 				loop {
 					response = ssl_socket.geth
 					if response['error']
@@ -806,7 +814,7 @@ download_mapdb = proc {
 download_file = proc { |file,game|
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'download', 'file' => file, 'game' => game, 'supported compressions' => 'gzip')
+		ssl_socket.puth('action' => 'download', 'file' => file, 'game' => game, 'supported compressions' => 'gzip', 'client' => client_version)
 		response = ssl_socket.geth
 		if response['error']
 			echo "error: server says: #{response['error']}"
@@ -1142,7 +1150,7 @@ elsif (cmd[0] =~ /^info$/i)
 		list.unshift(headers)
 		begin
 			ssl_socket, socket = connect.call
-			ssl_socket.puth('action' => 'inspect', 'file' => file, 'game' => game)
+			ssl_socket.puth('action' => 'inspect', 'file' => file, 'game' => game, 'client' => client_version)
 			response = ssl_socket.geth
 			if response['error']
 				echo "error: server says: #{response['error']}"
@@ -1407,7 +1415,7 @@ elsif (cmd[0] =~ /^upload$/i)
 	end
 	tags     = (cmd_tags.join(',') || get_tags_from_comments.call(comments))
 	size     = File.stat(filename).size
-	request  = { 'action' => 'upload', 'file' => file, 'game' => game, 'size' => size, 'author' => author, 'password' => password, 'md5sum' => md5sum, 'tags' => tags }
+	request  = { 'action' => 'upload', 'file' => file, 'game' => game, 'size' => size, 'author' => author, 'password' => password, 'md5sum' => md5sum, 'tags' => tags, 'client' => client_version }
 	delete_filename = false
 	if size > 5000
 		tempfilename = "#{$temp_dir}#{rand(100000000)}.repo"
@@ -1501,7 +1509,7 @@ elsif (cmd[0] =~ /^delete$/i)
 		sleep 5
 		begin
 			ssl_socket, socket = connect.call
-			ssl_socket.puth('action' => 'delete', 'file' => file, 'game' => game, 'author' => author, 'password' => password)
+			ssl_socket.puth('action' => 'delete', 'file' => file, 'game' => game, 'author' => author, 'password' => password, 'client' => client_version)
 			response = ssl_socket.geth
 			if response['error']
 				echo "error: server says: #{response['error']}"
@@ -1563,7 +1571,7 @@ elsif (cmd[0] =~ /^rate$/i)
 		game = list[0][gi]
 		begin
 			ssl_socket, socket = connect.call
-			ssl_socket.puth('action' => 'rate', 'file' => file, 'game' => game, 'rating' => cmd[2])
+			ssl_socket.puth('action' => 'rate', 'file' => file, 'game' => game, 'rating' => cmd[2], 'client' => client_version)
 			response = ssl_socket.geth
 			if response['error']
 				echo "error: server says: #{response['error']}"
@@ -1599,7 +1607,7 @@ elsif cmd[0] =~ /^(?:new|change)-?password$/i
 	end
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'change password', 'author' => author, 'password' => password, 'new password' => cmd[1])
+		ssl_socket.puth('action' => 'change password', 'author' => author, 'password' => password, 'new password' => cmd[1], 'client' => client_version)
 		response = ssl_socket.geth
 		if response['error']
 			echo "error: server says: #{response['error']}"
@@ -1638,7 +1646,7 @@ elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
 	end
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'checkout-mapdb', 'author' => author, 'password' => password, 'game' => game)
+		ssl_socket.puth('action' => 'checkout-mapdb', 'author' => author, 'password' => password, 'game' => game, 'client' => client_version)
 		response = ssl_socket.geth
 		if response['error']
 			echo "error: server says: #{response['error']}"
@@ -1675,7 +1683,7 @@ elsif (cmd[0] =~ /^release-?map(?:db)?$/i)
 	end
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'release-mapdb', 'author' => author, 'password' => password, 'game' => XMLData.game.downcase)
+		ssl_socket.puth('action' => 'release-mapdb', 'author' => author, 'password' => password, 'game' => XMLData.game.downcase, 'client' => client_version)
 		response = ssl_socket.geth
 		if response['error']
 			echo "error: server says: #{response['error']}"
@@ -1718,7 +1726,7 @@ elsif (cmd[0] =~ /^approve-?map(?:db)?$/i)
 	end
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'approve-mapdb', 'author' => author, 'password' => password, 'game' => game, 'timestamp' => timestamp)
+		ssl_socket.puth('action' => 'approve-mapdb', 'author' => author, 'password' => password, 'game' => game, 'timestamp' => timestamp, 'client' => client_version)
 		response = ssl_socket.geth
 		if response['error']
 			echo "error: server says: #{response['error']}"
@@ -1766,7 +1774,7 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 		exit
 	end
 	size     = File.stat(filename).size
-	request  = { 'action' => 'upload-mapdb', 'game' => game, 'author' => author, 'password' => password, 'md5sum' => md5sum }
+	request  = { 'action' => 'upload-mapdb', 'game' => game, 'author' => author, 'password' => password, 'md5sum' => md5sum, 'client' => client_version }
 
 	echo 'compressing map database...'
 	tempfilename = "#{$temp_dir}#{rand(100000000)}.repo"
@@ -1831,7 +1839,7 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'upload-mapdb-images', 'files' => image_filenames)
+		ssl_socket.puth('action' => 'upload-mapdb-images', 'files' => image_filenames, 'client' => client_version)
 		response = ssl_socket.geth
 		if response['error']
 			echo "error: server says: #{response['error']}"
@@ -1839,7 +1847,7 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 			for filename in response['need-images'].split('/')
 				echo "uploading #{filename}..."
 				size = File.stat("#{$lich_dir}maps/#{filename}").size
-				ssl_socket.puth('file' => filename, 'size' => size, 'md5sum' => Digest::MD5.file("#{$lich_dir}maps/#{filename}").to_s)
+				ssl_socket.puth('file' => filename, 'size' => size, 'md5sum' => Digest::MD5.file("#{$lich_dir}maps/#{filename}").to_s, 'client' => client_version)
 				response = ssl_socket.geth
 				if response['error']
 					echo "error: server says: #{response['error']}"
@@ -1909,7 +1917,7 @@ elsif (cmd[0] =~ /^upload-?lich$/i)
 	password  = (cmd_password || Settings["password:#{author.downcase.gsub(/[^a-z]/, '')}"])
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'upload-lich', 'author' => author, 'password' => password, 'version' => LICH_VERSION, 'size' => size.to_s, 'md5sum' => Digest::MD5.file(filename).to_s, 'compression' => 'gzip')
+		ssl_socket.puth('action' => 'upload-lich', 'author' => author, 'password' => password, 'version' => LICH_VERSION, 'size' => size.to_s, 'md5sum' => Digest::MD5.file(filename).to_s, 'compression' => 'gzip', 'client' => client_version)
 		response = ssl_socket.geth
 		if response['error']
 			echo "error: server says: #{response['error']}"
@@ -2013,6 +2021,7 @@ elsif cmd[0] =~ /^gui$/i
 				end
 				iter[9] = info[rci].to_i
 			end
+			# fixme: sort rating as Float
 			iter[10] = info[ti] if ti
 			iter[11] = info[ci] if ci
 		end
