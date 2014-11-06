@@ -353,6 +353,12 @@
       <cost type='mana'>if Spells.cleric &gt;= 40 then 40 elsif Spells.cleric &gt;= 25 then 25 else 18 end</cost>
       <cost type='spirit'>if Spells.cleric &gt;= 40 then 3 elsif Spells.cleric &gt;= 25 then 5 else 8 end</cost>
    </spell>
+   <spell availability='all' name='Soul Ward' number='319' type='defense'>
+      <cost type='mana'>19</cost>
+      <duration span='stackable' multicastable='yes'>20 + Spells.cleric</duration>
+      <message type='start'>Drawing deep from the well of your soul, you summon forth a thread of your essence and weave it into an evanescent shield to shroud your form\.</message>
+      <message type='end'>The air about you shimmers momentarily before the evanescent shield surrounding you collapses\.</message>
+   </spell>
    <spell availability='all' name='Divine Wrath' number='335' type='attack'>
       <cost type='mana'>35</cost>
    </spell>
@@ -2013,6 +2019,7 @@
       <message type='start'>Thin at first, a fine layer of rime tickles your hands and fingertips\.  The hoarfrost smoothly glides between you and [A-Z][a-z]+, turning to a light powder as it traverses the space\.  The white substance clings to [A-Z][a-z]+&apos;s? eyelashes and cheeks for a moment before it becomes charged with spiritual power, then it slowly melts away\.</message>
       <message type='start'>As you begin to chant,? you notice the scent of dry, dusty parchment and feel a cool mist cling to your skin somewhere near your feet\.  You sense the ethereal tendrils of the mist as they coil about your body and notice that the world turns to a yellowish hue as the mist settles about your head\.  Focusing on [A-Z][a-z]+, you feel the transfer of energy pass between you as you return (?:him|her) to life\.</message>
       <message type='start'>Wrapped in an aura of chill, you close your eyes and softly begin to chant\.  As the cold air that surrounds you condenses you feel it slowly ripple outward in waves that turn the breath of those nearby into a fine mist\.  This mist swiftly moves to encompass you and you feel a pair of wings arc over your back\.  With the last words of your chant, you open your eyes and watch as foggy wings rise above you and gently brush against [A-Z][a-z]+\.  As they dissipate in a cold rush against [A-Z][a-z]+, you feel a surge of power spill forth from you and into (?:him|her)\.</message>
+      <message type='start'>Low and monotonous, you begin a chant to draw [A-Z][a-z]+ back to life and feel the deep shadows of the area rise to meet you\.  Falling upon you like a cloak of darkness, the twisting, inky blackness transforms into the visage of a jackal from a once-forgotten nightmare\.  Sweeping from your body into [A-Z][a-z]+'s?, the raw energy of your prayer transfers into (?:his|her) prone form\.  Slowly, the shadows recede back into the surrounding area\.</message>
       <message type='end'>The feeling of weakness leaves you\.  Your spirits are somewhat rejuvenated\.</message>
    </spell>
    <spell availability='all' name='Adrenal Surge Cooldown' number='9010' type='timer'>
@@ -2178,9 +2185,9 @@
    </spell>
    <spell availability='all' name='Pre-Meditate' number='9042' type='timer'>
       <duration>2</duration>
-      <message type='start'>You (?:kneel down and |kneel and )?begin to meditate on your lot in life\.</message>
+      <message type='start'>You kneel (?:down )?and begin to meditate on your lot in life\.</message>
       <message type='end'>Your action interrupts your meditation\.</message>
-      <message type='end'>Your meditation is interrupted by .*\.</message>
+      <message type='end'>Your meditation is interrupted by .+\.</message>
    </spell>
    <spell availability='all' name='Meditate' number='9043' type='timer'>
       <duration>10</duration>
@@ -2242,25 +2249,28 @@
       <message type='start'>You feel (?:significantly|a great deal|a fair amount) more agile\.</message>
       <message type='end'>You feel entirely capable of preparing yourself to once again move swiftly at a moment&apos;s notice\.</message>
    </spell>
-   <spell availability='all' name='Divine Wrath Cooldown' number='9052' type='timer'>
-      <duration>10</duration>
-      <message type='start'>You pour your soul into an appeal to .*</message>
-      <message type='end'>You feel your weakness and enfeeblement abate\.</message>
-   </spell>
-  <spell availability='self-cast' name='Curse of the Star (bonus)' number='9053' type='timer'>
+   <spell availability='self-cast' name='Curse of the Star (bonus)' number='9053' type='timer'>
       <duration span='stackable'>20</duration>
       <message type='start'>You acquire a certain murky complexion, and you feel more deft\.</message>
       <message type='start'>Your complexion grows murkier\.</message>
       <message type='end'>Your murky complexion fades away, and you feel less deft\.</message>
    </spell>
-  <spell availability='self-cast' name='Doomstone Curse' number='9054' type='timer'>
+   <spell availability='self-cast' name='Doomstone Curse' number='9054' type='timer'>
       <duration span='refreshable'>60</duration>
       <message type='start'>You feel a strange, foreboding sensation as your hand touches the black doomstone\.</message>
       <message type='end'>The foreboding sensation recedes\.</message>
    </spell>
-  <spell availability='self-cast' name='Divine Word Cooldown' number='9055' type='timer'>
+   <spell availability='self-cast' name='Divine Word Cooldown' number='9055' type='timer'>
       <duration persist-on-death='yes' real-time='yes' span='refreshable'>if Skills.slreligion >= 40; 480; elsif Skills.slreligion >= 20; 720; else 1440; end</duration>
       <message type='start'>Your surroundings grow dim\.\.\.you lapse into a state of awareness only, unable to do anything\.\.\.</message>
+   </spell>
+   <spell availability='all' name='Chronomage Teleport Staff Cooldown' number='9056' type='timer'>
+      <duration max='1440.0' persist-on-death='yes' real-time='yes'>1440</duration>
+      <message type='start'>When the air around you settles and your mind calms, you realize that your very existence has been catapulted into the past\.  The sand in the hourglass is now in the upper bulb, trickling slowly into the lower chamber\.</message>
+   </spell>
+   <spell availability='all' name='Planar Fragment Cooldown' number='9057' type='timer'>
+      <duration max='5760.0' persist-on-death='yes' real-time='yes'>5760</duration>
+      <message type='start'>Shifting your gaze, you use the fragment&apos;s influence to pierce the veil between the planes of existence\.  An other-worldly landscape fills your vision, and you sense an object of potential interest within arms reach\.  Without waiting to actually see it, you reach out and yank .+ into your current temporal sphere\.</message>
    </spell>
    <spell availability='self-cast' name='Mana Leech Cooldown' number='9516' type='timer'>
       <duration persist-on-death='yes' span='stackable'>1</duration>
