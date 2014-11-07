@@ -2232,7 +2232,7 @@
    </spell>
    <spell availability='all' name='Symbol of Mana Cooldown' number='9048' type='timer'>
       <duration max='5.0' persist-on-death='yes'>5</duration>
-      <message type='start'>You feel a surge of life flow through you\.</message>
+      <message type='start'>You call upon a special blessing from Koar\.</message>
       <message type='end'>You feel Koar&apos;s blessing return to you\.</message>
    </spell>
    <spell availability='all' name='Symbol of Transcendence Cooldown' number='9049' type='timer'>
@@ -2241,7 +2241,7 @@
    </spell>
    <spell availability='all' name='Symbol of Renewal Cooldown' number='9050' type='timer'>
       <duration>2</duration>
-      <message type='start'>You call upon the vitality of nature to renew your soul\.</message>
+      <message type='start'>You feel a surge of life flow through you\.</message>
       <message type='end'>You feel your connection to vitality of nature renew itself once more\.</message>
    </spell>
    <spell availability='self-cast' name='Burst of Swiftness Cooldown' number='9051' type='timer'>
