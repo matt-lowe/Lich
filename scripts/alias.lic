@@ -9,20 +9,22 @@
 	game: any
 	tags: core
 	required: Lich >= 4.6.0
-	version: 0.2
+	version: 0.3
 
 	changelog:
+		0.3 (2014-11-07):
+			sort ;alias list
 		0.2 (2014-10-05):
 			don't crash from recursive aliases 
 
 =end
 
 if script.vars[1] =~ /^stop/i
-	if UpstreamHook.list.include('Alias Service')
-		UpstreamHook.remove('Alias Service')
-		respond "\n--- Alias service stopped\n\n"
+	if UpstreamHook.list.include('alias-service')
+		UpstreamHook.remove('alias-service')
+		respond "\n--- Lich: alias service stopped\n\n"
 	else
-		respond "\n--- Alias service is not running\n\n"
+		respond "\n--- Lich: alias service is not running\n\n"
 	end
 	exit
 end
@@ -95,28 +97,34 @@ hook_proc = proc { |client_string|
 			end
 		elsif args =~ /^list$/i
 			output = "\nGlobal Aliases:\n\n"
-			none = true
+			list = Array.new
 			db.execute("SELECT trigger,target FROM global;") do |row|
-				output.concat "   #{row[0]} => #{row[1]}\n"
-				none = false
+				list.push "   #{row[0]} => #{row[1]}\n"
 			end
-			output.concat "   (none)\n" if none
-			none = true
+			if list.empty?
+				output.concat "   (none)\n"
+			else
+				output.concat list.sort.join
+			end
 			output.concat "\n#{XMLData.name}'s Aliases:\n\n"
+			list.clear
 			db.execute("SELECT trigger,target FROM #{character};") do |row|
-				output.concat "   #{row[0]} => #{row[1]}\n"
-				none = false
+				list.push "   #{row[0]} => #{row[1]}\n"
 			end
-			output.concat "   (none)\n" if none
+			if list.empty?
+				output.concat "   (none)\n"
+			else
+				output.concat list.sort.join
+			end
 			output.concat "\n"
 			respond output
 		elsif args =~ /^reload/i
 			update_regex.call
 			respond "\n--- Alias data reloaded\n\n"
 		elsif args =~ /^stop/i
-			UpstreamHook.remove('Alias Service')
+			UpstreamHook.remove('alias-service')
 			db.close rescue()
-			respond "\n--- Alias service stopped\n\n"
+			respond "\n--- Lich: alias service stopped\n\n"
 		else
 			output = "\n"
 			output.concat "Usage:\n"
@@ -200,5 +208,5 @@ hook_proc = proc { |client_string|
 	end
 }
 
-UpstreamHook.add('Alias Service', hook_proc)
-respond "--- Alias service started"
+UpstreamHook.add('alias-service', hook_proc)
+respond "--- Lich: alias service started"
