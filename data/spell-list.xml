@@ -2264,13 +2264,13 @@
       <duration persist-on-death='yes' real-time='yes' span='refreshable'>if Skills.slreligion >= 40; 480; elsif Skills.slreligion >= 20; 720; else 1440; end</duration>
       <message type='start'>Your surroundings grow dim\.\.\.you lapse into a state of awareness only, unable to do anything\.\.\.</message>
    </spell>
-   <spell availability='all' name='Chronomage Teleport Staff Cooldown' number='9056' type='timer'>
-      <duration max='1440.0' persist-on-death='yes' real-time='yes'>1440</duration>
-      <message type='start'>When the air around you settles and your mind calms, you realize that your very existence has been catapulted into the past\.  The sand in the hourglass is now in the upper bulb, trickling slowly into the lower chamber\.</message>
-   </spell>
    <spell availability='all' name='Planar Fragment Cooldown' number='9057' type='timer'>
       <duration max='5760.0' persist-on-death='yes' real-time='yes'>5760</duration>
       <message type='start'>Shifting your gaze, you use the fragment&apos;s influence to pierce the veil between the planes of existence\.  An other-worldly landscape fills your vision, and you sense an object of potential interest within arms reach\.  Without waiting to actually see it, you reach out and yank .+ into your current temporal sphere\.</message>
+   </spell>
+   <spell availability='all' name='Chronomage Teleport Staff Cooldown' number='9058' type='timer'>
+      <duration max='1440.0' persist-on-death='yes' real-time='yes'>1440</duration>
+      <message type='start'>When the air around you settles and your mind calms, you realize that your very existence has been catapulted into the past\.  The sand in the hourglass is now in the upper bulb, trickling slowly into the lower chamber\.</message>
    </spell>
    <spell availability='self-cast' name='Mana Leech Cooldown' number='9516' type='timer'>
       <duration persist-on-death='yes' span='stackable'>1</duration>
