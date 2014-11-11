@@ -5,16 +5,31 @@
 
 	;autostart help
 
-	author: Tillmen (tillmen@lichproject.org)
-	game: any
-	tags: core
+	  author: Tillmen (tillmen@lichproject.org)
+	    game: any
+	    tags: core
+	 version: 0.2
 	required: Lich >= 4.6.0
+
+	changelog:
+		0.2 (2014-11-10):
+			auto add infomon to global autostart list
 
 =end
 
+unless Settings['auto-added-infomon']
+	script_list = (Settings['scripts'] || Array.new)
+	unless script_list.any? { |s| s[:name] =~ /^infomon(?:\.lic)?$/i }
+		script_list.push(:name => 'infomon', :args => [])
+		Settings['scripts'] = script_list
+	end
+	Settings['auto-added-infomon'] = true
+	script_list = nil
+end
+
 if script.vars.empty?
 	did_something = false
-	for script_list in [ Setting['scripts'], CharSetting['scripts'] ]
+	for script_list in [ Settings['scripts'], CharSettings['scripts'] ]
 		if script_list.class == Array
 			for script_info in script_list
 				start_script(script_info[:name], script_info[:args])
@@ -27,7 +42,7 @@ if script.vars.empty?
 	end
 elsif (script.vars[1] =~ /^add$/i) and script.vars[2] and (script.vars[3] or script.vars[2] !~ /^\-\-global$/i)
 	if script.vars[2] =~ /^\-\-global$/i
-		script_list = Setting['scripts']
+		script_list = Settings['scripts']
 		script_list = Array.new unless script_list.class == Array
 		if not Script.exists?(script.vars[3])
 			respond "\n--- #{script.vars[3]} does not appear to be a valid script\n\n"
@@ -35,11 +50,11 @@ elsif (script.vars[1] =~ /^add$/i) and script.vars[2] and (script.vars[3] or scr
 			respond "\n--- #{script.vars[3]} is already set to start at login for all characters\n\n"
 		else
 			script_list.push(:name => script.vars[3].downcase, :args => script.vars[4..-1])
-			Setting['scripts'] = script_list
+			Settings['scripts'] = script_list
 			respond "\n--- #{script.vars[3]} will now start at login for all characters\n\n"
 		end
 	else
-		script_list = CharSetting['scripts']
+		script_list = CharSettings['scripts']
 		script_list = Array.new unless script_list.class == Array
 		if not Script.exists?(script.vars[2])
 			respond "\n--- #{script.vars[2]} does not appear to be a valid script\n\n"
@@ -47,32 +62,32 @@ elsif (script.vars[1] =~ /^add$/i) and script.vars[2] and (script.vars[3] or scr
 			respond "\n--- #{script.vars[2]} is already set to start at login for #{Char.name}\n\n"
 		else
 			script_list.push(:name =>script.vars[2].downcase, :args => script.vars[3..-1])
-			CharSetting['scripts'] = script_list
+			CharSettings['scripts'] = script_list
 			respond "\n--- #{script.vars[2]} will now start at login for #{Char.name}\n\n"
 		end
 	end
 elsif script.vars[1] =~ /^rem(?:ove)?$|^del(?:ete)?$/ and script.vars[2] and (script.vars[3] or script.vars[2] !~ /^\-\-global$/i)
 	if script.vars[2] =~ /^\-\-global$/i
-		script_list = Setting['scripts']
+		script_list = Settings['scripts']
 		if (script_list.class == Array) and (script_info = script_list.find { |s| s[:name] == script.vars[3].downcase })
 			script_list.delete(script_info)
-			Setting['scripts'] = script_list
+			Settings['scripts'] = script_list
 			respond "\n--- #{script.vars[3]} was removed from the global autostart list\n\n"
 		else
 			respond "\n--- #{script.vars[3]} was not found in the global autostart list\n\n"
 		end
 	else
-		script_list = CharSetting['scripts']
+		script_list = CharSettings['scripts']
 		if (script_list.class == Array) and (script_info = script_list.find { |s| s[:name] == script.vars[2].downcase })
 			script_list.delete(script_info)
-			CharSetting['scripts'] = script_list
+			CharSettings['scripts'] = script_list
 			respond "\n--- #{script.vars[2]} was removed from #{XMLData.name}'s autostart list\n\n"
 		else
 			respond "\n--- #{script.vars[2]} was not found in #{XMLData.name}'s autostart list\n\n"
 		end
 	end
 elsif script.vars[1] =~ /^list$/i
-	script_list = Setting['scripts']
+	script_list = Settings['scripts']
 	output = "\n--- Global autostart scripts: "
 	if (script_list.class == Array) and not script_list.empty?
 		output.concat script_list.collect { |script_info| if script_info[:args].empty?; script_info[:name]; else; "#{script_info[:name]} (args: #{script_info[:args].join(' ')})"; end }.join(', ')
@@ -80,7 +95,7 @@ elsif script.vars[1] =~ /^list$/i
 	else
 		output.concat "(none)\n\n"
 	end
-	script_list = CharSetting['scripts']
+	script_list = CharSettings['scripts']
 	output.concat "--- #{XMLData.name}'s autostart scripts: "
 	if (script_list.class == Array) and not script_list.empty?
 		output.concat script_list.collect { |script_info| if script_info[:args].empty?; script_info[:name]; else; "#{script_info[:name]} (args: #{script_info[:args].join(' ')})"; end }.join(', ')
