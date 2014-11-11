@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.9'
+LICH_VERSION = '4.6.11'
 $version = LICH_VERSION # depreciated
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
@@ -567,7 +567,7 @@ rescue LoadError
 		end
 	else
 		# fixme: no sqlite3 on Linux/Mac
-		puts "aint got no sqlite3"
+		puts "The sqlite3 gem is not installed (or failed to load), you may need to: sudo gem install sqlite3"
 	end
 	exit
 end
@@ -585,14 +585,14 @@ rescue LoadError
 					ruby_bin_dir = File.dirname(r[:lpFilename])
 					if File.exists?("#{ruby_bin_dir}\\gem.bat")
 						verb = (Win32.isXP? ? 'open' : 'runas')
-						r = Win32.ShellExecuteEx(:fMask => Win32::SEE_MASK_NOCLOSEPROCESS, :lpVerb => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install gtk2 --no-ri --no-rdoc')
+						r = Win32.ShellExecuteEx(:fMask => Win32::SEE_MASK_NOCLOSEPROCESS, :lpVerb => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install gtk2 -v 2.2.0 --no-ri --no-rdoc')
 						if r[:return] > 0
 							pid = r[:hProcess]
 							sleep 1 while Win32.GetExitCodeProcess(:hProcess => pid)[:lpExitCode] == Win32::STILL_ACTIVE
 							r = Win32.MessageBox(:lpText => "Install finished.  Lich will restart now.", :lpCaption => "Lich v#{LICH_VERSION}", :uType => Win32::MB_OKCANCEL)
 						else
 							# ShellExecuteEx failed: this seems to happen with an access denied error even while elevated on some random systems
-							r = Win32.ShellExecute(:lpOperation => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install gtk2 --no-ri --no-rdoc')
+							r = Win32.ShellExecute(:lpOperation => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install gtk2 -v 2.2.0 --no-ri --no-rdoc')
 							if r <= 32
 								Win32.MessageBox(:lpText => "error: failed to start the gtk2 installer\n\nfailed command: Win32.ShellExecute(:lpOperation => #{verb.inspect}, :lpFile => \"#{ruby_bin_dir}\\gem.bat\", :lpParameters => \"install sqlite3 --no-ri --no-rdoc\")\n\nerror code: #{Win32.GetLastError}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
 								exit
@@ -618,8 +618,8 @@ rescue LoadError
 				# user doesn't want to install sqlite3 gem
 			end
 		else
-			# fixme: Linux, not a terminal, no gtk
-			puts "aint got no gtk"
+			# fixme: no gtk2 on Linux/Mac
+			puts "The gtk2 gem is not installed (or failed to load), you may need to: sudo gem install gtk2"
 		end
 		exit
 	else
@@ -1848,35 +1848,21 @@ DISTRUST_SCRIPT = proc { |script_name|
 	end
 }
 
-ALT_WIN32_LAUNCH_METHOD = proc {
+GET_WIN32_LAUNCH_METHOD = proc {
 	begin
-		val = lich_db.get_first_value("SELECT value FROM lich_settings WHERE name='alt_win32_launch_method';")
+		val = lich_db.get_first_value("SELECT value FROM lich_settings WHERE name='win32_launch_method';")
 	rescue SQLite3::BusyException
 		sleep 0.1
 		retry
 	end
-	if val.nil? or (val == 'no')
-		false
-	else
-		true
-	end
+	val
 }
-
-TOGGLE_WIN32_LAUNCH_METHOD = proc {
-	if ALT_WIN32_LAUNCH_METHOD.call
-		begin
-			val = lich_db.execute("INSERT OR REPLACE INTO lich_settings(name,value) values('alt_win32_launch_method','no');")
-		rescue SQLite3::BusyException
-			sleep 0.1
-			retry
-		end
-	else
-		begin
-			val = lich_db.execute("INSERT OR REPLACE INTO lich_settings(name,value) values('alt_win32_launch_method','yes');")
-		rescue SQLite3::BusyException
-			sleep 0.1
-			retry
-		end
+SET_WIN32_LAUNCH_METHOD = proc { |val|
+	begin
+		lich_db.execute("INSERT OR REPLACE INTO lich_settings(name,value) values('win32_launch_method',?);", val.to_s.encode('UTF-8'))
+	rescue SQLite3::BusyException
+		sleep 0.1
+		retry
 	end
 	nil
 }
@@ -5049,7 +5035,7 @@ class Spell
 						loop {
 							waitrt?
 							waitcastrt?
-							prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$|^You do not know that spell!$/
+							prepare_result = dothistimeout "prepare #{@num}", 8, /^You already have a spell readied!  You must RELEASE it if you wish to prepare another!$|^Your spell(?:song)? is ready\.|^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$|^You do not know that spell!$|^All you manage to do is cough up some blood\.$/
 							if prepare_result =~ /^Your spell(?:song)? is ready\./
 								break
 							elsif prepare_result == 'You already have a spell readied!  You must RELEASE it if you wish to prepare another!'
@@ -5059,7 +5045,7 @@ class Spell
 									sleep 0.1
 									return false
 								end
-							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$|^You do not know that spell!$/
+							elsif prepare_result =~ /^You can't think clearly enough to prepare a spell!$|^You are concentrating too intently .*?to prepare a spell\.$|^You are too injured to make that dextrous of a movement|^The searing pain in your throat makes that impossible|^But you don't have any mana!\.$|^You can't make that dextrous of a move!$|^As you begin to prepare the spell the wind blows small objects at you thwarting your attempt\.$|^You do not know that spell!$|^All you manage to do is cough up some blood\.$/
 								sleep 0.1
 								return prepare_result
 							end
@@ -7313,7 +7299,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
 				dir.sub!('door', 'second door')
 			end
 			put_dir.call
-		elsif line =~ /^You can't go there|^You can't swim in that direction\.|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails|^There doesn't seem to be any way to do that at the moment\.$/
+		elsif line =~ /^You can't go there|^You can't (?:go|swim) in that direction\.|^Where are you trying to go\?|^What were you referring to\?|^I could not find what you were referring to\.|^How do you plan to do that here\?|^You take a few steps towards|^You cannot do that\.|^You settle yourself on|^You shouldn't annoy|^You can't go to|^That's probably not a very good idea|^You can't do that|^Maybe you should look|^You are already|^You walk over to|^You step over to|The [\w\s]+ is too far away|You may not pass\.|become impassable\.|prevents you from entering\.|Please leave promptly\.|is too far above you to attempt that\.$|^Uh, yeah\.  Right\.$|^Definitely NOT a good idea\.$|^Your attempt fails|^There doesn't seem to be any way to do that at the moment\.$/
 			echo 'move: failed'
 			fill_hands if need_full_hands
 			Script.current.downstream_buffer.unshift(save_stream)
@@ -8011,6 +7997,37 @@ def checkbounty
 	else
 		return nil
 	end
+end
+
+def checksleeping
+	return $infomon_sleeping
+end
+def sleeping?
+	return $infomon_sleeping
+end
+def checkbound
+	return $infomon_bound
+end
+def bound?
+	return $infomon_bound
+end
+def checksilenced
+	$infomon_silenced
+end
+def silenced?
+	$infomon_silenced
+end
+def checkcalmed
+	$infomon_calmed
+end
+def calmed?
+	$infomon_calmed
+end
+def checkcutthroat
+	$infomon_cutthroat
+end
+def cutthroat?
+	$infomon_cutthroat
 end
 
 def variable
@@ -9290,11 +9307,6 @@ def do_client(client_string)
 			respond "   #{$clean_lich_char}send <line>               send a line to all scripts as if it came from the game"
 			respond "   #{$clean_lich_char}send to <script> <line>   send a line to a specific script"
 			respond
-			respond "   #{$clean_lich_char}setting add [global] <setting name> <value>"
-			respond "   #{$clean_lich_char}setting change [global] <setting name> <value>"
-			respond "   #{$clean_lich_char}setting delete [global] <setting name> [value]"
-			respond "   #{$clean_lich_char}setting list"
-			respond
 			respond 'If you liked this help message, you might also enjoy:'
 			respond "   #{$clean_lich_char}lnet help"
 			respond "   #{$clean_lich_char}magic help     (infomon must be running)"
@@ -9303,7 +9315,6 @@ def do_client(client_string)
 			respond "   #{$clean_lich_char}alias help"
 			respond "   #{$clean_lich_char}vars help"
 			respond "   #{$clean_lich_char}autostart help"
-			respond "   #{$clean_lich_char}updater help"
 			respond
 		else
 			if cmd =~ /^([^\s]+)\s+(.+)/
@@ -11031,11 +11042,7 @@ main_thread = Thread.new {
 				Lich.log "error: cannot bind listen socket to local port: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 				exit(1)
 			end
-#			begin
-#				listener.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEADDR, true)
-#			rescue
-#				Lich.log "Cannot set SO_REUSEADDR sockopt"
-#			end
+			accept_thread = Thread.new { $_CLIENT_ = SynchronizedSocket.new(listener.accept) }
 			localport = listener.addr[1]
 			if custom_launch
 				sal_filename = nil
@@ -11051,12 +11058,9 @@ main_thread = Thread.new {
 				launcher_cmd = launcher_cmd.sub('%1', sal_filename)
 				launcher_cmd = launcher_cmd.tr('/', "\\") if (RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)
 			end
-			accept_thread = Thread.new { $_CLIENT_ = SynchronizedSocket.new(listener.accept) }
-			begin
-				if custom_launch_dir
-					Dir.chdir(custom_launch_dir)
-				end
-				if defined?(Win32) and ALT_WIN32_LAUNCH_METHOD.call and (launcher_cmd =~ /^"(.*?)"\s*(.*)$/)
+			if defined?(Win32)
+				win32_launch_method_1 = proc {
+					launcher_cmd =~ /^"(.*?)"\s*(.*)$/
 					dir_file = $1
 					param = $2
 					dir = dir_file.slice(/^.*[\\\/]/)
@@ -11068,6 +11072,38 @@ main_thread = Thread.new {
 						Lich.log "error: Win32.ShellExecute returned #{r}; Win32.GetLastError: #{Win32.GetLastError}"
 						Lich.msgbox(:message => "error: Win32.ShellExecute returned #{r};  Win32.GetLastError: #{Win32.GetLastError}", :icon => :error)
 					end
+				}
+				win32_launch_method_2 = proc {
+					Lich.log "info: launcher_cmd: #{launcher_cmd}"
+					spawn launcher_cmd
+				}
+				win32_launch_method = nil
+				win32_launch = proc {
+					win32_launch_method = GET_WIN32_LAUNCH_METHOD.call
+					if win32_launch_method.nil?
+						win32_launch_method = 1
+						SET_WIN32_LAUNCH_METHOD.call('1:in-progress')
+						win32_launch_method_1.call
+					else
+						m, s = win32_launch_method.split(':')
+						if (m == '1' and s == 'success') or (m == '2' and s =~ /^fail$|^in-progress$/)
+							win32_launch_method = 1
+							SET_WIN32_LAUNCH_METHOD.call('1:in-progress')
+							win32_launch_method_1.call
+						else
+							win32_launch_method = 2
+							SET_WIN32_LAUNCH_METHOD.call('2:in-progress')
+							win32_launch_method_2.call
+						end
+					end
+				}
+			end
+			begin
+				if custom_launch_dir
+					Dir.chdir(custom_launch_dir)
+				end
+				if defined?(Win32)
+					win32_launch.call
 				elsif defined?(Wine)
 					Lich.log "info: launcher_cmd: #{Wine::BIN} #{launcher_cmd}"
 					spawn "#{Wine::BIN} #{launcher_cmd}"
@@ -11083,38 +11119,13 @@ main_thread = Thread.new {
 			300.times { sleep 0.1; break unless accept_thread.status }
 			if defined?(Win32) and not $_CLIENT_
 				Lich.log "error: timeout waiting for client to connect"
-				if ALT_WIN32_LAUNCH_METHOD.call
-					answer = Lich.msgbox(:message => "error: launch method 2 timed out waiting for client to connect\n\nWould you like to try method 1?", :buttons => :yes_no, :icon => :error)
-				else
-					answer = Lich.msgbox(:message => "error: launch method 1 timed out waiting for client to connect\n\nWould you like to try method 2?", :buttons => :yes_no, :icon => :error)
-				end
+				answer = Lich.msgbox(:message => "error: launch method #{win32_launch_method} timed out waiting for client to connect\n\nWould you like to try method #{win32_launch_method == 1 ? 2 : 1}?", :buttons => :yes_no, :icon => :error)
 				if (answer == :yes)
-					TOGGLE_WIN32_LAUNCH_METHOD.call
-					begin
-						if ALT_WIN32_LAUNCH_METHOD.call
-							launcher_cmd =~ /^"(.*?)"\s*(.*)$/
-							dir_file = $1
-							param = $2
-							dir = dir_file.slice(/^.*[\\\/]/)
-							file = dir_file.sub(/^.*[\\\/]/, '')
-							operation = (Win32.isXP? ? 'open' : 'runas')
-							Lich.log "info: launcher_cmd: Win32.ShellExecute(:lpOperation => #{operation.inspect}, :lpFile => #{file.inspect}, :lpDirectory => #{dir.inspect}, :lpParameters => #{param.inspect})"
-							r = Win32.ShellExecute(:lpOperation => operation, :lpFile => file, :lpDirectory => dir, :lpParameters => param)
-							if r < 33
-								Lich.log "error: Win32.ShellExecute returned #{r}; Win32.GetLastError: #{Win32.GetLastError}"
-								Lich.msgbox(:message => "error: Win32.ShellExecute returned #{r};  Win32.GetLastError: #{Win32.GetLastError}", :icon => :error)
-							end
-						else
-							Lich.log "info: launcher_cmd: #{launcher_cmd}"
-							spawn launcher_cmd
-						end
-					rescue
-						Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-						Lich.msgbox(:message => "error: #{$!}", :icon => :error)
-					end
+					win32_launch.call
 					Lich.log 'info: waiting for client to connect...'
 					300.times { sleep 0.1; break unless accept_thread.status }
 				else
+					SET_WIN32_LAUNCH_METHOD.call("#{win32_launch_method}:fail")
 					accept_thread.kill if accept_thread.status
 					Dir.chdir($lich_dir)
 					if sal_filename
@@ -11144,14 +11155,12 @@ main_thread = Thread.new {
 				exit
 			end
 			Lich.log 'info: connected'
+			if defined?(Win32)
+				SET_WIN32_LAUNCH_METHOD.call("#{win32_launch_method}:success")
+			end
 			listener.close rescue()
 			if sal_filename
 				File.delete(sal_filename) rescue()
-			end
-			begin
-				listener.close
-			rescue
-				Lich.log "error: #{$!}"
 			end
 		end
 		gamehost, gameport = fix_game_host_port.call(gamehost, gameport)
@@ -11593,7 +11602,7 @@ main_thread = Thread.new {
 	server_thread = Thread.new {
 		begin
 			while $_SERVERSTRING_ = $_SERVER_.gets
-#				Game.update($_SERVERSTRING_)
+				Game.update($_SERVERSTRING_) if defined?(Game)
 				last_server_thread_recv = Time.now
 				begin
 					$cmd_prefix = String.new if $_SERVERSTRING_ =~ /^\034GSw/
@@ -11651,13 +11660,13 @@ main_thread = Thread.new {
 				end
 			end
 		rescue Exception
-			$stdout.puts "--- error: server_thread: #{$!}"
 			Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+			$stdout.puts "--- error: server_thread: #{$!}"
 			sleep 0.2
 			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or ($!.to_s =~ /invalid argument/i)
 		rescue
-			$stdout.puts "--- error: server_thread: #{$!}"
 			Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+			$stdout.puts "--- error: server_thread: #{$!}"
 			sleep 0.2
 			retry unless $_CLIENT_.closed? or $_SERVER_.closed?
 		end
