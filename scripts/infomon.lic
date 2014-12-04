@@ -9,15 +9,16 @@
 	  author: Tillmen (tillmen@lichproject.org
 	    game: Gemstone
 	    tags: core
-	required: Lich > 4.4.0
-	 version: 1.0
+	required: Lich > 4.6.10
+	 version: 1.2
+
+	changelog:
+		1.2 (2014-11-14):
+			attempted bugfix
+		1.1 (2014-11-10):
+			don't define check(sleeping|bound|silenced|calmed|cutthroat)
 
 =end
-
-unless $version.split('.').collect { |num| num.rjust(5, '0') }.join('.') >= '00004.00004.00000'
-	echo 'Your version of Lich is too old for this script.'
-	exit
-end
 
 unless XMLData.game =~ /^(?:GSF|GSIV|GSPlat|GSTest)$/
 	echo "This script is meant for Gemstone Prime, Platinum, or Shattered.  It will likely cause problems on whatever game you're trying to run it on..."
@@ -234,44 +235,11 @@ action = proc { |client_string|
 }
 UpstreamHook.add('infomon', action)
 
-#
-# Implement some status tracking functions
-#
 $infomon_sleeping = false
-def checksleeping
-	return $infomon_sleeping
-end
-def sleeping?
-	return $infomon_sleeping
-end
 $infomon_bound = false
-def checkbound
-	return $infomon_bound
-end
-def bound?
-	return $infomon_bound
-end
 $infomon_silenced = false
-def checksilenced
-	$infomon_silenced
-end
-def silenced?
-	$infomon_silenced
-end
 $infomon_calmed = true
-def checkcalmed
-	$infomon_calmed
-end
-def calmed?
-	$infomon_calmed
-end
 $infomon_cutthroat = false
-def checkcutthroat
-	$infomon_cutthroat
-end
-def cutthroat?
-	$infomon_cutthroat
-end
 
 #
 # Save function
@@ -316,16 +284,6 @@ Thread.new {
 before_dying {
 	save_proc.call
 	UpstreamHook.remove('infomon')
-	undef checksleeping
-	undef sleeping?
-	undef checkbound
-	undef bound?
-	undef checksilenced
-	undef silenced?
-	undef checkcalmed
-	undef calmed?
-	undef checkcutthroat
-	undef cutthroat?
 }
 
 #
@@ -748,7 +706,7 @@ while line = get
 							echo
 						end
 					else
-						echo 'This script must be trusted to use this function.'
+						echo 'This script must be trusted to use this function. (;trust infomon)'
 					end
 				elsif mobj.captures.first =~ /load/i
 					if $SAFE == 0
@@ -791,7 +749,7 @@ while line = get
 							echo
 						end
 					else
-						echo 'This script must be trusted to use this function.'
+						echo 'This script must be trusted to use this function. (;trust infomon)'
 					end
 				else
 					echo "Magic error! Type ';magic help' for usage information."
@@ -1175,7 +1133,7 @@ while line = get
 			Spell[6666].putup
 			Spell[6666].timeleft = time_added
 		elsif line =~ spell_up_msgs_re
-			spell = Spell.list.find { |spell| line =~ /^#{spell.msgup}$/ }
+			spell = Spell.list.find { |s| line =~ /^#{s.msgup}$/ }
 			if spell.num == 218
 				if line =~ /^You infuse your (.*?) spirit with the mana necessary to maintain its corporeal form\.$/
 					servant_type = $1
@@ -1331,7 +1289,7 @@ while line = get
 				end
 			end
 		elsif line =~ spell_dn_msgs_re
-			if spell = Spell.active.find { |spell| line =~ /^#{spell.msgdn}$/ } || Spell.list.find { |spell| line =~ /^#{spell.msgdn}$/ }
+			if spell = (Spell.active.find { |s| line =~ /^#{s.msgdn}$/ } || Spell.list.find { |s| line =~ /^#{s.msgdn}$/ })
 				if (spell.num == 218) and servant_type
 					if line =~ /(?:An?|The) #{servant_type} spirit fades into ethereal form and wafts away\.$/
 						spell.putdown
