@@ -1367,14 +1367,18 @@
       <message type='end'>You feel slightly weakened as the blood in your veins thins\.</message>
    </spell>
    <spell availability='self-cast' name='Zealot' number='1617' type='offense'>
-      <duration>2 + ([Spells.paladin-17,0].max / 6)</duration>
+      <duration>2 + ([Spells.paladin-17,0].max / 6.0)</duration>
       <cost type='mana'>17</cost>
       <bonus type='physical-as'>30+(bonus = 0; [1,3,6,10,15,21,28,36,45,55,66,78,91,105,120,136,153,171,190].each { |n| bonus += 1 if Skills.slreligion &gt;= n }; bonus)</bonus>
       <bonus type='physical-ds'>-30+(bonus = 0; [1,3,6,10,15,21,28,36,45,55,66,78,91,105,120,136,153,171,190].each { |n| bonus += 1 if Skills.slreligion &gt;= n }; bonus)</bonus>
       <message type='start'>A surge of radiant energy coalesces around you and (?:then fades into obscurity|those nearby)\.</message>
       <message type='end'>You feel less resolved as the divine urging subsides, fading into obscurity\.</message>
    </spell>
-   <spell availability='group' name='Guard the Meek' number='1618' type='defense'></spell>
+   <spell availability='group' name='Crusade' number='1618' type='offense'>
+      <duration>60</duration>
+      <message type='start'>You utter a pious chant and a divine force suddenly radiates around you\. The intensity of your patron's aid billows out from you in a wave of righteous indignation!</message>
+      <message type='end'>The divine force surrounding you slowly fades away\.</message>
+   </spell>
    <spell availability='self-cast' name='Faith Shield' number='1619' type='defense'>
       <duration>dur = 0.5 + (Spells.paladin - 19) / 60.0; if dur &gt; (70.0 / 60.0) then dur = (70.0 / 60.0) else dur end</duration>
       <cost type='mana'>19</cost>
