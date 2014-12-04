@@ -9,23 +9,29 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.18
+	     version: 2.21
 
-	Changelog:
+	changelog:
+		2.21 (2014-11-23):
+			set default values for download-updates on first run
+		2.20 (2014-11-22):
+			show game in list when there's multiple files with the same name
+		2.19 (2014-11-11):
+			slow down download-updates
 		2.18 (2014-11-06):
 			workaround to deal with the plat_updater script disabling OpenSSL::SSL::VERIFY_PEER
 		2.17 (2014-10-12):
 			started on gui
+
+=end
+=begin
+
 		2.16 (2014-10-12):
 			delete old map databases after downloading a new one
 		2.15 (2014-10-07):
 			don't look in data directory for xml files on Lich 4.4
 		2.14 (2014-10-07):
 			fix Invalid cross-device link error (when temp directory is on a different disk)
-
-=end
-=begin
-
 		2.13 (2014-10-05):
 			automatically download-mapdb after checkout-mapdb
 		2.12 (2014-10-05):
@@ -56,13 +62,39 @@ unless defined?(LICH_VERSION) # Lich < 4.5
 	LICH_VERSION = $version
 end
 
+if Settings['updatable'].nil?
+	Settings['first-gs-run'] = true
+	Settings['updatable'] = Hash.new
+	Settings['updatable'][:scripts] = Array.new
+	Settings['updatable'][:scripts].push(:filename => 'repository.lic', :game => 'any', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'lnet.lic', :game => 'any', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'alias.lic', :game => 'any', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'vars.lic', :game => 'any', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'go2.lic', :game => 'any', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'narost.lic', :game => 'any', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'autostart.lic', :game => 'any', :author => 'Tillmen')
+	Settings['updatable'][:mapdb] = Hash.new
+	if LICH_VERSION.split('.').collect { |num| num.rjust(5, '0') }.join('.') < '00004.00006.00000'
+		Settings['updatable'][:lich] = false
+	else
+		Settings['updatable'][:lich] = true
+	end
+end
+
+if (XMLData.game =~ /^GS/) and Settings['first-gs-run']
+	Settings['first-gs-run'] = false
+	Settings['updatable'][:scripts].push(:filename => 'infomon.lic', :game => 'gs', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'spell-list.xml', :game => 'gs', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'gameobj-data.xml', :game => 'gs', :author => 'Tillmen')
+end
+
 require 'openssl'
 require 'digest/md5'
 
 hostname           = 'lichproject.org'
 port               = 7157
 ca_cert_data       = "-----BEGIN CERTIFICATE-----\nMIIDlTCCAn2gAwIBAgIJAKuu65i5NsruMA0GCSqGSIb3DQEBCwUAMGExCzAJBgNV\nBAYTAlVTMREwDwYDVQQIDAhJbGxpbm9pczESMBAGA1UECgwJTWF0dCBMb3dlMQ8w\nDQYDVQQDDAZSb290Q0ExGjAYBgkqhkiG9w0BCQEWC21hdHRAaW80LnVzMB4XDTE0\nMDYwNzE3NDUwMFoXDTI0MDYwNDE3NDUwMFowYTELMAkGA1UEBhMCVVMxETAPBgNV\nBAgMCElsbGlub2lzMRIwEAYDVQQKDAlNYXR0IExvd2UxDzANBgNVBAMMBlJvb3RD\nQTEaMBgGCSqGSIb3DQEJARYLbWF0dEBpbzQudXMwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQCcIRn0IMCNYeL5agKmkdedgJXsIyTJS8qKrY6EvQsq4tt0\nmO3Or9K8IaDl7qFdQ9nfSJ5phNgoCy9wZ9rDWv5FhY5MnnVHGr3fCa7RkMxJFR/N\nwiD4ihQlixOUly76glceyc/6QQS9bNe96evZDstERGAFfzgHY4qAlyurR6mBu9Mb\nyyCRok6xMRnjrbTMNkvvOsuG0sY9ot+SLHGgU3qT7+wVh/CbWcjeF7/Qwa//fbFk\nmq5c1FuvhU3DanSSz+VuWudPFSyZ3r5pYrLMJWsyomDa4gkL2bJ5jya2BWDMXvSS\nCpdQgPDIlClMfAFLd/Ss8ZIGa6uNFcSK6Xca51ClAgMBAAGjUDBOMB0GA1UdDgQW\nBBScbglRiGzz9yzuhgBwFYjgimeByDAfBgNVHSMEGDAWgBScbglRiGzz9yzuhgBw\nFYjgimeByDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA7MLZYfqam\n5aaSBqQpT6sOGDtVc9koIok59oTQmNXqe+awg2VUnAiesxtLd+FWGUMp8XzHdGWw\nH3O6kAUkPm/in001X7TRAhbgDujfTRbTzxND0XrjuEzDMALs3YpDM1pMXqC7RXWA\n7z+N0gRaUgmh1rMbk/qA3cAfC2dwf2j3NYy3bDw3lMpdyIwAfOQxiZVglYgX3dgT\nU9b//gsUyPCvlpL0mYcmhOOLt6oqQhMJaw1I6A9xMe2kO2L+8KPGK2u1B+P5/Sx0\nFE8LIp5KA3a7yRbOty19NsGR+yW7WwV7BL6c6GOKb/iKJBLYzTmNG6m16hRrxDGj\ntGu91I0ORptB\n-----END CERTIFICATE-----"
-client_version     = '2.18'
+client_version     = '2.21'
 cmd                = Array.new
 cmd_author         = nil
 cmd_password       = nil
@@ -466,11 +498,11 @@ format_list = proc { |list|
 			list[ri][si] = "#{(list[ri][si].to_f / 1024).to_s.slice(/^[0-9]+(?:\.[0-9])?/)}k"
 		}
 	end
-	if c = headers.index('game')
-		games = list.collect { |r| r[c] }
-		games.uniq!
-		games.delete('any')
-		if games.length == 1
+	if (c = headers.index('game')) and (f = headers.index('file'))
+		f_list = list.collect { |r| r[f] }.uniq
+		g_list = list.collect { |r| r[c] }.uniq
+		g_list.delete('any')
+		unless (f_list.length < list.length) or (g_list.length > 1)
 			headers.delete_at(c)
 			list.each { |r| r.delete_at(c) }
 		end
@@ -1248,7 +1280,9 @@ elsif (cmd[0] =~ /^download-?update[ds]$/i)
 								echo "warning: author of #{local_info[:filename]} changed from #{local_info[:author]} to #{remote_info[ai]}: downloading anyway"
 							end
 							echo "downloading #{local_info[:filename].sub(/\.lic$/,'')}..."
+							start = Time.now.to_f
 							download_file.call(local_info[:filename], local_info[:game])
+							sleep [(1.5 - Time.now.to_f + start), 0].max
 							no_updates = false
 						end
 					end
