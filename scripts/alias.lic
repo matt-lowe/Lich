@@ -9,9 +9,11 @@
 	game: any
 	tags: core
 	required: Lich >= 4.6.0
-	version: 0.3
+	version: 0.4
 
 	changelog:
+		0.4 (2014-11-13):
+			remove leading spaces before sending the alias target
 		0.3 (2014-11-07):
 			sort ;alias list
 		0.2 (2014-10-05):
@@ -155,7 +157,7 @@ hook_proc = proc { |client_string|
 		if character_regex and (client_string =~ character_regex)
 			trigger, extra = $1, $2
 			if target = db.get_first_value("SELECT target FROM #{character} WHERE trigger=?;", trigger.encode('UTF-8'))
-				target = target.split('\\r')
+				target = target.split('\\r')#.collect { |line| line.sub(/^\s+/, '') }
 				if extra.empty?
 					target.collect! { |line| line.gsub('\\?', '') }
 				elsif target.any? { |line| line.include?('\\?') }
@@ -179,7 +181,7 @@ hook_proc = proc { |client_string|
 		elsif global_regex and (client_string =~ global_regex)
 			trigger, extra = $1, $2
 			if target = db.get_first_value("SELECT target FROM global WHERE trigger=?;", trigger.encode('UTF-8'))
-				target = target.split('\\r')
+				target = target.split('\\r')#.collect { |line| line.sub(/^\s+/, '') }
 				if extra.empty?
 					target.collect! { |line| line.gsub('\\?', '') }
 				elsif target.any? { |line| line.include?('\\?') }
