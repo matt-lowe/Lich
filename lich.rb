@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.11'
+LICH_VERSION = '4.6.12'
 $version = LICH_VERSION # depreciated
 
 if ARGV.any? { |arg| (arg == '-h') or (arg == '--help') }
@@ -1867,6 +1867,24 @@ SET_WIN32_LAUNCH_METHOD = proc { |val|
 	nil
 }
 
+begin
+	did_trusted_defaults = lich_db.get_first_value("SELECT value FROM lich_settings WHERE name='did_trusted_defaults';")
+rescue SQLite3::BusyException
+	sleep 0.1
+	retry
+end
+if did_trusted_defaults.nil?
+	TRUST_SCRIPT.call('repository')
+	TRUST_SCRIPT.call('lnet')
+	TRUST_SCRIPT.call('narost')
+	begin
+		lich_db.execute("INSERT INTO lich_settings(name,value) VALUES('did_trusted_defaults', 'yes');")
+	rescue SQLite3::BusyException
+		sleep 0.1
+		retry
+	end
+end
+
 #
 # import Lich 4.4 settings to Lich 4.5
 #
@@ -2036,6 +2054,7 @@ if did_import.nil?
 				alias_hash.each { |trigger,target|
 					tables.each { |t|
 						begin
+							# fixme: trigger has been Regexp.escape'd; needs undone
 							db.execute("INSERT OR REPLACE INTO #{t} (trigger,target) VALUES(?,?);", trigger.encode('UTF-8'), target.encode('UTF-8'))
 						rescue SQLite3::BusyException
 							sleep 0.1
@@ -2176,7 +2195,7 @@ end
 class SynchronizedSocket
 	def initialize(o)
 		@delegate = o
-		@mutex = ::Mutex.new
+		@mutex = Mutex.new
 	end
 	def puts(*args, &block)
 		@mutex.synchronize {
@@ -4576,11 +4595,11 @@ class Spell
 							spell.active = true
 						end
 					}
-					@@loaded = true
 					@@bonus_list = @@list.collect { |spell| spell._bonus.keys }.flatten
 					@@bonus_list = @@bonus_list | @@bonus_list
 					@@cost_list = @@list.collect { |spell| spell._cost.keys }.flatten
 					@@cost_list = @@cost_list | @@cost_list
+					@@loaded = true
 					return true
 				rescue
 					respond "--- Lich: error: Spell.load: #{$!}"
@@ -5227,7 +5246,7 @@ class CMan
 	@@weapon_bonding         ||= 0
 	@@vanish                 ||= 0
 	@@duck_and_weave         ||= 0
-	@@slipery_mind           ||= 0
+	@@slippery_mind          ||= 0
 	@@predators_eye          ||= 0
     @@burst_of_swiftness     ||= 0
 	@@rolling_krynch_stance  ||= 0
@@ -5292,7 +5311,7 @@ class CMan
 	def CMan.weapon_bonding;     @@weapon_bonding;     end
 	def CMan.vanish;             @@vanish;             end
 	def CMan.duck_and_weave;     @@duck_and_weave;     end
-	def CMan.slipery_mind;       @@slipery_mind;       end
+	def CMan.slippery_mind;      @@slippery_mind;      end
 	def CMan.predators_eye;      @@predators_eye;      end
 
 	def CMan.bearhug=(val);            @@bearhug=val;            end
@@ -5351,7 +5370,7 @@ class CMan
 	def CMan.weapon_bonding=(val);     @@weapon_bonding=val;     end
 	def CMan.vanish=(val);             @@vanish=val;             end
 	def CMan.duck_and_weave=(val);     @@duck_and_weave=val;     end
-	def CMan.slipery_mind=(val);       @@slipery_mind=val;       end
+	def CMan.slippery_mind=(val);      @@slippery_mind=val;      end
 	def CMan.predators_eye=(val);      @@predators_eye=val;      end
 
 	def CMan.method_missing(arg1, arg2=nil)
@@ -10373,16 +10392,16 @@ main_thread = Thread.new {
 			liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
 
 			renderer = Gtk::CellRendererText.new
-			renderer.background = 'white'
+#			renderer.background = 'white'
 
 			treeview = Gtk::TreeView.new(liststore)
 			treeview.height_request = 160
 
-			col = Gtk::TreeViewColumn.new("Game", renderer, :text => 1, :background_set => 2)
+			col = Gtk::TreeViewColumn.new("Game", renderer, :text => 1)
 			col.resizable = true
 			treeview.append_column(col)
 
-			col = Gtk::TreeViewColumn.new("Character", renderer, :text => 3, :background_set => 2)
+			col = Gtk::TreeViewColumn.new("Character", renderer, :text => 3)
 			col.resizable = true
 			treeview.append_column(col)
 
@@ -11489,7 +11508,7 @@ main_thread = Thread.new {
 				respond $!.backtrace.first
 				Lich.log "error: client_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 				sleep 0.2
-				retry unless $_CLIENT_.closed? or $_SERVER_.closed? or !server_thread.alive?
+				retry unless $_CLIENT_.closed? or $_SERVER_.closed? or !server_thread.alive? or ($!.to_s =~ /invalid argument|A connection attempt failed|An existing connection was forcibly closed/i)
 			end
 			server_thread.kill rescue()
 		}
@@ -11663,12 +11682,12 @@ main_thread = Thread.new {
 			Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 			$stdout.puts "--- error: server_thread: #{$!}"
 			sleep 0.2
-			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or ($!.to_s =~ /invalid argument/i)
+			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or ($!.to_s =~ /invalid argument|A connection attempt failed|An existing connection was forcibly closed/i)
 		rescue
 			Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 			$stdout.puts "--- error: server_thread: #{$!}"
 			sleep 0.2
-			retry unless $_CLIENT_.closed? or $_SERVER_.closed?
+			retry unless $_CLIENT_.closed? or $_SERVER_.closed? or ($!.to_s =~ /invalid argument|A connection attempt failed|An existing connection was forcibly closed/i)
 		end
 	}
 
