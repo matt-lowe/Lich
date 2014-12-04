@@ -8,23 +8,25 @@
 	  author: Tillmen (tillmen@lichproject.org)
 	    game: any
 	    tags: core
-	 version: 0.2
+	 version: 0.3
 	required: Lich >= 4.6.0
 
 	changelog:
+		0.3 (2014-11-23):
+			add default settings on first run
 		0.2 (2014-11-10):
 			auto add infomon to global autostart list
 
 =end
 
-unless Settings['auto-added-infomon']
-	script_list = (Settings['scripts'] || Array.new)
-	unless script_list.any? { |s| s[:name] =~ /^infomon(?:\.lic)?$/i }
-		script_list.push(:name => 'infomon', :args => [])
-		Settings['scripts'] = script_list
+if Settings['scripts'].nil?
+	Settings['scripts'] = Array.new
+	if XMLData.game =~ /^GS/
+		Settings['scripts'].push(:name => 'infomon', :args => [])
 	end
-	Settings['auto-added-infomon'] = true
-	script_list = nil
+	Settings['scripts'].push(:name => 'alias', :args => [])
+	Settings['scripts'].push(:name => 'lnet', :args => [])
+	Settings['scripts'].push(:name => 'repository', :args => ['download-updates'])
 end
 
 if script.vars.empty?
