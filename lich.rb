@@ -3479,10 +3479,11 @@ class Map
 	@@elevated_load_xml        = proc { Map.load_xml }
 	@@elevated_save            = proc { Map.save }
 	@@elevated_save_xml        = proc { Map.save_xml }
+	@@links                    = []
 	attr_reader :id
-	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location, :unique_loot
-	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil, unique_loot=nil)
-		@id, @title, @description, @paths, @location, @climate, @terrain, @wayto, @timeto, @image, @image_coords, @tags, @check_location, @unique_loot = id, title, description, paths, location, climate, terrain, wayto, timeto, image, image_coords, tags, check_location, unique_loot
+	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location, :unique_loot, :links
+	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil, unique_loot=nil, links=[])
+		@id, @title, @description, @paths, @location, @climate, @terrain, @wayto, @timeto, @image, @image_coords, @tags, @check_location, @unique_loot, @links = id, title, description, paths, location, climate, terrain, wayto, timeto, image, image_coords, tags, check_location, unique_loot, links
 		@@list[@id] = self
 	end
 	def outside?
@@ -3828,6 +3829,10 @@ class Map
 					while filename = file_list.shift
 						begin
 							@@list = File.open(filename, 'rb') { |f| Marshal.load(f.read) }
+							# Marshalling old DBs will cause all the links arrays to be nil - lets go through and fill them with
+							# an empty array.  (ease of use for adding)
+							nil_links = @@list.find_all { |x| !x.links }
+							nil_links.each { |x| x.links = [] }
 							respond "--- loaded #{filename}" if error
 							@@loaded = true
 							return true
@@ -3911,7 +3916,7 @@ class Map
 					tag_end = proc { |element|
 						if element == 'room'
 							room['unique_loot'] = nil if room['unique_loot'].empty?
-							Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'])
+							Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'], [])
 						elsif element == 'map'
 							missing_end = false
 						end
@@ -4239,6 +4244,23 @@ class Map
 			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }.first
 		end
 	end
+
+    class Link
+        @@destination_room_id   = nil
+        @@destination_map_name  = nil
+        @@clickable_area        = []
+        attr_accessor :destination_room_id, :destination_map_name, :clickable_area
+        def initialize(room_id, map_name, clickable_area=[])
+            @destination_room_id, @destination_map_name, @clickable_area = room_id, map_name, clickable_area
+        end
+        def to_s
+            "Destination: #{@destination_room_id}:\n#{@destination_map_name}\n#{@clickable_area}"
+        end
+    end
+
+    def link_to(destination_room_id, destination_map_name, clickable_area=[])
+        @@links.push(Map::Link.new(destination_room_id, destination_map_name, clickable_area))
+    end
 end
 
 class Room < Map
