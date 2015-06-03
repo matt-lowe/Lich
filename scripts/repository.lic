@@ -9,9 +9,31 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.21
+	     version: 2.28
 
 	changelog:
+		2.28 (2015-05-21):
+			don't infomon and lnet: infomon failed to start on some machines
+		2.27 (2015-05-14):
+			give progress updates while uploading the map database if it's slow
+		2.26 (2015-04-21):
+			auto load/restart spell-list.xml, gameobj-data.xml, lnet, infomon after downloading
+			check for missing map images even if the map database was up-to-date
+			allow the server to display warning messages
+
+=end
+=begin
+
+		2.25 (2015-02-21):
+			an update just for people who have managed to ignore hundreds of download errors a day for months
+		2.24 (2015-01-23):
+			added --version option to download command
+			give a warning if the system date is outside the range of the CA cert date
+			disable SSLv2 and SSLv3
+		2.23 (2015-01-16):
+			new host name
+		2.22 (2014-11-23):
+			set map database as updatable by default
 		2.21 (2014-11-23):
 			set default values for download-updates on first run
 		2.20 (2014-11-22):
@@ -22,10 +44,6 @@
 			workaround to deal with the plat_updater script disabling OpenSSL::SSL::VERIFY_PEER
 		2.17 (2014-10-12):
 			started on gui
-
-=end
-=begin
-
 		2.16 (2014-10-12):
 			delete old map databases after downloading a new one
 		2.15 (2014-10-07):
@@ -74,11 +92,11 @@ if Settings['updatable'].nil?
 	Settings['updatable'][:scripts].push(:filename => 'narost.lic', :game => 'any', :author => 'Tillmen')
 	Settings['updatable'][:scripts].push(:filename => 'autostart.lic', :game => 'any', :author => 'Tillmen')
 	Settings['updatable'][:mapdb] = Hash.new
-	if LICH_VERSION.split('.').collect { |num| num.rjust(5, '0') }.join('.') < '00004.00006.00000'
-		Settings['updatable'][:lich] = false
-	else
-		Settings['updatable'][:lich] = true
-	end
+	Settings['updatable'][:mapdb][XMLData.game] = true
+	Settings['updatable'][:mapdb]['GSIV'] = true
+	Settings['updatable'][:mapdb]['GSF'] = true
+	Settings['updatable'][:mapdb]['GSPlat'] = true
+	Settings['updatable'][:lich] = true
 end
 
 if (XMLData.game =~ /^GS/) and Settings['first-gs-run']
@@ -91,10 +109,10 @@ end
 require 'openssl'
 require 'digest/md5'
 
-hostname           = 'lichproject.org'
+hostname           = 'repo.lichproject.org'
 port               = 7157
-ca_cert_data       = "-----BEGIN CERTIFICATE-----\nMIIDlTCCAn2gAwIBAgIJAKuu65i5NsruMA0GCSqGSIb3DQEBCwUAMGExCzAJBgNV\nBAYTAlVTMREwDwYDVQQIDAhJbGxpbm9pczESMBAGA1UECgwJTWF0dCBMb3dlMQ8w\nDQYDVQQDDAZSb290Q0ExGjAYBgkqhkiG9w0BCQEWC21hdHRAaW80LnVzMB4XDTE0\nMDYwNzE3NDUwMFoXDTI0MDYwNDE3NDUwMFowYTELMAkGA1UEBhMCVVMxETAPBgNV\nBAgMCElsbGlub2lzMRIwEAYDVQQKDAlNYXR0IExvd2UxDzANBgNVBAMMBlJvb3RD\nQTEaMBgGCSqGSIb3DQEJARYLbWF0dEBpbzQudXMwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQCcIRn0IMCNYeL5agKmkdedgJXsIyTJS8qKrY6EvQsq4tt0\nmO3Or9K8IaDl7qFdQ9nfSJ5phNgoCy9wZ9rDWv5FhY5MnnVHGr3fCa7RkMxJFR/N\nwiD4ihQlixOUly76glceyc/6QQS9bNe96evZDstERGAFfzgHY4qAlyurR6mBu9Mb\nyyCRok6xMRnjrbTMNkvvOsuG0sY9ot+SLHGgU3qT7+wVh/CbWcjeF7/Qwa//fbFk\nmq5c1FuvhU3DanSSz+VuWudPFSyZ3r5pYrLMJWsyomDa4gkL2bJ5jya2BWDMXvSS\nCpdQgPDIlClMfAFLd/Ss8ZIGa6uNFcSK6Xca51ClAgMBAAGjUDBOMB0GA1UdDgQW\nBBScbglRiGzz9yzuhgBwFYjgimeByDAfBgNVHSMEGDAWgBScbglRiGzz9yzuhgBw\nFYjgimeByDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA7MLZYfqam\n5aaSBqQpT6sOGDtVc9koIok59oTQmNXqe+awg2VUnAiesxtLd+FWGUMp8XzHdGWw\nH3O6kAUkPm/in001X7TRAhbgDujfTRbTzxND0XrjuEzDMALs3YpDM1pMXqC7RXWA\n7z+N0gRaUgmh1rMbk/qA3cAfC2dwf2j3NYy3bDw3lMpdyIwAfOQxiZVglYgX3dgT\nU9b//gsUyPCvlpL0mYcmhOOLt6oqQhMJaw1I6A9xMe2kO2L+8KPGK2u1B+P5/Sx0\nFE8LIp5KA3a7yRbOty19NsGR+yW7WwV7BL6c6GOKb/iKJBLYzTmNG6m16hRrxDGj\ntGu91I0ORptB\n-----END CERTIFICATE-----"
-client_version     = '2.21'
+ca_cert            = OpenSSL::X509::Certificate.new("-----BEGIN CERTIFICATE-----\nMIIDlTCCAn2gAwIBAgIJAKuu65i5NsruMA0GCSqGSIb3DQEBCwUAMGExCzAJBgNV\nBAYTAlVTMREwDwYDVQQIDAhJbGxpbm9pczESMBAGA1UECgwJTWF0dCBMb3dlMQ8w\nDQYDVQQDDAZSb290Q0ExGjAYBgkqhkiG9w0BCQEWC21hdHRAaW80LnVzMB4XDTE0\nMDYwNzE3NDUwMFoXDTI0MDYwNDE3NDUwMFowYTELMAkGA1UEBhMCVVMxETAPBgNV\nBAgMCElsbGlub2lzMRIwEAYDVQQKDAlNYXR0IExvd2UxDzANBgNVBAMMBlJvb3RD\nQTEaMBgGCSqGSIb3DQEJARYLbWF0dEBpbzQudXMwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQCcIRn0IMCNYeL5agKmkdedgJXsIyTJS8qKrY6EvQsq4tt0\nmO3Or9K8IaDl7qFdQ9nfSJ5phNgoCy9wZ9rDWv5FhY5MnnVHGr3fCa7RkMxJFR/N\nwiD4ihQlixOUly76glceyc/6QQS9bNe96evZDstERGAFfzgHY4qAlyurR6mBu9Mb\nyyCRok6xMRnjrbTMNkvvOsuG0sY9ot+SLHGgU3qT7+wVh/CbWcjeF7/Qwa//fbFk\nmq5c1FuvhU3DanSSz+VuWudPFSyZ3r5pYrLMJWsyomDa4gkL2bJ5jya2BWDMXvSS\nCpdQgPDIlClMfAFLd/Ss8ZIGa6uNFcSK6Xca51ClAgMBAAGjUDBOMB0GA1UdDgQW\nBBScbglRiGzz9yzuhgBwFYjgimeByDAfBgNVHSMEGDAWgBScbglRiGzz9yzuhgBw\nFYjgimeByDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA7MLZYfqam\n5aaSBqQpT6sOGDtVc9koIok59oTQmNXqe+awg2VUnAiesxtLd+FWGUMp8XzHdGWw\nH3O6kAUkPm/in001X7TRAhbgDujfTRbTzxND0XrjuEzDMALs3YpDM1pMXqC7RXWA\n7z+N0gRaUgmh1rMbk/qA3cAfC2dwf2j3NYy3bDw3lMpdyIwAfOQxiZVglYgX3dgT\nU9b//gsUyPCvlpL0mYcmhOOLt6oqQhMJaw1I6A9xMe2kO2L+8KPGK2u1B+P5/Sx0\nFE8LIp5KA3a7yRbOty19NsGR+yW7WwV7BL6c6GOKb/iKJBLYzTmNG6m16hRrxDGj\ntGu91I0ORptB\n-----END CERTIFICATE-----")
+client_version     = '2.28'
 cmd                = Array.new
 cmd_author         = nil
 cmd_password       = nil
@@ -110,6 +128,7 @@ cmd_age            = nil
 cmd_size           = nil
 cmd_downloads      = nil
 cmd_rating         = nil
+cmd_version        = nil
 no_more_options    = nil
 cmd_show_tags      = nil
 cmd_hide_age       = nil
@@ -217,9 +236,18 @@ unmet_lich_requirement = proc { |comments|
 
 connect = proc {
 	begin
+		if ca_cert.not_before > Time.now
+			respond "\n---\n--- warning: The current date is set incorrectly on your computer. This will\n---          cause the SSL certificate verification to fail and prevent this\n---          script from connecting to the server.  Fix it.\n---\n\n"
+			sleep 3
+		end
+		if ca_cert.not_after < Time.now
+			respond "\n---\n--- warning: Your computer thinks the date is #{Time.now.strftime("%m-%d-%Y")}.  If this is the\n---          correct date, you need an updated version of this script.  If \n---          this is not the correct date, you need to change it.  In either\n---          case, this date makes the SSL certificate in this script invalid\n---          and will prevent the script from connecting to the server.\n---\n\n"
+			sleep 3
+		end
 		cert_store              = OpenSSL::X509::Store.new
-		cert_store.add_cert(OpenSSL::X509::Certificate.new(ca_cert_data))
+		cert_store.add_cert(ca_cert)
 		ssl_context             = OpenSSL::SSL::SSLContext.new
+		ssl_context.options     = (OpenSSL::SSL::OP_NO_SSLv2 + OpenSSL::SSL::OP_NO_SSLv3)
 		ssl_context.cert_store  = cert_store
 		if OpenSSL::SSL::VERIFY_PEER == OpenSSL::SSL::VERIFY_NONE
 			# the plat_updater script redefines OpenSSL::SSL::VERIFY_PEER, disabling it for everyone
@@ -230,13 +258,13 @@ connect = proc {
 		socket                  = TCPSocket.new(hostname, port)
 		ssl_socket              = OpenSSL::SSL::SSLSocket.new(socket, ssl_context)
 		ssl_socket.connect
-		if ssl_socket.peer_cert.subject.to_a.find { |n| n[0] == 'CN' }[1] != hostname
+		if (ssl_socket.peer_cert.subject.to_a.find { |n| n[0] == 'CN' }[1] != 'lichproject.org') and (ssl_socket.peer_cert.subject.to_a.find { |n| n[0] == 'CN' }[1] != 'Lich Repository')
 			if cmd_force
 				echo "warning: server certificate hostname mismatch"
 			else
 				echo "error: server certificate hostname mismatch"
-				ssl_socket.close
-				socket.close
+				ssl_socket.close rescue nil
+				socket.close rescue nil
 				exit
 			end
 		end
@@ -250,8 +278,8 @@ connect = proc {
 		end
 	rescue
 		echo "error connecting to server: #{$!}"
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 		exit
 	end
 	[ ssl_socket, socket ]
@@ -264,6 +292,9 @@ get_list = proc {
 		ssl_socket, socket = connect.call
 		ssl_socket.puth(request)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			if response['error'] == 'already up-to-date'
 				echo 'list up-to-date' if $repository_debug
@@ -307,8 +338,8 @@ get_list = proc {
 		list.unshift(headers)
 		list
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 }
 
@@ -319,6 +350,9 @@ add_comments_to_list = proc { |list|
 		ssl_socket, socket = connect.call
 		ssl_socket.puth(request)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			if response['error'] == 'already up-to-date'
 				echo 'comments up-to-date' if $repository_debug
@@ -376,8 +410,8 @@ add_comments_to_list = proc { |list|
 		list.unshift(headers)
 		list
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 }
 
@@ -571,8 +605,8 @@ format_list = proc { |list|
 }
 
 download_lich = proc {
-	if LICH_VERSION.split('.').collect { |num| num.rjust(5, '0') }.join('.') < '00004.00006.00000'
-		echo "error: Your version of Lich is too old to be updated by this script, but that's ok.  The upgrade to Lich 4.6 involves installing Ruby 2.0 and must be done manually.  Lich 4.6 is in beta and upgrading may cause you problems."
+	if RUBY_VERSION !~ /^2/
+		echo "error: This script can't update Lich for you because the new version of Lich requires Ruby 2.0, and you're using Ruby #{RUBY_VERSION}.  See https://lichproject.org/download.html for instructions on updating."
 	else
 		filename = "#{$lich_dir}#{File.basename($PROGRAM_NAME)}"
 		if not File.exists?(filename)
@@ -582,6 +616,9 @@ download_lich = proc {
 				ssl_socket, socket = connect.call
 				ssl_socket.puth('action' => 'download-lich', 'current-md5sum' => Digest::MD5.file(filename).to_s, 'supported compressions' => 'gzip', 'client' => client_version)
 				response = ssl_socket.geth
+				if response['warning']
+					echo "warning: server says: #{response['warning']}"
+				end
 				if response['error']
 					if response['error'] == 'already up-to-date'
 						echo 'Lich is up-to-date'
@@ -663,8 +700,8 @@ download_lich = proc {
 					end
 				end
 			ensure
-				ssl_socket.close
-				socket.close
+				ssl_socket.close rescue nil
+				socket.close rescue nil
 			end
 		end
 	end
@@ -672,6 +709,7 @@ download_lich = proc {
 
 download_mapdb = proc {
 	failed = true
+	downloaded = false
 	if XMLData.game =~ /^GS/i
 		if XMLData.game =~ /^GSF$|^GSPlat$/i
 			game = XMLData.game.downcase
@@ -695,9 +733,13 @@ download_mapdb = proc {
 		ssl_socket, socket = connect.call
 		ssl_socket.puth(request)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			if response['error'] == 'already up-to-date'
 				echo 'map database is up-to-date'
+				failed = false
 			else
 				echo "error: server says: #{response['error']}"
 			end
@@ -753,40 +795,43 @@ download_mapdb = proc {
 					end
 				end
 				failed = false
+				downloaded = true
 			end
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 	unless failed
-		old_maps = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |fn| (fn =~ /^map\-([0-9]+)\.(?:dat|xml)$/) and ($1 != response['timestamp']) }[0...-3]
-		unless old_maps.empty?
-			echo "deleting old map databases..."
-			begin
-				old_maps.each { |fn| File.delete("#{$data_dir}#{XMLData.game}/#{fn}") }
-			rescue
-				echo "error: #{$!}"
-			end
-			old_maps = nil
-		end
-		# rename map files with a higher timestamp than the just downloaded map, because the user probably wants to use the map they just downloaded
-		Dir.entries("#{$data_dir}#{XMLData.game}").each { |fn|
-			if (fn =~ /^map\-([0-9]+)\.(?:dat|xml)$/) and ($1.to_i > response['timestamp'].to_i)
+		if downloaded
+			old_maps = Dir.entries("#{$data_dir}#{XMLData.game}").find_all { |fn| (fn =~ /^map\-([0-9]+)\.(?:dat|xml)$/) and ($1 != response['timestamp']) }[0...-3]
+			unless old_maps.empty?
+				echo "deleting old map databases..."
 				begin
-					File.rename("#{$data_dir}#{XMLData.game}/#{fn}", "#{$data_dir}#{XMLData.game}/#{fn}.bak")
+					old_maps.each { |fn| File.delete("#{$data_dir}#{XMLData.game}/#{fn}") }
 				rescue
-					if $!.to_s =~ /Invalid cross-device link/
-						File.open("#{$data_dir}#{XMLData.game}/#{fn}", 'rb') { |r| File.open("#{$data_dir}#{XMLData.game}/#{fn}.bak", 'wb') { |w| w.write(r.read) } }
-						File.delete("#{$data_dir}#{XMLData.game}/#{fn}")
-					else
-						raise $!
+					echo "error: #{$!}"
+				end
+				old_maps = nil
+			end
+			# rename map files with a higher timestamp than the just downloaded map, because the user probably wants to use the map they just downloaded
+			Dir.entries("#{$data_dir}#{XMLData.game}").each { |fn|
+				if (fn =~ /^map\-([0-9]+)\.(?:dat|xml)$/) and ($1.to_i > response['timestamp'].to_i)
+					begin
+						File.rename("#{$data_dir}#{XMLData.game}/#{fn}", "#{$data_dir}#{XMLData.game}/#{fn}.bak")
+					rescue
+						if $!.to_s =~ /Invalid cross-device link/
+							File.open("#{$data_dir}#{XMLData.game}/#{fn}", 'rb') { |r| File.open("#{$data_dir}#{XMLData.game}/#{fn}.bak", 'wb') { |w| w.write(r.read) } }
+							File.delete("#{$data_dir}#{XMLData.game}/#{fn}")
+						else
+							raise $!
+						end
 					end
 				end
-			end
-		}
-		echo 'loading map database...'
-		Map.reload
+			}
+			echo 'loading map database...'
+			Map.reload
+		end
 		image_filenames = Array.new
 		Map.list.each { |room| image_filenames.push(room.image) if room.image and not image_filenames.include?(room.image) }
 		Dir.mkdir("#{$lich_dir}maps") unless File.exists?("#{$lich_dir}maps")
@@ -798,6 +843,9 @@ download_mapdb = proc {
 				ssl_socket.puth('action' => 'download-mapdb-images', 'files' => image_filenames.join('/'), 'client' => client_version)
 				loop {
 					response = ssl_socket.geth
+					if response['warning']
+						echo "warning: server says: #{response['warning']}"
+					end
 					if response['error']
 						echo "error: server says: #{response['error']}"
 						break
@@ -835,19 +883,24 @@ download_mapdb = proc {
 					end
 				}
 			ensure
-				ssl_socket.close
-				socket.close
+				ssl_socket.close rescue nil
+				socket.close rescue nil
 			end
 		end
 		echo 'done'
 	end
 }
 
-download_file = proc { |file,game|
+download_file = proc { |file,game,version|
 	begin
 		ssl_socket, socket = connect.call
-		ssl_socket.puth('action' => 'download', 'file' => file, 'game' => game, 'supported compressions' => 'gzip', 'client' => client_version)
+		request = { 'action' => 'download', 'file' => file, 'game' => game, 'supported compressions' => 'gzip', 'client' => client_version }
+		request['version'] = version unless version.nil?
+		ssl_socket.puth(request)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 			false
@@ -918,13 +971,20 @@ download_file = proc { |file,game|
 							raise $!
 						end
 					end
+					if XMLData.game =~ /^GS/
+						if file == 'spell-list.xml'
+							Spell.load
+						elsif file == 'gameobj-data.xml'
+							GameObj.load_data
+						end
+					end
 					true
 				end
 			end
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 }
 
@@ -1052,6 +1112,13 @@ for var in script.vars[1..-1]
 				cmd_rating.push [ $1, $2.to_f ]
 			else
 				echo 'error: --rating option not complete; e.g. --rating>8.5'
+				exit
+			end
+		elsif var =~ /^--version/i
+			if var =~ /^--version\s*=\s*([0-9\.]+)/i
+				cmd_version = $1
+			else
+				echo 'error: --version option not complete; e.g. --version=1.2'
 				exit
 			end
 		else
@@ -1184,6 +1251,9 @@ elsif (cmd[0] =~ /^info$/i)
 			ssl_socket, socket = connect.call
 			ssl_socket.puth('action' => 'inspect', 'file' => file, 'game' => game, 'client' => client_version)
 			response = ssl_socket.geth
+			if response['warning']
+				echo "warning: server says: #{response['warning']}"
+			end
 			if response['error']
 				echo "error: server says: #{response['error']}"
 				exit
@@ -1193,10 +1263,31 @@ elsif (cmd[0] =~ /^info$/i)
 			end
 			data = ssl_socket.read(response['size'].to_i)
 		ensure
-			ssl_socket.close
-			socket.close
+			ssl_socket.close rescue nil
+			socket.close rescue nil
 		end
-		respond "\n#{format_list.call(list)}\n\n#{data}\n\n"
+		output = "\n#{format_list.call(list)}\n\n"
+		if response['versions']
+			sorted_versions = response['versions'].split(';').collect { |v| v.split('.') }.sort { |a,b|
+				i = r = 0
+				loop {
+					if (r != 0) or not (a[i] or b[i])
+						break
+					elsif b[i] and not a[i]
+						r = -1
+					elsif a[i] and not b[i]
+						r = 1
+					else
+						r = (a[i].to_i <=> b[i].to_i)
+					end
+					i += 1
+				}
+				r
+			}.collect { |v| v.join('.') }.join(', ')
+			output.concat "available versions: #{sorted_versions}\n\n"
+		end
+		output.concat "#{data}\n\n"
+		respond output
 	end
 
 
@@ -1232,7 +1323,7 @@ elsif (cmd[0] =~ /^download$/i)
 	else
 		echo "downloading #{list[0][fi]} in 3 seconds... (;k #{script.name} to cancel)"
 		sleep 3
-		if download_file.call(list[0][fi], list[0][gi])
+		if download_file.call(list[0][fi], list[0][gi], cmd_version)
 			echo 'done'
 		end
 	end
@@ -1266,6 +1357,7 @@ elsif (cmd[0] =~ /^download-?update[ds]$/i)
 		else
 			no_updates = true
 			for local_info in (Settings['updatable'][:scripts])
+				next if (LICH_VERSION =~ /^4\.4/) and (local_info[:filename] =~ /^(alias|vars|autostart|infomon)\.lic$/i)
 				if remote_info = list.find { |rinfo| (rinfo[fi] == local_info[:filename]) and (rinfo[gi] == local_info[:game]) }
 					if (local_info[:filename] =~ /\.xml$/i) and (LICH_VERSION.split('.').collect { |n| n.rjust(5,'0') }.join('.') >= '00004.00006.00000')
 						updated = !File.exists?("#{$data_dir}#{local_info[:filename]}") || (File.mtime("#{$data_dir}#{local_info[:filename]}").to_i < remote_info[lui].to_i)
@@ -1281,7 +1373,7 @@ elsif (cmd[0] =~ /^download-?update[ds]$/i)
 							end
 							echo "downloading #{local_info[:filename].sub(/\.lic$/,'')}..."
 							start = Time.now.to_f
-							download_file.call(local_info[:filename], local_info[:game])
+							download_file.call(local_info[:filename], local_info[:game], nil)
 							sleep [(1.5 - Time.now.to_f + start), 0].max
 							no_updates = false
 						end
@@ -1471,6 +1563,9 @@ elsif (cmd[0] =~ /^upload$/i)
 		ssl_socket, socket = connect.call
 		ssl_socket.puth(request)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 			exit
@@ -1487,6 +1582,9 @@ elsif (cmd[0] =~ /^upload$/i)
 			ssl_socket.write(f.read(size % 1_000_000)) unless (size % 1_000_000) == 0
 		}
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['success']
@@ -1495,8 +1593,8 @@ elsif (cmd[0] =~ /^upload$/i)
 			echo "error: unrecognized response from server: #{response.inspect}"
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 		File.delete(filename) if delete_filename
 	end
 
@@ -1545,6 +1643,9 @@ elsif (cmd[0] =~ /^delete$/i)
 			ssl_socket, socket = connect.call
 			ssl_socket.puth('action' => 'delete', 'file' => file, 'game' => game, 'author' => author, 'password' => password, 'client' => client_version)
 			response = ssl_socket.geth
+			if response['warning']
+				echo "warning: server says: #{response['warning']}"
+			end
 			if response['error']
 				echo "error: server says: #{response['error']}"
 			elsif response['success']
@@ -1557,8 +1658,8 @@ elsif (cmd[0] =~ /^delete$/i)
 				echo "error: unrecognized response from server: #{response.inspect}"
 			end
 		ensure
-			ssl_socket.close
-			socket.close
+			ssl_socket.close rescue nil
+			socket.close rescue nil
 		end
 	end
 
@@ -1607,6 +1708,9 @@ elsif (cmd[0] =~ /^rate$/i)
 			ssl_socket, socket = connect.call
 			ssl_socket.puth('action' => 'rate', 'file' => file, 'game' => game, 'rating' => cmd[2], 'client' => client_version)
 			response = ssl_socket.geth
+			if response['warning']
+				echo "warning: server says: #{response['warning']}"
+			end
 			if response['error']
 				echo "error: server says: #{response['error']}"
 				exit
@@ -1615,8 +1719,8 @@ elsif (cmd[0] =~ /^rate$/i)
 				exit
 			end
 		ensure
-			ssl_socket.close
-			socket.close
+			ssl_socket.close rescue nil
+			socket.close rescue nil
 		end
 	end
 
@@ -1643,6 +1747,9 @@ elsif cmd[0] =~ /^(?:new|change)-?password$/i
 		ssl_socket, socket = connect.call
 		ssl_socket.puth('action' => 'change password', 'author' => author, 'password' => password, 'new password' => cmd[1], 'client' => client_version)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['success']
@@ -1651,8 +1758,8 @@ elsif cmd[0] =~ /^(?:new|change)-?password$/i
 			echo "password saved for author #{author}"
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 
 
@@ -1682,6 +1789,9 @@ elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
 		ssl_socket, socket = connect.call
 		ssl_socket.puth('action' => 'checkout-mapdb', 'author' => author, 'password' => password, 'game' => game, 'client' => client_version)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['success']
@@ -1694,8 +1804,8 @@ elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
 			echo "edit your map database and     ;#{script.name} upload-mapdb     within 24 hours."
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 
 
@@ -1719,6 +1829,9 @@ elsif (cmd[0] =~ /^release-?map(?:db)?$/i)
 		ssl_socket, socket = connect.call
 		ssl_socket.puth('action' => 'release-mapdb', 'author' => author, 'password' => password, 'game' => XMLData.game.downcase, 'client' => client_version)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['success']
@@ -1729,8 +1842,8 @@ elsif (cmd[0] =~ /^release-?map(?:db)?$/i)
 			echo 'success: other people can work on the map database now'
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 
 
@@ -1762,6 +1875,9 @@ elsif (cmd[0] =~ /^approve-?map(?:db)?$/i)
 		ssl_socket, socket = connect.call
 		ssl_socket.puth('action' => 'approve-mapdb', 'author' => author, 'password' => password, 'game' => game, 'timestamp' => timestamp, 'client' => client_version)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['success']
@@ -1772,8 +1888,8 @@ elsif (cmd[0] =~ /^approve-?map(?:db)?$/i)
 			echo 'success'
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 
 
@@ -1828,6 +1944,9 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 		ssl_socket, socket = connect.call
 		ssl_socket.puth(request)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 			exit
@@ -1840,11 +1959,23 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 			echo "password saved for author #{author}"
 		end
 		echo 'uploading map database...'
+		progress = 0
+		progress_time = Time.now.to_i
 		File.open(tempfilename, 'rb') { |f|
-			(size / 1_000_000).times { ssl_socket.write(f.read(1_000_000)) }
+			(size / 1_000_000).times {
+				ssl_socket.write(f.read(1_000_000))
+				progress += 1000000
+				if ((Time.now.to_i - progress_time) > 10)
+					progress_time = Time.now.to_i
+					echo "still uploading (#{((progress*100)/size).round}%)..."
+				end
+			}
 			ssl_socket.write(f.read(size % 1_000_000)) unless (size % 1_000_000) == 0
 		}
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['success']
@@ -1853,8 +1984,8 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 			echo "error: unrecognized response from server: #{response.inspect}"
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 		File.delete(tempfilename)
 	end
 
@@ -1875,6 +2006,9 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 		ssl_socket, socket = connect.call
 		ssl_socket.puth('action' => 'upload-mapdb-images', 'files' => image_filenames, 'client' => client_version)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['need-images']
@@ -1883,6 +2017,9 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 				size = File.stat("#{$lich_dir}maps/#{filename}").size
 				ssl_socket.puth('file' => filename, 'size' => size, 'md5sum' => Digest::MD5.file("#{$lich_dir}maps/#{filename}").to_s, 'client' => client_version)
 				response = ssl_socket.geth
+				if response['warning']
+					echo "warning: server says: #{response['warning']}"
+				end
 				if response['error']
 					echo "error: server says: #{response['error']}"
 					break
@@ -1895,6 +2032,9 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 					ssl_socket.write(f.read(size % 1_000_000)) unless (size % 1_000_000) == 0
 				}
 				response = ssl_socket.geth
+				if response['warning']
+					echo "warning: server says: #{response['warning']}"
+				end
 				if response['error']
 					echo "error: server says: #{response['error']}"
 				elsif not response['success']
@@ -1908,8 +2048,8 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 			echo "error: unrecognized response from server: #{response.inspect}"
 		end
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 
 
@@ -1953,6 +2093,9 @@ elsif (cmd[0] =~ /^upload-?lich$/i)
 		ssl_socket, socket = connect.call
 		ssl_socket.puth('action' => 'upload-lich', 'author' => author, 'password' => password, 'version' => LICH_VERSION, 'size' => size.to_s, 'md5sum' => Digest::MD5.file(filename).to_s, 'compression' => 'gzip', 'client' => client_version)
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 			exit
@@ -1969,6 +2112,9 @@ elsif (cmd[0] =~ /^upload-?lich$/i)
 			ssl_socket.write(f.read(size % 1_000_000)) unless (size % 1_000_000) == 0
 		}
 		response = ssl_socket.geth
+		if response['warning']
+			echo "warning: server says: #{response['warning']}"
+		end
 		if response['error']
 			echo "error: server says: #{response['error']}"
 		elsif response['success']
@@ -1978,8 +2124,8 @@ elsif (cmd[0] =~ /^upload-?lich$/i)
 		end
 		File.delete(tempfilename)
 	ensure
-		ssl_socket.close
-		socket.close
+		ssl_socket.close rescue nil
+		socket.close rescue nil
 	end
 
 
@@ -2223,6 +2369,7 @@ elsif cmd[0] =~ /^help$/i
 		output.concat "   --rating<NUMBER           only list files with a rating lower than NUMBER\n"
 		output.concat "   --rating=NUMBER           only list files with a rating equal to NUMBER\n"
 		output.concat "   --tags=TEXT[,TEXT]        only list files with the specified tags\n"
+		output.concat "   --version=<version>       download a specific version\n"
 		output.concat "   --force                   ignore md5sum checks and script requirements\n"
    		output.concat "\n"
 		output.concat "   --show-tags               show tags in the list\n"

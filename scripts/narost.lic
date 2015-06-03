@@ -6,9 +6,10 @@
 	shift-click on a room to show its description
 	right-click for some options
 
-	author: Tillmen (tillmen@lichproject.org)
-	game: any
-	tags: core, movement
+	 author: Tillmen (tillmen@lichproject.org)
+	   game: any
+	   tags: core, movement
+	version: 0.1
 
 =end
 

@@ -1,6 +1,5 @@
 =begin
 
-	movement script based on Shaelun's goto.lic
 	attempts to find the shortest route between any two rooms in the game
 	requires a map database (;repository download-mapdb)
 
@@ -10,9 +9,21 @@
 	original author: Shaelun
 	           game: any
 	           tags: core, movement
-			version: 1.2
+	        version: 1.7
 
 	changelog:
+		1.7 (2014-12-11):
+			added stop-for-dead to the help message
+		1.6 (2014-12-10):
+			added stop-for-dead option
+			add settings to list command
+		1.5 (2014-12-04):
+			remove a debug message
+		1.4 (2014-12-04):
+			added delay setting
+			fixed bug with finding silver cost of a path
+		1.3 (2014-11-09):
+			changed typeahead setting to be different for each character
 		1.2 (2014-10-16):
 			don't use typeaheads for first move: makes it easier to find problems
 		1.1 (2014-10-07):
@@ -20,15 +31,19 @@
 
 =end
 
+# fixme: don't do puzzles
+
 setting_value = { 'on' => true, 'true' => true, 'yes' => true, 'off' => false, 'false' => false, 'no' => false }
 previous = shortest_distances = nil
 
-Settings['typeahead']            =     1 if Settings['typeahead'].nil?
+CharSettings['typeahead']        =     0 if CharSettings['typeahead'].nil?
 CharSettings['use portals']      = false if CharSettings['use portals'].nil?
 CharSettings['have portal pass'] = false if CharSettings['have portal pass'].nil?
 CharSettings['vaalor shortcut']  = false if CharSettings['vaalor shortcut'].nil?
 CharSettings['ice mode']         = :auto if CharSettings['ice mode'].nil?
 CharSettings['get silvers']      = false if CharSettings['get silvers'].nil?
+CharSettings['delay']            =     0 if CharSettings['delay'].nil?
+CharSettings['stop for dead']    = false if CharSettings['stop for dead'].nil?
 
 show_help = proc {
 	output = "\n"
@@ -44,14 +59,17 @@ show_help = proc {
 	output.concat "\n"
 	output.concat "   options:\n"
 	output.concat "\n"
-	output.concat "      --typeahead=<#>                        Sets the number of typeahead lines to use.\n"
+	output.concat "     --typeahead=<#>                         Sets the number of typeahead lines to use.\n"
+	output.concat "     --delay=<#>                             Sets the delay in seconds between movements\n"
+	output.concat "                                              (disables typeahead).\n"
 	if XMLData.game =~ /^GS/
-		output.concat "      --get-silvers=<on|off>                 Sets if #{script.name} has permission to access your bank\n"
+		output.concat "     --get-silvers=<on|off>                  Sets if #{script.name} has permission to access your bank\n"
 		output.concat "                                              account.\n"
-		output.concat "     --shortcut=<on|off>                     Sets if the shortcut to Ta'Vaalor should be used.\n"
-		output.concat "                                              (climbing and/or simming needed)\n"
 		output.concat "     --ice-mode=<auto|wait|run>              Sets how #{script.name} should deal with room the make you\n"
 		output.concat "                                              slip and fall.\n"
+		output.concat "     --stop-for-dead=<on|off>                Pauses the script if you pass a dead person.\n"
+		output.concat "     --shortcut=<on|off>                     Sets if the shortcut to Ta'Vaalor should be used.\n"
+		output.concat "                                              (climbing and/or simming needed)\n"
 		output.concat "     --get-return-trip-silvers=<on|off>      Sets if #{script.name} should withdraw enough silvers to\n"
 		output.concat "                                              return from your destination room to your starting room.\n"
 		output.concat "     --use-seeking=<on|off>                  Sets if #{script.name} should use Voln symbol of seeking\n"
@@ -70,7 +88,7 @@ show_help = proc {
 	output.concat "      #{$lich_char}#{script.name} save <new name>=<target>      Saves a custom target.  <target> can be the same as before,\n"
 	output.concat "      #{''.rjust($lich_char.length + script.name.length)}                             	  or 'current' for your current room\n"
 	output.concat "      #{$lich_char}#{script.name} delete <custom target>        Deletes a saved custom target.\n"
-	output.concat "      #{$lich_char}#{script.name} list                          Shows your custom targets.\n"
+	output.concat "      #{$lich_char}#{script.name} list                          Shows your settings and custom targets.\n"
 	output.concat "      #{$lich_char}#{script.name} targets                       Shows the built-in targets.\n"
 	output.concat "\n"
 	respond output
@@ -193,89 +211,32 @@ change_map_vaalor_shortcut = proc { |use_shortcut|
 	end
 }
 
-current_or_new_room = proc {
-	room = Map.list.find { |room| room.title.include?(XMLData.room_title) and room.description.include?(XMLData.room_description.strip) and room.paths.include?(XMLData.room_exits_string.strip) }
-	20.times {
-		break if room
-		sleep 0.05
-		room = Map.list.find { |room| room.title.include?(XMLData.room_title) and room.description.include?(XMLData.room_description.strip) and room.paths.include?(XMLData.room_exits_string.strip) }
-	}
-	unless room
-		room = Map.new(Map.get_free_id, [ XMLData.room_title ], [ XMLData.room_description.strip ], [ XMLData.room_exits_string.strip ])
-		$map_history.push "Created room #{room.id}"
-	end
-	room
-}
-
-combine_rooms = proc { |this_room, that_room|
-	first_room = Room[[this_room.to_i, that_room.to_i].min]
-	second_room = Room[[this_room.to_i, that_room.to_i].max]
-	second_room.title.each { |title| first_room.title.push(title) unless first_room.title.include?(title) }
-	second_room.description.each { |desc| first_room.description.push(desc) unless first_room.description.include?(desc) }
-	second_room.paths.each { |paths| first_room.paths.push(paths) unless first_room.paths.include?(paths) }
-	second_room.wayto.each_pair { |adj_room,way|
-		unless first_room.wayto.keys.include?(adj_room)
-			first_room.wayto[adj_room] = way
-			first_room.timeto[adj_room] = second_room.timeto[adj_room]
-		end
-	}
-	$map_done.delete(second_room.id)
-	$map_pending.delete(second_room.id.to_s)
-	$fix_done.delete(second_room.id)
-	$fix_pending.delete(second_room.id.to_s)
-	Map.list[second_room.id] = nil
-	key = second_room.id.to_s
-	Map.list.each { |room|
-		if room.wayto.keys.include?(key)
-			room.wayto[first_room.id.to_s] = room.wayto[key]
-			room.timeto[first_room.id.to_s] = room.timeto[key]
-			room.wayto.delete(key)
-			room.timeto.delete(key)
-		end
-	}
-	Map.list.each { |room|
-		room.wayto.each_pair { |rm,way|
-			if (way.class == Proc) and way._dump =~ /#{second_room.id.to_s}/
-				respond
-				respond "#{room.id} => #{rm}"
-				respond way._dump
-				respond
-				clear
-				echo 'this path refrences the deleted room number'
-				echo "replace #{second_room.id} with #{first_room.id}? (send yes/no)"
-				respond
-				line = nil
-				line = get until line =~ /^yes$|^no$/i
-				if line =~ /^yes$/i
-					room.wayto[rm] = StringProc.new(way._dump.gsub(second_room.id.to_s, first_room.id.to_s))
-				end
-			end
-		}
-	}
-}
-
 check_silvers = proc {
-	silvers = nil
-	action = proc { |server_string|
+	hook_proc = proc { |server_string|
 		if server_string =~ /^\s*Name\:|^\s*Gender\:|^\s*Normal \(Bonus\)|^\s*Strength \(STR\)\:|^\s*Constitution \(CON\)\:|^\s*Dexterity \(DEX\)\:|^\s*Agility \(AGI\)\:|^\s*Discipline \(DIS\)\:|^\s*Aura \(AUR\)\:|^\s*Logic \(LOG\)\:|^\s*Intuition \(INT\)\:|^\s*Wisdom \(WIS\)\:|^\s*Influence \(INF\)\:/
 			nil
 		elsif server_string =~ /^\s*Mana\:\s+\-?[0-9]+\s+Silver\:\s+([0-9]+)/
-			silvers = $1.to_i
 			DownstreamHook.remove('go2_check_silvers')
 			nil
 		else
 			server_string
 		end
 	}
-	DownstreamHook.add('go2_check_silvers', action)
+	clear
+	DownstreamHook.add('go2_check_silvers', hook_proc)
 	silence_me unless undo_silence = silence_me
 	put 'info'
 	silence_me if undo_silence
-	wait_until { silvers }
+	while (line = get)
+		if line =~ /^\s*Mana\:\s+\-?[0-9]+\s+Silver\:\s+([0-9]+)/
+			silvers = $1.to_i
+			break
+		end
+	end
 	silvers
 }
 
-silver_cost = proc { |path|
+get_silver_cost = proc { |path|
 	cost = 0
 	path.each_index { |index| 
 		Room[path[index]].tags.each { |tag|
@@ -284,7 +245,7 @@ silver_cost = proc { |path|
 				if cost_string =~ /^[0-9]+$/
 					cost += cost_string.to_i
 				else
-					cost = StringProc.new(cost_string).call.to_i
+					cost += StringProc.new(cost_string).call.to_i
 				end
 			end
 		}
@@ -328,9 +289,35 @@ elsif script.vars[0] =~ /^targets$/i
 	respond output
 	exit
 elsif script.vars[0] =~ /^list$/i
-	for target_name,target_num in GameSettings['custom targets'].sort
-		respond "   #{target_name.ljust(20)} = #{target_num.to_s.rjust(5)}   #{Map[target_num].title.first}"
+	output = "\n"
+	output.concat "settings:\n"
+	output.concat "\n"
+	output.concat "            typeahead: #{CharSettings['typeahead']}"
+	if (CharSettings['typeahead'] > 0) and (CharSettings['delay'] > 0)
+		output.concat " (not used because delay > 0)"
 	end
+	output.concat "\n"
+	output.concat "                delay: #{CharSettings['delay']}\n"
+	output.concat "          get silvers: #{CharSettings['get silvers'] ? 'on' : 'off'}\n"
+	output.concat "   get return silvers: #{CharSettings['get return trip silvers'] ? 'on' : 'off'}\n"
+	output.concat "             ice mode: #{CharSettings['ice mode']}\n"
+	output.concat "          use seeking: #{CharSettings['use seeking'] ? 'on' : 'off'}\n"
+	if XMLData.game =~ /^GS/
+		output.concat "        stop for dead: #{CharSettings['stop for dead'] ? 'on' : 'off'}\n"
+		output.concat "      vaalor shortcut: #{CharSettings['vaalor shortcut'] ? 'on' : 'off'}\n"
+	end
+	if XMLData.game =~ /^GSPlat|^GSF/
+		output.concat "          use portals: #{CharSettings['use portals'] ? 'on' : 'off'}"
+		output.concat "     have portal pass: #{CharSettings['have portal pass'] ? 'yes' : 'no'}"
+	end
+	output.concat "\n"
+	output.concat "custom targets:\n"
+	output.concat "\n"
+	for target_name,target_num in GameSettings['custom targets'].sort
+		output.concat "   #{target_name.ljust(20)} = #{target_num.to_s.rjust(5)}   #{Map[target_num].title.first}\n"
+	end
+	output.concat "\n"
+	respond output
 	exit
 elsif script.vars[1] =~ /^save/i
 	new_target = script.vars[0].sub(/\s*save\s*/i, '').split(/\s*=\s*/)
@@ -381,11 +368,13 @@ end
 
 target_search_array             = Array.new
 setting_typeahead               = nil
+setting_delay                   = nil
 setting_disable_confirm         = false
 setting_use_vaalor_shortcut     = nil
 setting_ice_mode                = nil
 setting_get_silvers             = nil
 setting_use_seeking             = nil
+setting_stop_for_dead           = nil
 setting_get_return_trip_silvers = nil
 setting_have_portal_pass        = nil
 setting_use_portals             = nil
@@ -393,8 +382,14 @@ setting_use_portals             = nil
 for var in script.vars[1..-1]
 	if var =~ /^(?:\-\-)?typeahead=([0-9]+)$/i
 		setting_typeahead = $1.to_i
+	elsif var =~ /^(?:\-\-)?delay=([0-9\.]+)$/i
+		setting_delay = $1.to_f
 	elsif var =~ /^_disable_confirm_$|^--disable-confirm$/i
 		setting_disable_confirm = true
+	elsif var =~ /^--stop-for-dead$/i
+		setting_stop_for_dead = true
+	elsif var =~ /^--stop-for-dead=(on|true|yes|off|false|no)/i
+		setting_stop_for_dead = setting_value[$1]
 	elsif (XMLData.game =~ /^GS/) and var =~ /^(?:\-\-)?shortcut=(on|true|yes|off|false|no)$/i
 		setting_use_vaalor_shortcut = setting_value[$1]
 	elsif (XMLData.game =~ /^GS/) and (var =~ /^(?:\-\-)?ice\-?mode=(auto|wait|run)$/i)
@@ -425,9 +420,16 @@ target_search_string = target_search_array.join(' ')
 # if only settings were given, save the settings and exit
 #
 if target_search_string.empty?
+	unless setting_delay.nil?
+		CharSettings['delay'] = setting_delay
+		echo "delay setting changed to #{setting_delay} seconds"
+	end
 	unless setting_typeahead.nil?
-		Settings['typeahead'] = setting_typeahead
+		CharSettings['typeahead'] = setting_typeahead
 		echo "typeahead setting changed to #{setting_typeahead}"
+		if CharSettings['delay'].to_f > 0
+			echo "typeahead setting will not be used, because the delay setting is greater than zero"
+		end
 	end
 	if XMLData.game =~ /^GSPlat/
 		unless setting_use_portals.nil?
@@ -473,6 +475,10 @@ if target_search_string.empty?
 			$go2_use_seeking = setting_use_seeking
 			echo "go2 #{ if setting_use_seeking then 'may' else 'will not' end } use symbol of seeking for faster travel"
 		end
+		unless setting_stop_for_dead.nil?
+			CharSettings['stop for dead'] = setting_stop_for_dead
+			echo "go2 #{ if setting_stop_for_dead then 'will (probably)' else 'will not' end } stop when it sees dead people"
+		end
 		unless setting_ice_mode.nil?
 			CharSettings['ice mode'] = setting_ice_mode
 			# fixme: echo "something"
@@ -494,7 +500,11 @@ end
 # target was given; use saved settings, override them with command line settings, but don't save them
 #
 if setting_typeahead.nil?
-	setting_typeahead = Settings['typeahead']
+	setting_typeahead = CharSettings['typeahead']
+end
+
+if setting_delay.nil?
+	setting_delay = CharSettings['delay']
 end
 
 if setting_get_silvers.nil?
@@ -509,6 +519,10 @@ if setting_use_seeking.nil?
 else
 	before_dying { $go2_use_seeking = CharSettings['use seeking'] }
 	$go2_use_seeking = setting_use_seeking
+end
+
+if setting_stop_for_dead.nil?
+	setting_stop_for_dead = CharSettings['stop for dead']
 end
 
 if setting_ice_mode.nil?
@@ -635,6 +649,22 @@ else
 	end
 end
 
+if setting_stop_for_dead and (setting_typeahead > 0) and (setting_delay <= 0)
+	$go2_see_dead_people = false
+	exec_string = "
+		hide_me
+		status_tags
+		parent_id = #{Script.self.object_id}
+		Thread.new { loop { sleep 3; Script.self.kill unless Script.running.any? { |s| s.object_id == parent_id } or Script.hidden.any? { |s| s.object_id == parent_id } } }
+		while (line = get)
+			if line =~ /<compDef id='room players'>Also here:.*? the body of </
+				$go2_see_dead_people = true
+			end
+		end
+	"
+	start_exec_script(exec_string, flags={ :quiet => true })
+end
+
 #
 # move
 #
@@ -681,27 +711,24 @@ loop {
 	previous = shortest_distances = nil
 
 	if XMLData.game =~ /^GS/
-		needed_silvers = silver_cost.call(path)
+		needed_silvers = get_silver_cost.call(path)
 		if setting_get_return_trip_silvers
 			return_previous, return_shortest_distances = Map.dijkstra(destination.id, start_room.id)
 			return_path = [ start_room.id ]
 			return_path.push(return_previous[return_path[-1]]) until return_previous[return_path[-1]].nil?
 			return_path.reverse!
 			return_previous = return_shortest_distances = nil
-			needed_silvers += silver_cost.call(return_path)
+			needed_silvers += get_silver_cost.call(return_path)
 			return_path = nil
 		end
 		if needed_silvers > 0
 			current_silvers = check_silvers.call
-			echo "current_silvers: #{current_silvers}" if $go2_debug
-			echo "needed_silvers: #{needed_silvers}" if $go2_debug
 			if needed_silvers > current_silvers
 				if $go2_get_silvers
-					unless bank_id = Room.current.find_all_nearest_by_tag('bank').find { |room_id| current_silvers >= silver_cost.call(Room.current.path_to(room_id)) }
+					unless bank_id = Room.current.find_all_nearest_by_tag('bank').find { |room_id| current_silvers >= get_silver_cost.call(Room.current.path_to(room_id)) }
 						echo "error: You're too poor to go to the bank."
 						exit
 					end
-					echo "bank_id: #{bank_id}" if $go2_debug
 					pr, s = Map.dijkstra(Room.current.id, bank_id)
 					est_time = s[bank_id]
 					pr = s = nil
@@ -741,14 +768,14 @@ loop {
 					path.reverse!
 					est_time = shortest_distances[destination.id]
 					previous = shortest_distances = nil
-					needed_silvers = silver_cost.call(path)
+					needed_silvers = get_silver_cost.call(path)
 					if setting_get_return_trip_silvers
 						return_previous, return_shortest_distances = Map.dijkstra(destination.id, start_room.id)
 						return_path = [ start_room.id ]
 						return_path.push(return_previous[return_path[-1]]) until return_previous[return_path[-1]].nil?
 						return_path.reverse!
 						return_previous = return_shortest_distances = nil
-						needed_silvers += silver_cost.call(return_path)
+						needed_silvers += get_silver_cost.call(return_path)
 						return_path = nil
 					end
 					fput 'unhide' if hidden? or invisible?
@@ -790,11 +817,27 @@ loop {
 
 		if room.wayto[next_id].class == Proc
 			# echo 'proc: ' + room.id.to_s + ' -> ' + next_id.to_s
-			if setting_typeahead > 0
+			if (setting_typeahead > 0) and (setting_delay <= 0)
 				50.times {
 					break if ($room_count >= moves_sent)
 					sleep 0.05
 				}
+				if setting_stop_for_dead and $go2_see_dead_people
+					$go2_restart = true
+					10.times {
+						break if GameObj.pcs.any? { |pc| pc.status =~ /dead/ }
+						idx -= 1
+						break unless (way = Room.current.wayto[path[idx].to_s])
+						if way.class == Proc
+							way.call
+						else
+							move way
+						end
+					}
+					pause_script
+					$go2_see_dead_people = false
+					break
+				end
 				unless ($room_count >= moves_sent)
 					if $_SERVERBUFFER_.any? { |line| line =~ /Sorry, you may only type ahead/ }
 						echo 'reducing typeahead setting...'
@@ -807,6 +850,8 @@ loop {
 			begin
 				room_id_before_proc = Room.current.id
 				room.wayto[next_id].call
+				sleep setting_delay
+				pause_script if setting_stop_for_dead and GameObj.pcs.any? { |pc| pc.status =~ /dead/ }
 				# $go2_restart = true if Room.current.id == room_id_before_proc
 				break if $go2_restart
 			rescue
@@ -815,26 +860,34 @@ loop {
 				exit
 			end
 			moves_sent = $room_count
-			if $fix_map_db
-				real_next_id = Room.current.id.to_s
-				unless (real_next_id == next_id)
-					echo "current room id: #{real_next_id}; expected id: #{next_id}"
-					# We're not in the room we're suposed to be, but we won't delete a mini-script movements
-					echo "bad mini-script (#{room.id.to_s}->#{next_id})"
-					error_count += 1
-					exit if error_count > 20
-					$go2_restart = true
-					break
-				end
-			end
 		else
-			if (setting_typeahead > 0) and not first_move
+			if (setting_typeahead > 0) and (setting_delay <= 0) and not first_move
 				time = Time.now + 3
 				moves = moves_sent - setting_typeahead
 				loop {
 					break if ($room_count >= moves) or (Time.now > time)
-					get? or sleep 0.005
+					sleep 0.02
 				}
+				if setting_stop_for_dead and $go2_see_dead_people
+					$go2_restart = true
+					50.times {
+						break if ($room_count >= moves_sent)
+						sleep 0.05
+					}
+					10.times {
+						break if GameObj.pcs.any? { |pc| pc.status =~ /dead/ }
+						idx -= 1
+						break unless (way = Room.current.wayto[path[idx].to_s])
+						if way.class == Proc
+							way.call
+						else
+							move way
+						end
+					}
+					pause_script
+					$go2_see_dead_people = false
+					break
+				end
 				unless ($room_count + setting_typeahead) >= moves_sent
 					if $_SERVERBUFFER_.any? { |line| line =~ /Sorry, you may only type ahead/ }
 						echo 'reducing typeahead setting...'
@@ -847,46 +900,11 @@ loop {
 				moves_sent += 1
 			else
 				first_move = false
+				moves_sent += 1
 				result = move room.wayto[next_id]
-				if result
-					if $fix_map_db
-						# move succeeded, but did it move us to where we expected?
-						real_nextroom = current_or_new_room.call
-						real_next_id = real_nextroom.id.to_s
-						unless (real_next_id == next_id)
-							from_id = room.id.to_s
-							respond
-							respond '--- Are these the same room?'
-							respond Room[next_id.to_i]
-							respond Room[next_id.to_i].wayto.inspect
-							respond real_nextroom
-							respond real_nextroom.wayto.inspect
-							respond '--- type   ;send yes   or   ;send no'
-							respond '--- assuming "no" in 10 seconds...'
-							respond
-							clear
-							answer = nil
-							100.times {
-								sleep 0.1
-								break if answer = clear.find { |line| line =~ /^yes$|^no$/i }
-							}
-							if answer =~ /^yes$/i
-								combine_rooms.call(next_id, real_next_id)
-							else
-								echo "fixing map database..."
-								echo "adding: #{from_id} -> #{room.wayto[next_id]} -> #{real_next_id}"
-								room.wayto[real_next_id] = room.wayto[next_id]
-								room.timeto[real_next_id] = 0.2
-								echo "deleting: #{from_id} -> #{room.wayto[next_id]} -> #{next_id}"
-								room.wayto.delete(next_id)
-								room.timeto.delete(next_id)
-							end
-							error_count += 1
-							$go2_restart = true
-							break
-						end
-					end
-				else
+				sleep setting_delay
+				pause_script if setting_stop_for_dead and GameObj.pcs.any? { |pc| pc.status =~ /dead/ }
+				unless result
 					error_count += 1
 					if (idx == 0) and (error_count > 2) and (Room.current.id == room.id)
 						echo "changing Room[#{room.id}].timeto['#{next_id}'] to nil"
@@ -910,7 +928,7 @@ loop {
 		end
 	}
 
-	if setting_typeahead > 0
+	if (setting_typeahead > 0) and (setting_delay <= 0)
 		50.times {
 			break if ($room_count >= moves_sent)
 			sleep 0.05

@@ -10,9 +10,11 @@
 	    game: Gemstone
 	    tags: core
 	required: Lich > 4.6.10
-	 version: 1.2
+	 version: 1.3
 
 	changelog:
+		1.3 (2014-12-17):
+			recognize spells in "spell active" that have an "Indefinite" time left
 		1.2 (2014-11-14):
 			attempted bugfix
 		1.1 (2014-11-10):
@@ -1336,9 +1338,13 @@ while line = get
 			$infomon_cutthroat = false
 		elsif line == "You currently have the following active spells:"
 			while (line = get)
-				if line =~ /([A-z0-9\s\'\(\)]+) \.+ ([0-9]+)\:([0-9]+)\:([0-9]+)$/
+				if line =~ /([A-z0-9\s\'\(\)]+) \.+ (([0-9]+)\:([0-9]+)\:([0-9]+)|Indefinite)$/
 					spell_name = $1
-					spell_time = ($2.to_i * 60) + $3.to_i + ($4.to_i / 60.0)
+					if $2 == 'Indefinite'
+						spell_time = 599.0
+					else
+						spell_time = ($3.to_i * 60) + $4.to_i + ($5.to_i / 60.0)
+					end 
 					if spell_name == 'Raise Dead Recovery'
 						# fixme
 						spell_name = 'Raise Dead Cooldown'
