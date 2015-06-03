@@ -179,7 +179,7 @@
       <message type='start'>A faint slick sheen makes the air about you visible for the briefest of moments, then sinks into you and disappears\.</message>
       <message type='end'>The air shivers about you, glistening faintly before stilling to normalcy\.</message>
    </spell>
-   <spell availability='all' name='Silence' number='210' type='attack'>
+   <spell availability='all' name='Silence' number='210' type='attack' incant='no'>
       <duration cast-type='target'>if (history = reget.reverse) and (line = history.index { |l| l =~ /^A pall of silence settles over you\./ }) and history[history.index(line)+2] =~ /^\s*CS: [\+\-][0-9]+ \- TD\: [\+\-][0-9]+ \+ CvA\: [\+\-][0-9]+ \+ d100\: [\+\-][0-9]+ (?:\- \+?[0-9]+ )?==? \+([0-9]+)/; 0.5 + ($1.to_i - 100)/60.0; else; 0.25; end</duration>
       <cost type='mana'>10</cost>
    </spell>
@@ -218,7 +218,7 @@
    <spell availability='all' name='Frenzy' number='216' type='attack'>
       <cost type='mana'>16</cost>
    </spell>
-   <spell availability='all' name='Mass Interference' number='217' type='attack'>
+   <spell availability='all' name='Mass Interference' number='217' type='attack' incant='no'>
       <cost type='mana'>17</cost>
    </spell>
    <spell availability='self-cast' name='Spirit Servant' number='218' type='utility'>
@@ -343,7 +343,7 @@
    <spell availability='all' name='Remove Curse' number='315' type='utility'>
       <cost type='mana'>15</cost>
    </spell>
-   <spell availability='all' name='Censure' number='316' type='attack'>
+   <spell availability='all' name='Censure' number='316' type='attack' incant='no'>
       <cost type='mana'>16</cost>
    </spell>
    <spell availability='all' channel='yes' name='Divine Fury' number='317' type='attack'>
@@ -359,7 +359,7 @@
       <message type='start'>Drawing deep from the well of your soul, you summon forth a thread of your essence and weave it into an evanescent shield to shroud your form\.</message>
       <message type='end'>The air about you shimmers momentarily before the evanescent shield surrounding you collapses\.</message>
    </spell>
-   <spell availability='all' name='Divine Wrath' number='335' type='attack'>
+   <spell availability='all' name='Divine Wrath' number='335' type='attack' incant='no'>
       <cost type='mana'>35</cost>
    </spell>
    <spell availability='all' name='Holy Receptacle' number='325' type='utility'>
@@ -427,7 +427,7 @@
    <spell availability='all' name='Elemental Blast' number='409' type='attack'>
       <cost type='mana'>7</cost>
    </spell>
-   <spell availability='all' name='Elemental Wave' number='410' type='attack/area'>
+   <spell availability='all' name='Elemental Wave' number='410' type='attack/area' incant='no'>
       <cost type='mana'>10</cost>
    </spell>
    <spell availability='all' name='Elemental Blade' number='411' type='utility'>
@@ -490,7 +490,7 @@
       <message type='start'>Your skin tingles for a moment and you feel more secure\.</message>
       <message type='end'>The tingling sensation and sense of security leaves you\.</message>
    </spell>
-   <spell availability='all' name='Major Elemental Wave' number='435' type='attack/area'>
+   <spell availability='all' name='Major Elemental Wave' number='435' type='attack/area' incant='no'>
       <cost type='mana'>35</cost>
    </spell>
    <spell availability='all' name='Sleep' number='501' type='attack'>
@@ -569,7 +569,7 @@
    <spell availability='all' name='Stone Fist' number='514' type='attack'>
       <cost type='mana'>14</cost>
    </spell>
-   <spell availability='self-cast' name='Rapid Fire' number='515' type='utility'>
+   <spell availability='all' name='Rapid Fire' number='515' type='utility'>
       <duration span='stackable'>1</duration>
       <cost type='mana'>15</cost>
       <message type='start'>\(Your next spell will be re-prepared upon its casting\.\)</message>
@@ -581,7 +581,7 @@
    <spell availability='all' name='Charge Item' number='517' type='utility'>
       <cost type='mana'>17</cost>
    </spell>
-   <spell availability='all' name='Cone of Lightning' number='518' stance='yes' type='attack/area'>
+   <spell availability='all' name='Cone of Lightning' number='518' stance='yes' type='attack/area' incant='no'>
       <cost type='mana'>18</cost>
    </spell>
    <spell availability='all' name='Immolation' number='519' type='attack'>
@@ -593,7 +593,7 @@
       <message type='start'>A layer of .*?, shifting stone forms around you\.</message>
       <message type='end'>The layer of stone surrounding you crumbles away\.</message>
    </spell>
-   <spell availability='all' name='Meteor Swarm' number='525' type='attack'>
+   <spell availability='all' name='Meteor Swarm' number='525' type='attack' incant='no'>
       <cost type='mana'>25</cost>
    </spell>
    <spell availability='all' name='Elemental Disjunction' number='530' type='attack'>
@@ -654,10 +654,10 @@
    <spell availability='all' name='Camouflage' number='608' type='offense'>
       <cost type='mana'>8</cost>
    </spell>
-   <spell availability='all' name='Sun Burst' number='609' type='attack/utility'>
+   <spell availability='all' name='Sun Burst' number='609' type='attack/utility' incant='no'>
       <cost type='mana'>9</cost>
    </spell>
-   <spell availability='all' name='Tangleweed' number='610' type='attack'>
+   <spell availability='all' name='Tangleweed' number='610' type='attack' incant='no'>
       <cost type='mana'>10</cost>
    </spell>
    <spell availability='group' name='Mass Colors' number='611' type='defense'>
@@ -698,7 +698,7 @@
       <message type='start'>You suddenly feel much more dextrous\.</message>
       <message type='end'>You no longer feel so dextrous\.</message>
    </spell>
-   <spell availability='all' name='Mass Calm' number='619' type='attack'>
+   <spell availability='all' name='Mass Calm' number='619' type='attack' incant='no'>
       <cost type='mana'>19</cost>
    </spell>
    <spell availability='all' name='Resist Nature' number='620' type='utility'>
@@ -716,7 +716,7 @@
    <spell availability='all' name='Animal Companion' number='630' type='attack/utility'>
       <cost type='mana'>30</cost>
    </spell>
-   <spell availability='all' name='Nature&apos;s Fury' number='635' type='attack'>
+   <spell availability='all' name='Nature&apos;s Fury' number='635' type='attack' incant='no'>
       <cost type='mana'>35</cost>
    </spell>
    <spell availability='self-cast' name='Wall of Thorns' number='640' type='defense'>
@@ -783,7 +783,7 @@
       <message type='start'>A shadowy patch of ether rises up through the (?:floor|ground) to encompass you, swiftly sinking into your skin\.</message>
       <message type='end'>A dark shadow seems to detach itself from your body, swiftly dissipating into the air\.</message>
    </spell>
-   <spell availability='all' name='Nightmare' number='713' stance='yes' type='attack'>
+   <spell availability='all' name='Balefire' number='713' stance='yes' type='attack'>
       <cost type='mana'>13</cost>
    </spell>
    <spell availability='all' name='Scroll Infusion' number='714' type='utility'>
@@ -795,7 +795,7 @@
    <spell availability='all' name='Disease' number='716' type='attack'>
       <cost type='mana'>16</cost>
    </spell>
-   <spell availability='all' name='Evil Eye' number='717' type='attack'>
+   <spell availability='all' name='Evil Eye' number='717' type='attack' incant='no'>
       <cost type='mana'>17</cost>
    </spell>
    <spell availability='all' name='Torment' number='718' type='attack'>
@@ -804,7 +804,7 @@
    <spell availability='all' name='Dark Catalyst' number='719' type='attack'>
       <cost type='mana'>19</cost>
    </spell>
-   <spell availability='all' name='Implosion' number='720' type='attack'>
+   <spell availability='all' name='Implosion' number='720' type='attack' incant='no'>
       <cost type='mana'>20</cost>
    </spell>
    <spell availability='self-cast' name='Minor Summoning' number='725' type='utility'>
@@ -858,7 +858,7 @@
    <spell availability='all' name='Major Fire' number='908' stance='yes' type='attack'>
       <cost type='mana'>8</cost>
    </spell>
-   <spell availability='all' name='Tremors' number='909' type='attack/area'>
+   <spell availability='all' name='Tremors' number='909' type='attack/area' incant='no'>
       <cost type='mana'>9</cost>
    </spell>
    <spell availability='all' name='Major Shock' number='910' stance='yes' type='attack'>
@@ -872,7 +872,7 @@
       <message type='start'>If you were visible, your form would have blurred\.</message>
       <message type='end'>You become solid again\.</message>
    </spell>
-   <spell availability='all' name='Call Wind' number='912' type='attack/area'>
+   <spell availability='all' name='Call Wind' number='912' type='attack/area' incant='no'>
       <cost type='mana'>12</cost>
    </spell>
    <spell availability='self-cast' name='Melgorehn&apos;s Aura' number='913' type='defense'>
@@ -969,8 +969,8 @@
       <cost type='renew'>2+[[Spells.bard-7,0].max,13].min</cost>
       <bonus type='bolt-as'>([[3+Spells.bard,10].max,20].min)+(bonus=0;[3,7,12,18,25,33,42,52,63,75,88,102,117,133,150,168,187].each { |n| bonus+=1 if Skills.mltelepathy &gt;= n }; bonus)</bonus>
       <bonus type='physical-as'>([[3+Spells.bard,10].max,20].min)+(bonus=0;[3,7,12,18,25,33,42,52,63,75,88,102,117,133,150,168,187].each { |n| bonus+=1 if Skills.mltelepathy &gt;= n }; bonus)</bonus>
-      <message type='start'>Your (?:spirit is|spirits are) lifted by the verses praising Kai\.</message>
-      <message type='end'>Your (?:spirit is|spirits are|spirits, and those of your group,) no longer lifted by stories of Kai&apos;s Triumphs\.</message>
+      <message type='start'>Your (?:spirit is|spirits are) lifted by the verses praising Kai\.$|^[A-Z][a-z]+ sings of Kai&apos;s many triumphs, lifting your spirits\.</message>
+      <message type='end'>Your (?:spirit is|spirits are|spirits, and those of your group, are) no longer lifted by stories of Kai&apos;s Triumphs\.</message>
    </spell>
    <spell availability='all' name='Stunning Shout' number='1008' type='attack'>
       <cost type='mana'>8</cost>
@@ -1203,7 +1203,7 @@
       <message type='start'>You feel your forehead pulse as your mind hardens to deter invading thoughts\.</message>
       <message type='end'>You feel your forehead pulse as your mind relaxes\.</message>
    </spell>
-   <spell availability='all' name='Dragonclaw' number='1209' type='offense'>
+   <spell availability='self-cast' name='Dragonclaw' number='1209' type='offense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.minormental</duration>
       <cost type='mana'>9</cost>
       <bonus type='unarmed-af'>10+(bonus=0;[1,3,6,10,15,21,28,36,45,55,66,78,91,105,120,136,153,171,190].each { |n| bonus += 1 if Skills.mltransformation >= n }; bonus)</bonus>
@@ -1311,8 +1311,12 @@
       <message type='start'>Granules of cobalt light coalesce around you and as they begin to seep into your exposed skin, you feel invigorated\.</message>
       <message type='end'>Cobalt light separates itself from your skin and scatters into oblivion\.</message>
    </spell>
-   <spell availability='group' name='Beacon of Courage' number='1608' type='attack'>
+   <spell availability='group' name='Beacon of Courage' number='1608' type='utility'>
+      <duration span='refreshable' multicastable='no'>1</duration>
       <cost type='mana'>8</cost>
+      <bonus type='fof-offset'>1 + (bonus = 0; [10,21,33,46,60,75,91,108,126,145,165,186,208,231,255].each { |n| bonus += 1 if Skills.slblessings &gt;= n }; bonus)</bonus>
+      <message type='start'>Motes of lambent white-gold light appear and begin to swirl around you, coalescing into a radiant aura.</message>
+      <message type='end'>The aura of lambent white-gold light motes surrounding you dissipates slowly, winking out of existence.</message>
    </spell>
    <spell availability='group' name='Divine Shield' number='1609' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.paladin</duration>
@@ -1375,9 +1379,10 @@
       <message type='end'>You feel less resolved as the divine urging subsides, fading into obscurity\.</message>
    </spell>
    <spell availability='group' name='Crusade' number='1618' type='offense'>
-      <duration>60</duration>
-      <message type='start'>You utter a pious chant and a divine force suddenly radiates around you\. The intensity of your patron's aid billows out from you in a wave of righteous indignation!</message>
-      <message type='end'>The divine force surrounding you slowly fades away\.</message>
+      <duration>3</duration>
+      <cost type='mana'>18</cost>
+      <message type='start'>You utter a pious chant and a divine force suddenly radiates around you\.  The intensity of your patron's aid billows out from you in a wave of righteous indignation\!</message>
+      <message type='end'>You feel your spiritual strength return as you are ready to continue on your crusade\.</message>
    </spell>
    <spell availability='self-cast' name='Faith Shield' number='1619' type='defense'>
       <duration>dur = 0.5 + (Spells.paladin - 19) / 60.0; if dur &gt; (70.0 / 60.0) then dur = (70.0 / 60.0) else dur end</duration>
@@ -1402,6 +1407,8 @@
    </spell>
    <spell availability='all' name='Divine Word' number='1640' type='utility'>
       <cost type='mana'>40</cost>
+   </spell>
+   <spell availability='all' name='Arcane Blast' number='1700' type='attack'>
    </spell>
    <spell availability='all' name='Arcane Decoy' number='1701' type='defense'>
       <duration span='refreshable'>15 + (Skills.magicitemuse/6.0)</duration>
@@ -1448,7 +1455,7 @@
       <message type='start'>A faint silvery glow surrounds your body\.</message>
       <message type='end'>A faint silvery glow fades from around you\.</message>
    </spell>
-   <spell availability='all' name='Death Cloud' number='1713' type='attack'/>
+   <spell availability='all' name='Death Cloud' number='1713' type='attack' incant='no'/>
    <spell availability='all' name='Firestorm' number='1715' type='attack'/>
    <spell availability='all' name='V&apos;Tull&apos;s Fury' number='1718' type='attack'/>
    <spell availability='all' name='Arcane Barrier' number='1720' type='defense'>
@@ -2275,6 +2282,11 @@
    <spell availability='all' name='Chronomage Teleport Staff Cooldown' number='9058' type='timer'>
       <duration max='1440.0' persist-on-death='yes' real-time='yes'>1440</duration>
       <message type='start'>When the air around you settles and your mind calms, you realize that your very existence has been catapulted into the past\.  The sand in the hourglass is now in the upper bulb, trickling slowly into the lower chamber\.</message>
+   </spell>
+   <spell availability='all' name='Crusade Recovery' number='9059' type='timer'>
+      <duration max='2.0' persist-on-death='yes' real-time='yes'>2</duration>
+      <message type='start'>The divine force surrounding you slowly fades away\.</message>
+      <message type='end'>You feel your spiritual strength return as you are ready to continue on your crusade\.</message>
    </spell>
    <spell availability='self-cast' name='Mana Leech Cooldown' number='9516' type='timer'>
       <duration persist-on-death='yes' span='stackable'>1</duration>
