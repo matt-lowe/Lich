@@ -3883,6 +3883,7 @@ class Map
 							room['paths'] = Array.new
 							room['tags'] = Array.new
 							room['unique_loot'] = Array.new
+							room['links'] = Array.new
 						elsif element =~ /^(?:image|tsoran)$/ and attributes['name'] and attributes['x'] and attributes['y'] and attributes['size']
 							room['image'] = attributes['name']
 							room['image_coords'] = [ (attributes['x'].to_i - (attributes['size']/2.0).round), (attributes['y'].to_i - (attributes['size']/2.0).round), (attributes['x'].to_i + (attributes['size']/2.0).round), (attributes['y'].to_i + (attributes['size']/2.0).round) ]
@@ -3898,6 +3899,11 @@ class Map
 							room['tags'].push(text_string)
 						elsif current_tag =~ /^(?:title|description|paths|tag|unique_loot)$/
 							room[current_tag].push(text_string)
+						elsif current_tag == 'link'
+							dest_room_id = current_attributes['destination']
+							dest_map_name = current_attributes['mapName']
+							click_area = current_attributes['clickableArea'].split(',').collect { |num| num.to_i }
+							room['links'].push(Map::Link.new(dest_room_id, dest_map_name, click_area))
 						elsif current_tag == 'exit' and current_attributes['target']
 							if current_attributes['type'].downcase == 'string'
 								room['wayto'][current_attributes['target']] = text_string
@@ -3916,7 +3922,7 @@ class Map
 					tag_end = proc { |element|
 						if element == 'room'
 							room['unique_loot'] = nil if room['unique_loot'].empty?
-							Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'], [])
+							Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'], room['links'])
 						elsif element == 'map'
 							missing_end = false
 						end
@@ -4052,6 +4058,7 @@ class Map
 								file.write "		<exit target=\"#{target}\" type=\"#{room.wayto[target].class}\"#{cost}>#{room.wayto[target].gsub(/(<|>|"|'|&)/) { escape[$1] }}</exit>\n"
 							end
 						}
+						room.links.each { |link| file.write "		<link destination=\"#{link.destination_room_id}\" mapName=\"link.destination_map_name\" clickableArea=\"#{link.clickable_area.join(',')}\"/>\n" }
 						file.write "	</room>\n"
 					}
 					file.write "</map>\n"
