@@ -602,8 +602,6 @@ Gtk.queue {
 		}
 	}
 
-	window.show_all
-
 	window_width = [window_width,100].max
 	window_height = [window_height,100].max
 	window.resize(window_width, window_height)
@@ -611,6 +609,8 @@ Gtk.queue {
 	window_position[0] = [[0, window_position[0].to_i].max, (Gdk.screen_width-window_width)].min
 	window_position[1] = [[0, window_position[1].to_i].max, (Gdk.screen_height-window_height)].min
 	window.move(window_position[0], window_position[1])
+
+	window.show_all
 
 	if trouble
 		respond
