@@ -1442,6 +1442,7 @@ class XMLParser
 				if attributes['id'] == 'room objs'
 					GameObj.clear_loot
 					GameObj.clear_npcs
+					GameObj.clear_all_objs
 				elsif attributes['id'] == 'room players'
 					GameObj.clear_pcs
 				elsif attributes['id'] == 'room exits'
@@ -1735,6 +1736,8 @@ class XMLParser
 						end
 					elsif (text_string =~ /that (?:is|appears) ([\w\s]+)(?:,| and|\.)/) or (text_string =~ / \(([^\(]+)\)/)
 						GameObj.npcs[-1].status = $1
+					else
+						GameObj.new_all_obj(@obj_exist, @obj_noun, text_string)
 					end
 				elsif @active_ids.include?('room players')
 					if @active_tags.include?('a')
@@ -8852,6 +8855,7 @@ module Games
 			end
 		end
 		class GameObj
+			@@all_objs		= Array.new
 			@@loot          = Array.new
 			@@npcs          = Array.new
 			@@npc_status    = Hash.new
@@ -8932,14 +8936,14 @@ module Games
 			def GameObj.[](val)
 				if val.class == String
 					if val =~ /^\-?[0-9]+$/
-						obj = @@inv.find { |o| o.id == val } || @@loot.find { |o| o.id == val } || @@npcs.find { |o| o.id == val } || @@pcs.find { |o| o.id == val } || [ @@right_hand, @@left_hand ].find { |o| o.id == val } || @@room_desc.find { |o| o.id == val }
+						obj = @@inv.find { |o| o.id == val } || @@all_objs.find { |o| o.id == val } || @@loot.find { |o| o.id == val } || @@npcs.find { |o| o.id == val } || @@pcs.find { |o| o.id == val } || [ @@right_hand, @@left_hand ].find { |o| o.id == val } || @@room_desc.find { |o| o.id == val }
 					elsif val.split(' ').length == 1
-						obj = @@inv.find { |o| o.noun == val } || @@loot.find { |o| o.noun == val } || @@npcs.find { |o| o.noun == val } || @@pcs.find { |o| o.noun == val } || [ @@right_hand, @@left_hand ].find { |o| o.noun == val } || @@room_desc.find { |o| o.noun == val }
+						obj = @@inv.find { |o| o.noun == val } || @@all_objs.find { |o| o.noun == val } || @@loot.find { |o| o.noun == val } || @@npcs.find { |o| o.noun == val } || @@pcs.find { |o| o.noun == val } || [ @@right_hand, @@left_hand ].find { |o| o.noun == val } || @@room_desc.find { |o| o.noun == val }
 					else
-						obj = @@inv.find { |o| o.name == val } || @@loot.find { |o| o.name == val } || @@npcs.find { |o| o.name == val } || @@pcs.find { |o| o.name == val } || [ @@right_hand, @@left_hand ].find { |o| o.name == val } || @@room_desc.find { |o| o.name == val } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i }
+						obj = @@inv.find { |o| o.name == val } || @@all_objs.find { |o| o.name == val }  || @@loot.find { |o| o.name == val } || @@npcs.find { |o| o.name == val } || @@pcs.find { |o| o.name == val } || [ @@right_hand, @@left_hand ].find { |o| o.name == val } || @@room_desc.find { |o| o.name == val } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i }
 					end
 				elsif val.class == Regexp
-					obj = @@inv.find { |o| o.name =~ val } || @@loot.find { |o| o.name =~ val } || @@npcs.find { |o| o.name =~ val } || @@pcs.find { |o| o.name =~ val } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ val } || @@room_desc.find { |o| o.name =~ val }
+					obj = @@inv.find { |o| o.name =~ val } || @@all_objs.find { |o| o.name =~ val }  || @@loot.find { |o| o.name =~ val } || @@npcs.find { |o| o.name =~ val } || @@pcs.find { |o| o.name =~ val } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ val } || @@room_desc.find { |o| o.name =~ val }
 				end
 			end
 			def GameObj
@@ -8951,12 +8955,19 @@ module Games
 			def GameObj.new_npc(id, noun, name, status=nil)
 				obj = GameObj.new(id, noun, name)
 				@@npcs.push(obj)
+				@@all_objs.push(obj)
 				@@npc_status[id] = status
 				obj
 			end
 			def GameObj.new_loot(id, noun, name)
 				obj = GameObj.new(id, noun, name)
 				@@loot.push(obj)
+				@@all_objs.push(obj)
+				obj
+			end
+			def GameObj.new_all_obj(id, noun, name)
+				obj = GameObj.new(id, noun, name)
+				@@all_objs.push(obj)
 				obj
 			end
 			def GameObj.new_pc(id, noun, name, status=nil)
@@ -9011,6 +9022,9 @@ module Games
 			def GameObj.left_hand
 				@@left_hand.dup
 			end
+			def GameObj.clear_all_objs
+				@@all_objs.clear
+			end
 			def GameObj.clear_loot
 				@@loot.clear
 			end
@@ -9052,6 +9066,13 @@ module Games
 					nil
 				else
 					@@loot.dup
+				end
+			end
+			def GameObj.all_objs
+				if @@all_objs.empty?
+					nil
+				else
+					@@all_objs.dup
 				end
 			end
 			def GameObj.pcs
