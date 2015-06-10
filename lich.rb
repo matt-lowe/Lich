@@ -39,6 +39,8 @@
 LICH_VERSION = '4.6.32'
 TESTING = false
 
+$_IS_PROCESSING_LINE_MUTEX = Mutex.new
+
 if RUBY_VERSION !~ /^2/
 	if (RUBY_PLATFORM =~ /mingw|win/) and (RUBY_PLATFORM !~ /darwin/i)
 		if RUBY_VERSION =~ /^1\.9/
@@ -1263,7 +1265,7 @@ class LimitedArray < Array
 end
 
 class XMLParser
-	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :player_id, :active_spells, :prompt, :current_target_id
+	attr_reader :mana, :max_mana, :health, :max_health, :spirit, :max_spirit, :last_spirit, :stamina, :max_stamina, :stance_text, :stance_value, :mind_text, :mind_value, :prepared_spell, :encumbrance_text, :encumbrance_full_text, :encumbrance_value, :indicator, :injuries, :injury_mode, :room_count, :room_title, :room_description, :room_exits, :room_exits_string, :familiar_room_title, :familiar_room_description, :familiar_room_exits, :bounty_task, :injury_mode, :server_time, :server_time_offset, :roundtime_end, :cast_roundtime_end, :last_pulse, :level, :next_level_value, :next_level_text, :society_task, :stow_container_id, :name, :game, :in_stream, :current_output_class, :player_id, :active_spells, :prompt, :current_target_id
 	attr_accessor :send_fake_tags
 
 	@@warned_deprecated_spellfront = 0
@@ -1290,6 +1292,7 @@ class XMLParser
 		@pc = nil
 		@last_obj = nil
 		@in_stream = false
+		@current_output_class = nil
 		@player_status = nil
 		@fam_mode = String.new
 		@room_window_disabled = false
@@ -1402,6 +1405,8 @@ class XMLParser
 				@obj_name = nil
 				@obj_before_name = nil
 				@obj_after_name = nil
+			elsif name == 'output'
+				@current_output_class = attributes['class']
 			elsif name == 'dialogData' and attributes['id'] == 'ActiveSpells' and attributes['clear'] == 't'
 				@active_spells.clear
 			elsif name == 'resource' or name == 'nav'
@@ -1419,11 +1424,11 @@ class XMLParser
 						$room_count += 1
 					end
 				end
-				@in_stream = false
 				if attributes['id'] == 'bounty'
 					@bounty_task.strip!
 				end
 				@current_stream = String.new
+				@in_stream = false
 			elsif name == 'pushBold'
 				@bold = true
 			elsif name == 'popBold'
@@ -1442,6 +1447,7 @@ class XMLParser
 				if attributes['id'] == 'room objs'
 					GameObj.clear_loot
 					GameObj.clear_npcs
+					GameObj.clear_all_objs
 				elsif attributes['id'] == 'room players'
 					GameObj.clear_pcs
 				elsif attributes['id'] == 'room exits'
@@ -1735,6 +1741,8 @@ class XMLParser
 						end
 					elsif (text_string =~ /that (?:is|appears) ([\w\s]+)(?:,| and|\.)/) or (text_string =~ / \(([^\(]+)\)/)
 						GameObj.npcs[-1].status = $1
+					else
+						GameObj.new_all_obj(@obj_exist, @obj_noun, text_string)
 					end
 				elsif @active_ids.include?('room players')
 					if @active_tags.include?('a')
@@ -3479,10 +3487,11 @@ class Map
 	@@elevated_load_xml        = proc { Map.load_xml }
 	@@elevated_save            = proc { Map.save }
 	@@elevated_save_xml        = proc { Map.save_xml }
+	@@links                    = []
 	attr_reader :id
-	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location, :unique_loot
-	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil, unique_loot=nil)
-		@id, @title, @description, @paths, @location, @climate, @terrain, @wayto, @timeto, @image, @image_coords, @tags, @check_location, @unique_loot = id, title, description, paths, location, climate, terrain, wayto, timeto, image, image_coords, tags, check_location, unique_loot
+	attr_accessor :title, :description, :paths, :location, :climate, :terrain, :wayto, :timeto, :image, :image_coords, :tags, :check_location, :unique_loot, :links
+	def initialize(id, title, description, paths, location=nil, climate=nil, terrain=nil, wayto={}, timeto={}, image=nil, image_coords=nil, tags=[], check_location=nil, unique_loot=nil, links=[])
+		@id, @title, @description, @paths, @location, @climate, @terrain, @wayto, @timeto, @image, @image_coords, @tags, @check_location, @unique_loot, @links = id, title, description, paths, location, climate, terrain, wayto, timeto, image, image_coords, tags, check_location, unique_loot, links
 		@@list[@id] = self
 	end
 	def outside?
@@ -3828,6 +3837,10 @@ class Map
 					while filename = file_list.shift
 						begin
 							@@list = File.open(filename, 'rb') { |f| Marshal.load(f.read) }
+							# Marshalling old DBs will cause all the links arrays to be nil - lets go through and fill them with
+							# an empty array.  (ease of use for adding)
+							nil_links = @@list.find_all { |x| !x.links }
+							nil_links.each { |x| x.links = [] }
 							respond "--- loaded #{filename}" if error
 							@@loaded = true
 							return true
@@ -3878,6 +3891,7 @@ class Map
 							room['paths'] = Array.new
 							room['tags'] = Array.new
 							room['unique_loot'] = Array.new
+							room['links'] = Array.new
 						elsif element =~ /^(?:image|tsoran)$/ and attributes['name'] and attributes['x'] and attributes['y'] and attributes['size']
 							room['image'] = attributes['name']
 							room['image_coords'] = [ (attributes['x'].to_i - (attributes['size']/2.0).round), (attributes['y'].to_i - (attributes['size']/2.0).round), (attributes['x'].to_i + (attributes['size']/2.0).round), (attributes['y'].to_i + (attributes['size']/2.0).round) ]
@@ -3893,6 +3907,11 @@ class Map
 							room['tags'].push(text_string)
 						elsif current_tag =~ /^(?:title|description|paths|tag|unique_loot)$/
 							room[current_tag].push(text_string)
+						elsif current_tag == 'link'
+							dest_room_id = current_attributes['destination']
+							dest_map_name = current_attributes['mapName']
+							click_area = current_attributes['clickableArea'].split(',').collect { |num| num.to_i }
+							room['links'].push(Map::Link.new(dest_room_id, dest_map_name, click_area))
 						elsif current_tag == 'exit' and current_attributes['target']
 							if current_attributes['type'].downcase == 'string'
 								room['wayto'][current_attributes['target']] = text_string
@@ -3911,7 +3930,7 @@ class Map
 					tag_end = proc { |element|
 						if element == 'room'
 							room['unique_loot'] = nil if room['unique_loot'].empty?
-							Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'])
+							Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'], room['links'])
 						elsif element == 'map'
 							missing_end = false
 						end
@@ -4047,6 +4066,7 @@ class Map
 								file.write "		<exit target=\"#{target}\" type=\"#{room.wayto[target].class}\"#{cost}>#{room.wayto[target].gsub(/(<|>|"|'|&)/) { escape[$1] }}</exit>\n"
 							end
 						}
+						room.links.each { |link| file.write "		<link destination=\"#{link.destination_room_id}\" mapName=\"link.destination_map_name\" clickableArea=\"#{link.clickable_area.join(',')}\"/>\n" }
 						file.write "	</room>\n"
 					}
 					file.write "</map>\n"
@@ -4239,6 +4259,23 @@ class Map
 			target_list.sort { |a,b| shortest_distances[a] <=> shortest_distances[b] }.first
 		end
 	end
+
+    class Link
+        @@destination_room_id   = nil
+        @@destination_map_name  = nil
+        @@clickable_area        = []
+        attr_accessor :destination_room_id, :destination_map_name, :clickable_area
+        def initialize(room_id, map_name, clickable_area=[])
+            @destination_room_id, @destination_map_name, @clickable_area = room_id, map_name, clickable_area
+        end
+        def to_s
+            "Destination: #{@destination_room_id}:\n#{@destination_map_name}\n#{@clickable_area}"
+        end
+    end
+
+    def link_to(destination_room_id, destination_map_name, clickable_area=[])
+        @@links.push(Map::Link.new(destination_room_id, destination_map_name, clickable_area))
+    end
 end
 
 class Room < Map
@@ -5774,15 +5811,20 @@ def respond(first = "", *messages)
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str.split(/\r?\n/).each { |line| Script.new_script_output(line); Buffer.update(line, Buffer::SCRIPT_OUTPUT) }
 		if $frontend == 'stormfront'
-			str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"\"/>\r\n"
+			str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"#{XMLData.current_output_class}\"/>\r\n"
 		elsif $frontend == 'profanity'
 			str = str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
 		end
-		wait_while { XMLData.in_stream }
-		$_CLIENT_.puts(str)
-		if $_DETACHABLE_CLIENT_
-			$_DETACHABLE_CLIENT_.puts(str) rescue()
-		end
+		$_IS_PROCESSING_LINE_MUTEX.synchronize {
+			while XMLData.in_stream do
+				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
+			end
+			$_CLIENT_LOGS_.push("#{XMLData.in_stream}: #{str}")
+			$_CLIENT_.puts(str)
+			if $_DETACHABLE_CLIENT_
+				$_DETACHABLE_CLIENT_.puts(str) rescue()
+			end
+		}
 	rescue
 		puts $!
 		puts $!.backtrace.first
@@ -5799,11 +5841,16 @@ def _respond(first = "", *messages)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str.split(/\r?\n/).each { |line| Script.new_script_output(line); Buffer.update(line, Buffer::SCRIPT_OUTPUT) } # fixme: strip/separate script output?
-		wait_while { XMLData.in_stream }
-		$_CLIENT_.puts(str)
-		if $_DETACHABLE_CLIENT_
-			$_DETACHABLE_CLIENT_.puts(str) rescue()
-		end
+		$_IS_PROCESSING_LINE_MUTEX.synchronize {
+			while XMLData.in_stream do
+				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
+			end
+			$_CLIENT_LOGS_.push("#{XMLData.in_stream}: #{str}")
+			$_CLIENT_.puts(str)
+			if $_DETACHABLE_CLIENT_
+				$_DETACHABLE_CLIENT_.puts(str) rescue()
+			end
+		}
 	rescue
 		puts $!
 		puts $!.backtrace.first
@@ -7072,8 +7119,12 @@ module Games
 								end
 								unless $_SERVERSTRING_ =~ /^<setting/
 									begin
-										REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
-										# XMLData.parse($_SERVERSTRING_)
+										# We have to synchronize this, or there is a race condition between XMLData.parse and respond's "in_stream" check.
+										# synchronizing here prevents 'respond' text from appearing in other streams
+										$_IS_PROCESSING_LINE_MUTEX.synchronize {
+											REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+											# XMLData.parse($_SERVERSTRING_)
+										} # $_IS_PROCESSING_LINE_MUTEX.synchronize
 									rescue
 										unless $!.to_s =~ /invalid byte sequence/
 											if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
@@ -8823,6 +8874,7 @@ module Games
 			end
 		end
 		class GameObj
+			@@all_objs		= Array.new
 			@@loot          = Array.new
 			@@npcs          = Array.new
 			@@npc_status    = Hash.new
@@ -8903,14 +8955,14 @@ module Games
 			def GameObj.[](val)
 				if val.class == String
 					if val =~ /^\-?[0-9]+$/
-						obj = @@inv.find { |o| o.id == val } || @@loot.find { |o| o.id == val } || @@npcs.find { |o| o.id == val } || @@pcs.find { |o| o.id == val } || [ @@right_hand, @@left_hand ].find { |o| o.id == val } || @@room_desc.find { |o| o.id == val }
+						obj = @@inv.find { |o| o.id == val } || @@all_objs.find { |o| o.id == val } || @@loot.find { |o| o.id == val } || @@npcs.find { |o| o.id == val } || @@pcs.find { |o| o.id == val } || [ @@right_hand, @@left_hand ].find { |o| o.id == val } || @@room_desc.find { |o| o.id == val }
 					elsif val.split(' ').length == 1
-						obj = @@inv.find { |o| o.noun == val } || @@loot.find { |o| o.noun == val } || @@npcs.find { |o| o.noun == val } || @@pcs.find { |o| o.noun == val } || [ @@right_hand, @@left_hand ].find { |o| o.noun == val } || @@room_desc.find { |o| o.noun == val }
+						obj = @@inv.find { |o| o.noun == val } || @@all_objs.find { |o| o.noun == val } || @@loot.find { |o| o.noun == val } || @@npcs.find { |o| o.noun == val } || @@pcs.find { |o| o.noun == val } || [ @@right_hand, @@left_hand ].find { |o| o.noun == val } || @@room_desc.find { |o| o.noun == val }
 					else
-						obj = @@inv.find { |o| o.name == val } || @@loot.find { |o| o.name == val } || @@npcs.find { |o| o.name == val } || @@pcs.find { |o| o.name == val } || [ @@right_hand, @@left_hand ].find { |o| o.name == val } || @@room_desc.find { |o| o.name == val } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i }
+						obj = @@inv.find { |o| o.name == val } || @@all_objs.find { |o| o.name == val }  || @@loot.find { |o| o.name == val } || @@npcs.find { |o| o.name == val } || @@pcs.find { |o| o.name == val } || [ @@right_hand, @@left_hand ].find { |o| o.name == val } || @@room_desc.find { |o| o.name == val } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val.strip)}$/i } || @@inv.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@loot.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@npcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@pcs.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i } || @@room_desc.find { |o| o.name =~ /\b#{Regexp.escape(val).sub(' ', ' .*')}$/i }
 					end
 				elsif val.class == Regexp
-					obj = @@inv.find { |o| o.name =~ val } || @@loot.find { |o| o.name =~ val } || @@npcs.find { |o| o.name =~ val } || @@pcs.find { |o| o.name =~ val } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ val } || @@room_desc.find { |o| o.name =~ val }
+					obj = @@inv.find { |o| o.name =~ val } || @@all_objs.find { |o| o.name =~ val }  || @@loot.find { |o| o.name =~ val } || @@npcs.find { |o| o.name =~ val } || @@pcs.find { |o| o.name =~ val } || [ @@right_hand, @@left_hand ].find { |o| o.name =~ val } || @@room_desc.find { |o| o.name =~ val }
 				end
 			end
 			def GameObj
@@ -8922,12 +8974,19 @@ module Games
 			def GameObj.new_npc(id, noun, name, status=nil)
 				obj = GameObj.new(id, noun, name)
 				@@npcs.push(obj)
+				@@all_objs.push(obj)
 				@@npc_status[id] = status
 				obj
 			end
 			def GameObj.new_loot(id, noun, name)
 				obj = GameObj.new(id, noun, name)
 				@@loot.push(obj)
+				@@all_objs.push(obj)
+				obj
+			end
+			def GameObj.new_all_obj(id, noun, name)
+				obj = GameObj.new(id, noun, name)
+				@@all_objs.push(obj)
 				obj
 			end
 			def GameObj.new_pc(id, noun, name, status=nil)
@@ -8982,6 +9041,9 @@ module Games
 			def GameObj.left_hand
 				@@left_hand.dup
 			end
+			def GameObj.clear_all_objs
+				@@all_objs.clear
+			end
 			def GameObj.clear_loot
 				@@loot.clear
 			end
@@ -9023,6 +9085,13 @@ module Games
 					nil
 				else
 					@@loot.dup
+				end
+			end
+			def GameObj.all_objs
+				if @@all_objs.empty?
+					nil
+				else
+					@@all_objs.dup
 				end
 			end
 			def GameObj.pcs

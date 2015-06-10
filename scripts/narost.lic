@@ -37,6 +37,7 @@ if $SAFE > 0
 	exit
 end
 
+require 'set'
 trouble = script.vars.any? { |var| var =~ /trouble/i }
 
 Settings.load
@@ -235,11 +236,7 @@ no_room = proc {
 	}
 }
 
-find_clicked_link = proc { |click_x, click_y|
-	clicked_link = nil
-	map_name = current_map.slice(/([^\/\\]+)$/)
-	# fixme: use tags in map database for this
-	map_links = [
+gs_map_links = [
 		[ 'TI-teras.gif',                  1962, 2238,   68,  192, 'TI-wilds.gif',                   840, 1252 ],
 		[ 'TI-teras.gif',                   710,  972, 2130, 2260, 'WL-wehnimers.gif',              2338, 1070 ],
 		[ 'TI-wilds.gif',                  1124, 1412,  604,  682, 'TI-vtull.gif',                  2276, 1638 ],
@@ -296,6 +293,36 @@ find_clicked_link = proc { |click_x, click_y|
 		[ 'RR-citadel.gif',                1868, 2138, 1010, 1082, 'RR-riversrest.gif',             1598,  336 ],
 		[ 'VO-caravansary.gif',            1556, 1824, 1742, 1816, 'RR-riversrest.gif',              576, 1642 ],
 	]
+
+get_map_links = proc { |map_name|
+	if XMLData.game =~ /^(?:DRF|DR|DRPlat)$/
+		current_map_rooms = Map.list.find_all { |room| room.map_name == map_name }
+
+		links = []
+		current_map_rooms.each do |room|
+			room.links.each do |link|
+				linked_room = Map[link.destination_room_id]
+				item = [map_name,
+						link.clickable_area[0], link.clickable_area[2], #min/max X
+						link.clickable_area[1], link.clickable_area[3], #min/max Y
+						link.destination_map_name,
+						linked_room.map_x, linked_room.map_y # location to center in destination view
+					]
+				links.push(item)
+			end
+		end
+
+		links
+	else
+		gs_map_links
+	end
+}
+
+find_clicked_link = proc { |click_x, click_y|
+	clicked_link = nil
+	map_name = current_map.slice(/([^\/\\]+)$/)
+	# fixme: use tags in map database for this
+	map_links = get_map_links.call(map_name)
 	for link in map_links
 		if (link[0] =~ /#{map_name}/i) and (click_x > link[1]) and (click_x < link[2]) and (click_y > link[3]) and (click_y < link[4])
 			clicked_link = [ "#{map_dir}#{link[5]}", link[6], link[7] ]
@@ -575,8 +602,6 @@ Gtk.queue {
 		}
 	}
 
-	window.show_all
-
 	window_width = [window_width,100].max
 	window_height = [window_height,100].max
 	window.resize(window_width, window_height)
@@ -584,6 +609,8 @@ Gtk.queue {
 	window_position[0] = [[0, window_position[0].to_i].max, (Gdk.screen_width-window_width)].min
 	window_position[1] = [[0, window_position[1].to_i].max, (Gdk.screen_height-window_height)].min
 	window.move(window_position[0], window_position[1])
+
+	window.show_all
 
 	if trouble
 		respond
