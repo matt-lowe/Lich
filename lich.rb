@@ -39,6 +39,8 @@
 LICH_VERSION = '4.6.32'
 TESTING = false
 
+$_IS_PROCESSING_LINE_MUTEX = Mutex.new
+
 if RUBY_VERSION !~ /^2/
 	if (RUBY_PLATFORM =~ /mingw|win/) and (RUBY_PLATFORM !~ /darwin/i)
 		if RUBY_VERSION =~ /^1\.9/
@@ -1422,11 +1424,11 @@ class XMLParser
 						$room_count += 1
 					end
 				end
-				@in_stream = false
 				if attributes['id'] == 'bounty'
 					@bounty_task.strip!
 				end
 				@current_stream = String.new
+				@in_stream = false
 			elsif name == 'pushBold'
 				@bold = true
 			elsif name == 'popBold'
@@ -5813,11 +5815,16 @@ def respond(first = "", *messages)
 		elsif $frontend == 'profanity'
 			str = str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
 		end
-		wait_while { XMLData.in_stream }
-		$_CLIENT_.puts(str)
-		if $_DETACHABLE_CLIENT_
-			$_DETACHABLE_CLIENT_.puts(str) rescue()
-		end
+		$_IS_PROCESSING_LINE_MUTEX.synchronize {
+			while XMLData.in_stream do
+				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
+			end
+			$_CLIENT_LOGS_.push("#{XMLData.in_stream}: #{str}")
+			$_CLIENT_.puts(str)
+			if $_DETACHABLE_CLIENT_
+				$_DETACHABLE_CLIENT_.puts(str) rescue()
+			end
+		}
 	rescue
 		puts $!
 		puts $!.backtrace.first
@@ -5834,11 +5841,16 @@ def _respond(first = "", *messages)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str.split(/\r?\n/).each { |line| Script.new_script_output(line); Buffer.update(line, Buffer::SCRIPT_OUTPUT) } # fixme: strip/separate script output?
-		wait_while { XMLData.in_stream }
-		$_CLIENT_.puts(str)
-		if $_DETACHABLE_CLIENT_
-			$_DETACHABLE_CLIENT_.puts(str) rescue()
-		end
+		$_IS_PROCESSING_LINE_MUTEX.synchronize {
+			while XMLData.in_stream do
+				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
+			end
+			$_CLIENT_LOGS_.push("#{XMLData.in_stream}: #{str}")
+			$_CLIENT_.puts(str)
+			if $_DETACHABLE_CLIENT_
+				$_DETACHABLE_CLIENT_.puts(str) rescue()
+			end
+		}
 	rescue
 		puts $!
 		puts $!.backtrace.first
@@ -7107,8 +7119,12 @@ module Games
 								end
 								unless $_SERVERSTRING_ =~ /^<setting/
 									begin
-										REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
-										# XMLData.parse($_SERVERSTRING_)
+										# We have to synchronize this, or there is a race condition between XMLData.parse and respond's "in_stream" check.
+										# synchronizing here prevents 'respond' text from appearing in other streams
+										$_IS_PROCESSING_LINE_MUTEX.synchronize {
+											REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+											# XMLData.parse($_SERVERSTRING_)
+										} # $_IS_PROCESSING_LINE_MUTEX.synchronize
 									rescue
 										unless $!.to_s =~ /invalid byte sequence/
 											if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
