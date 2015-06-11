@@ -41,6 +41,14 @@ TESTING = false
 
 $_IS_PROCESSING_LINE_MUTEX = Mutex.new
 
+def reentrant_synchronize(mutex)
+	if mutex.owned?
+		yield
+	else
+		mutex.synchronize &Proc.new
+	end
+end
+
 if RUBY_VERSION !~ /^2/
 	if (RUBY_PLATFORM =~ /mingw|win/) and (RUBY_PLATFORM !~ /darwin/i)
 		if RUBY_VERSION =~ /^1\.9/
@@ -5815,7 +5823,7 @@ def respond(first = "", *messages)
 		elsif $frontend == 'profanity'
 			str = str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
 		end
-		$_IS_PROCESSING_LINE_MUTEX.synchronize {
+		reentrant_synchronize($_IS_PROCESSING_LINE_MUTEX) {
 			while XMLData.in_stream do
 				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
 			end
@@ -5841,7 +5849,7 @@ def _respond(first = "", *messages)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str.split(/\r?\n/).each { |line| Script.new_script_output(line); Buffer.update(line, Buffer::SCRIPT_OUTPUT) } # fixme: strip/separate script output?
-		$_IS_PROCESSING_LINE_MUTEX.synchronize {
+		reentrant_synchronize($_IS_PROCESSING_LINE_MUTEX) {
 			while XMLData.in_stream do
 				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
 			end
@@ -7099,53 +7107,53 @@ module Games
 #									$_SERVERSTRING_.concat(@@socket.gets)
 #								end
 								$_SERVERBUFFER_.push($_SERVERSTRING_)
-								if alt_string = DownstreamHook.run($_SERVERSTRING_)
-		#							Buffer.update(alt_string, Buffer::DOWNSTREAM_MOD)
-									if $_DETACHABLE_CLIENT_
-										begin
-											$_DETACHABLE_CLIENT_.write(alt_string)
-										rescue
-											$_DETACHABLE_CLIENT_.close rescue()
-											$_DETACHABLE_CLIENT_ = nil
-											respond "--- Lich: error: client_thread: #{$!}"
-											respond $!.backtrace.first
-											Lich.log "error: client_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-										end
-									end
-									if $frontend =~ /^(?:wizard|avalon)$/
-										alt_string = sf_to_wiz(alt_string)
-									end
-									$_CLIENT_.write(alt_string)
-								end
-								unless $_SERVERSTRING_ =~ /^<setting/
-									begin
-										# We have to synchronize this, or there is a race condition between XMLData.parse and respond's "in_stream" check.
-										# synchronizing here prevents 'respond' text from appearing in other streams
-										$_IS_PROCESSING_LINE_MUTEX.synchronize {
-											REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
-											# XMLData.parse($_SERVERSTRING_)
-										} # $_IS_PROCESSING_LINE_MUTEX.synchronize
-									rescue
-										unless $!.to_s =~ /invalid byte sequence/
-											if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
-												# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
-												$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
-												retry
+								# We have to synchronize this, or there is a race condition between XMLData.parse and respond's "in_stream" check.
+								# synchronizing here prevents 'respond' text from appearing in other streams
+								reentrant_synchronize($_IS_PROCESSING_LINE_MUTEX) {
+									if alt_string = DownstreamHook.run($_SERVERSTRING_)
+			#							Buffer.update(alt_string, Buffer::DOWNSTREAM_MOD)
+										if $_DETACHABLE_CLIENT_
+											begin
+												$_DETACHABLE_CLIENT_.write(alt_string)
+											rescue
+												$_DETACHABLE_CLIENT_.close rescue()
+												$_DETACHABLE_CLIENT_ = nil
+												respond "--- Lich: error: client_thread: #{$!}"
+												respond $!.backtrace.first
+												Lich.log "error: client_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 											end
-											$stdout.puts "--- error: server_thread: #{$!}"
-											Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 										end
-										XMLData.reset
+										if $frontend =~ /^(?:wizard|avalon)$/
+											alt_string = sf_to_wiz(alt_string)
+										end
+										$_CLIENT_.write(alt_string)
 									end
-									Script.new_downstream_xml($_SERVERSTRING_)
-									stripped_server = strip_xml($_SERVERSTRING_)
-									stripped_server.split("\r\n").each { |line|
-										@@buffer.update(line) if TESTING
-										unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring\.|joins the adventure\.|(?:is off to a rough start!  (?:H|She) )?just bit the dust!|was just incinerated!|was just vaporized!|has been vaporized!|has disconnected\.)$|^ \* The death cry of [A-Z][a-z]+ echoes in your mind!$|^\r*\n*$/
-											Script.new_downstream(line) unless line.empty?
+									unless $_SERVERSTRING_ =~ /^<setting/
+										begin
+												REXML::Document.parse_stream($_SERVERSTRING_, XMLData)
+												# XMLData.parse($_SERVERSTRING_)
+										rescue
+											unless $!.to_s =~ /invalid byte sequence/
+												if $_SERVERSTRING_ =~ /<[^>]+='[^=>'\\]+'[^=>']+'[\s>]/
+													# Simu has a nasty habbit of bad quotes in XML.  <tag attr='this's that'>
+													$_SERVERSTRING_.gsub!(/(<[^>]+=)'([^=>'\\]+'[^=>']+)'([\s>])/) { "#{$1}\"#{$2}\"#{$3}" }
+													retry
+												end
+												$stdout.puts "--- error: server_thread: #{$!}"
+												Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+											end
+											XMLData.reset
 										end
-									}
-								end
+										Script.new_downstream_xml($_SERVERSTRING_)
+										stripped_server = strip_xml($_SERVERSTRING_)
+										stripped_server.split("\r\n").each { |line|
+											@@buffer.update(line) if TESTING
+											unless line =~ /^\s\*\s[A-Z][a-z]+ (?:returns home from a hard day of adventuring\.|joins the adventure\.|(?:is off to a rough start!  (?:H|She) )?just bit the dust!|was just incinerated!|was just vaporized!|has been vaporized!|has disconnected\.)$|^ \* The death cry of [A-Z][a-z]+ echoes in your mind!$|^\r*\n*$/
+												Script.new_downstream(line) unless line.empty?
+											end
+										}
+									end
+								} # $_IS_PROCESSING_LINE_MUTEX.synchronize
 							rescue
 								$stdout.puts "--- error: server_thread: #{$!}"
 								Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
