@@ -5827,7 +5827,6 @@ def respond(first = "", *messages)
 			while XMLData.in_stream do
 				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
 			end
-			$_CLIENT_LOGS_.push("#{XMLData.in_stream}: #{str}")
 			$_CLIENT_.puts(str)
 			if $_DETACHABLE_CLIENT_
 				$_DETACHABLE_CLIENT_.puts(str) rescue()
@@ -5853,7 +5852,6 @@ def _respond(first = "", *messages)
 			while XMLData.in_stream do
 				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
 			end
-			$_CLIENT_LOGS_.push("#{XMLData.in_stream}: #{str}")
 			$_CLIENT_.puts(str)
 			if $_DETACHABLE_CLIENT_
 				$_DETACHABLE_CLIENT_.puts(str) rescue()
