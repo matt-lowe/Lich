@@ -74,6 +74,7 @@ require 'zlib'
 require 'drb'
 require 'resolv'
 require 'digest/md5'
+require 'fileutils'
 begin
 	# stupid workaround for Windows
 	# seems to avoid a 10 second lag when starting lnet, without adding a 10 second lag at startup
@@ -7161,12 +7162,12 @@ module Games
 						Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 						$stdout.puts "--- error: server_thread: #{$!}"
 						sleep 0.2
-						retry unless $_CLIENT_.closed? or @@socket.closed? or ($!.to_s =~ /invalid argument|A connection attempt failed|An existing connection was forcibly closed/i)
+						retry unless $_CLIENT_.closed? or @@socket.closed? or ($!.to_s =~ /invalid argument|A connection attempt failed|An existing connection was forcibly closed|An established connection was aborted by the software in your host machine./i)
 					rescue
 						Lich.log "error: server_thread: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
 						$stdout.puts "--- error: server_thread: #{$!}"
 						sleep 0.2
-						retry unless $_CLIENT_.closed? or @@socket.closed? or ($!.to_s =~ /invalid argument|A connection attempt failed|An existing connection was forcibly closed/i)
+						retry unless $_CLIENT_.closed? or @@socket.closed? or ($!.to_s =~ /invalid argument|A connection attempt failed|An existing connection was forcibly closed|An established connection was aborted by the software in your host machine./i)
 					end
 				}
 				@@thread.priority = 4
@@ -10486,6 +10487,476 @@ if defined?(Gtk)
 	Gtk.queue { Gtk::Window.default_icon = Gdk::Pixbuf.new(Zlib::Inflate.inflate("eJyVl8tSE1EQhieTggULX8utr2CVOzc+gpXMhUDIBYhIAuQCAQEDKDEiF9eWZVneUDc+gk+gMtKN+doTJ1pSEP45/Z/uPn07k+u3bt/wvGsLfsbzPfn1vLvyl9y843n68Vw+cpdryYWLMoIS0H9JFf0QlAelSQNB3wVFgr6B/r6WJv2K5jnWXrDWFBQLmnWl6kFd0IygYop0SVARaSjoJagqqIxmXXuFlpKgiqAZ1l6juSCoBlLpG6IWC1p0fX7rSqvued9x3ozv+0kkj/P6ePmTBGxT8ntUKa8uKE+YRqQN1YL0gxkSzUrpyON5igdqLSdoWdAzKA3XRoAHyluhuDQ92V/WEvm/io5pdNjOOlZrSNdABfTqjlVBC4LmBFXwpMkOTXubdFbdZLddXpcoLwkK8WUdnu4dIC0SR9XXdXl9kPq3iVQL6pAS1Lw8cKWq9JADasC2OaBSmrihhXIqqEeYqiSsxwF1bSBoD+NqSP3ry6M/zNWugEWc11mjhdGisXSrhuBMHlWwTFiOCb2Ww6ygI9aa9O2AtTYBV80ajEPqc4MdBxjvEPWCoH0yqzW7ImgL6UO3olcI6bSgXfYG9JTa2CExOXnMjSVPTExc2ci5R9jGbgi558TaaCElWMflEHVbaNLeKSGYxSkrxk3IM+jTs2QmJyevJormc4MQzDIuzJd1wldEqm5khw3NAdokqER8uzjRogjKGFRnFzETUhhFynONvRGzYA6plVfEbCGqEVmJ2NChRmM2xAyUkH7rssOSGeNASDJtx4EgP5vNJjRUk361IakddcahTBoiPRHUGSc9cgdN7GrWgDipUU/84crOOLUt2nis9DRFWsPoyThpndYJ4ZnraVpGDnbPtLCmCTkep0qltiNkFAYpmhukP2BEBa7SNN6Aqhvh1SkO5fUpMbO7lMJ7DK+Q4p8Vm824OZenzWwXUhGTEZMkj7Tk+nLVKlK8EXMhT+dP45pdUlXXeEywI0ogYqbY5ZijpPKu8cANZ8ABQ7ohQ37N8dC1toz0qevfSKIaSJ/gi/EKKby+yws5W8AcUfTI7UfVZ++e9iqjd1h2amqKF6MafEusvcjsU9c5V7llsgV5D7QAr8xaB9QDzcOrsKYzWYvC7jy71RRV2FZlm+V5F9fK8Obdc2xC3nHrOsL7HIVnL0F2rcXw7BLNoM/SHhNi5Z2zprU+Q2JV+tFtFr217uOBrn2SR+2xq1fc30fuZzpHryaG7xfUrqHswmGMfBfzxbd/s4Z2U1jI7PteQgZGkVhL/txl3zV/AnftNz0=".unpack('m')[0]).unpack('c*'), false) }
 end
 
+module RedirectHost
+	@@lich_hosts_comment = " # Lich: "
+	def RedirectHost.redirect(real_host, new_addr)
+		File.open("#{Lich.hosts_file_backup}", "w") do |dupe|
+			redirected = false
+			File.foreach("#{Lich.hosts_file}") do |line| 
+				# If there is already a redirection active
+				if line =~ /^(\s*[^\s]+\s+#{real_host})(.*)/i
+					current_val = $1
+					if $2 =~ /#{@@lich_hosts_comment}(.*)/
+						# If it was lich that redirected it, then we're free to overwrite that value, storing the top-level redirection
+						dupe.puts "#{new_addr} #{real_host}#{@@lich_hosts_comment}#{$1}"
+					else
+						#Lich did not redirect it.  This is a top-level redirection
+						dupe.puts "#{new_addr} #{real_host}#{@@lich_hosts_comment}#{current_val}"
+					end
+					
+					#It's still redirected.
+					redirected = true
+				else
+					dupe.puts line 
+				end
+			end
+			
+			unless redirected
+				dupe.puts "#{new_addr} #{real_host}#{@@lich_hosts_comment}"
+			end
+		end
+		FileUtils.mv(Lich.hosts_file_backup, Lich.hosts_file, force: true)
+	end
+	
+	def RedirectHost.remove_redirection(real_host)
+		File.open("#{Lich.hosts_file_backup}", "w") do |dupe|
+			File.foreach("#{Lich.hosts_file}") do |line| 
+				if line =~ /^\s*[^\s]+\s+#{real_host}(.*)/i
+					old_val = $1
+					if old_val =~ /#{@@lich_hosts_comment}(.*)/
+						line = $1.strip
+						puts "Line val: #{line}"
+					end
+				end
+				
+				if !line.empty?
+					dupe.puts line
+				end
+			end
+		end
+		FileUtils.mv(Lich.hosts_file_backup, Lich.hosts_file, force: true)
+	end
+end
+
+class EAccessConnection
+	attr_reader :login_server, :error
+	
+	# 'F' - Subscription info
+	attr_reader :subscription
+	
+	# 'L' - Launcher info
+	attr_reader :game_host, :game_port
+	
+	# 'G' - Game info
+	attr_reader :game_name, :game_code
+	
+	# 'M' - Games
+	attr_reader :game_instances	
+	
+	# 'C' - Character info
+	attr_reader :used_character_slots, :available_character_slots, :characters, :chosen_character
+	
+	# 'A' - Login results
+	attr_reader :account, :login_result, :login_key, :real_name
+	
+	# 'F' - Game capabilities
+	attr_reader :capabilities
+	
+	
+	# Controls the verbose debug logging of the connection
+	@debug
+	def debug?
+		@debug
+	end
+	def debug=(val)
+		@debug = val
+	end
+	
+	#EAccessConnection is a single use class - it is not intended to call connect() multiple times.
+	@already_connected = false
+	
+	def initialize
+		@already_connected = false
+	end
+
+	def is_valid?
+		subscription =~ /KEY/
+	end
+	
+	def read
+		val = login_server.gets
+		Lich.log "LichLoginEAccess.read: #{val}" if debug?
+		val = process_read_line(val)
+		val
+	end
+	def write(val)
+		Lich.log "LichLoginEAccess.write: #{val}" if debug?
+		val = process_write_line(val)
+		login_server.puts(val)
+	end
+	
+	# using info from http://warlockclient.wikia.com/wiki/EAccess_Protocol
+	def process_read_line(line)
+		if line =~ /^C\t+(\d+)\t+(\d+)\t+([^\t]+)\t+([^\t]+)[\t\n]+(.*)/
+			# Characters
+			@used_character_slots = $1
+			@available_character_slots = $2
+			unknown1 = $3 # maybe something to do with new/unnamed characters?
+			unknown2 = $4 # maybe something to do with new/unnamed characters?
+			chars = $5
+
+			@characters ||= Hash.new
+			characters[game_code] = Hash.new
+			for code_name in chars.scan(/[^\t]+\t[^\t^\n]+/)
+				char_code, char_name = code_name.split("\t")
+				iter = []
+				iter[0] = game_code
+				iter[1] = game_name
+				iter[2] = char_code
+				iter[3] = char_name
+				
+				characters[game_code][char_name] = iter
+			end
+		elsif line =~ /^A\t+([^\t]+)\t+([^\t]+)\t+([^\t]+)\t+([^\t\n]+)/
+			# Auth response with 4 details - successful
+			@account = $1
+			# Known values for result:
+			# - KEY: login successful
+			@login_result = $2
+			@login_key = $3   #Not used for now.
+			@real_name = $4
+		elsif line =~ /^A\t+([^\t]+)\t+([^\t]+)[\t\n]+$/
+			# Auth response with 2 details - unsuccessful.
+			@account = $1
+			# Known values for result: 
+			# - NORECORD: bad username
+			# - PASSWORD: bad password
+			@login_result = $2
+			@login_key = nil
+			@real_name = nil
+		elsif line =~ /^F\t+([^\t]+)/
+			@subscription = $1
+		elsif line =~ /^L\t+OK\t+(.*)/
+			game_data = $1
+			if game_data =~ /GAMEHOST=([^\t\n]+)/
+				@game_host = $1
+			end
+			if game_data =~ /GAMEHOST=([^\t\n]+)/
+				@game_port = $1
+			end
+			if game_data =~ /GAMECODE=([^\t\n]+)/
+				@game_code = $1
+			end
+		elsif line =~ /^G\t+([^\t]+)\t+([^\t]+).*/
+			@game_name = $1
+			@subscription = $2
+		end
+		
+		line
+	end
+	
+	def process_write_line(line)
+		# Chosen game
+		if line =~ /^F\s+([^\s]+)/
+		elsif line =~ /^G\s+([^\s]+)/
+			# Chosen game_code
+			@game_code = $1
+		elsif line =~ /^L\t+([^\t]+)\t+([^\t])/
+			# Chosen character
+			@chosen_character = $1
+			game = $2
+		end
+		line
+	end
+	
+	private :read, :write, :process_read_line, :process_write_line
+	
+	def connect
+		unless @already_connected
+			@login_server = nil
+			connect_thread = nil
+			timeout_thread = Thread.new {
+				sleep 30
+				$stdout.puts "error: timed out connecting to eaccess.play.net:7900"
+				Lich.log "error: timed out connecting to eaccess.play.net:7900"
+				connect_thread.kill rescue()
+				@login_server = nil
+			}
+			connect_thread = Thread.new {
+				begin
+					@login_server = TCPSocket.new('eaccess.play.net', 7900)
+				rescue
+					@login_server = nil
+					@error = "error connecting to server: #{$!}"
+					$stdout.puts error
+					Lich.log error
+				end
+			}
+			connect_thread.join
+			timeout_thread.kill rescue()
+			if login_server and !login_server.closed?
+				Lich.log "Successfully connected"
+				@error = nil
+				true
+			else
+				Lich.log "Failed connection"
+				false
+			end
+		else
+			@error = "Unable to connect again."
+			$stdout.puts error
+			Lich.log error
+			false
+		end
+	end
+end
+
+class LichLoginEAccess < EAccessConnection
+
+	attr_reader :launch_data
+	
+	# Login data
+	@login_data
+	def login_data
+		@login_data
+	end
+	def login_data=(val)
+		@login_data = val
+	end
+
+	@should_sign_in
+	@server_hash_key
+	@hash_key_bytes
+		
+	def initialize
+		super()
+		@should_sign_in = true # default to true
+		@login_data = Hash.new
+	end
+	
+	def read_hash_key
+		write "K\n"
+		@hash_key_bytes = nil
+		@server_hash_key = read
+	end
+	private :read_hash_key
+	
+	def hash_key_bytes
+		# Always query the server for the latest
+		@hash_key_bytes ||= get_bytes(@server_hash_key)
+	end
+	private :hash_key_bytes
+
+	def get_bytes(str)
+		if 'test'[0].class == String
+			str = str.split('').collect { |c| c.getbyte(0) }
+		else
+			str = str.split('').collect { |c| c[0] }
+		end
+		str
+	end
+	private :get_bytes
+	
+	def password_bytes
+		get_bytes(login_data[:password])
+	end
+	private :password_bytes
+	
+	def hashed_password
+		pass = password_bytes
+		pass.each_index { |i| pass[i] = ((pass[i]-32)^hash_key_bytes[i])+32 }
+		pass.collect { |c| c.chr }.join
+	end
+	
+	def user_id
+		login_data[:user_id]
+	end
+	
+	def read_subscription
+		write "F\t#{login_data[:game_code]}\n"
+		read
+	end
+	private :read_subscription
+	
+	def read_characters
+		write "C\n"
+		read
+	end
+	
+	@game_chosen
+	def do_choose_game
+		write "G\t#{login_data[:game_code]}\n"
+		read
+		@game_chosen = true
+	end
+	
+	def game_chosen?
+		@game_chosen
+	end
+	
+	def sign_in=(val)
+		@should_sign_in = val
+	end
+	
+	def sign_in?
+		@should_sign_in and login_data[:char_name]
+	end
+	
+	def do_login
+		debug_log "Reading hash from server"
+		read_hash_key
+		debug_log "Logging in account"
+		write "A\t#{user_id}\t#{hashed_password}\n"
+		read
+	end
+	private :do_login
+	
+	def read_instances
+		write "M\n"
+		read
+	end
+	
+	def find_char_code
+		
+		if characters[game_code]
+			game_chars = characters[game_code]
+			char_data = game_chars[login_data[:char_name]]
+			if char_data
+				return char_data[2]
+			else
+				Lich.log "Unable to find character data for #{login_data[:char_name]}"
+			end
+		else
+			Lich.log "Unable to find characters for game"
+		end
+	end
+	
+	def read_all_characters
+		write 'M\n'
+		line = read
+		if line =~ /^M\t/
+			unless capabilities
+				@capabilities = Hash.new
+			end
+			unless @game_instances
+				@game_instances = Hash.new
+			end
+			
+			for game in line.sub(/^M\t/, '').scan(/[^\t]+\t[^\t^\n]+/)
+				game_code, game_name = game.split("\t")
+				write "N\t#{game_code}\n"
+				
+				# Lich only supports STORM-based games, so only request info about those games
+				if read =~ /STORM/
+					write "F\t#{game_code}\n"
+					# Only try to read the characters if there is a valid subscription to this instance
+					caps = read
+					capabilities[game_code] = caps
+					if caps =~ /NORMAL|PREMIUM|TRIAL|INTERNAL|FREE/
+						# Switch to this game
+						write "G\t#{game_code}\n"
+						read
+						
+						read_characters
+					end
+				end
+			end
+		end
+	end
+	private :read_all_characters
+	
+	def read_launch_data(block)
+		char_to_use = find_char_code
+		
+		if char_to_use
+			write "L\t#{char_to_use}\tSTORM\n"
+			response = read
+			if response =~ /^L\t/
+				login_server.close unless login_server.closed?
+				@launch_data = response.sub(/^L\tOK\t/, '').split("\t")
+				if login_data[:frontend] == 'wizard'
+					launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+				end
+				if login_data[:game_file]
+					launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=#{login_data[:game_file]}") }
+				end
+				if login_data[:game_type]
+					launch_data.collect! { |line| line.sub(/GAME=.+/, "GAME=#{login_data[:game_type]}") }
+				end
+				if login_data[:custom_launch]
+					launch_data.push "CUSTOMLAUNCH=#{login_data[:custom_launch]}"
+					if login_data[:custom_launch_dir]
+						launch_data.push "CUSTOMLAUNCHDIR=#{login_data[:custom_launch_dir]}"
+					end
+				end
+				return true
+			else
+				@error = "error: unrecognized response from server. (#{response})"
+				report_error(nil, block)
+			end
+		else
+			@error = "Unable to find character code for #{login_data[:char_name]}"
+			report_error(nil, block)
+		end
+	end
+	
+	def report_error(reconnect_if_wanted, block)
+		login_server.close unless login_server.closed?
+		$stdout.puts error
+		Lich.log error
+		if reconnect_if_wanted
+			reconnect_if_wanted.call
+		end
+		block.call(error) unless block.nil?
+	end
+	
+	def debug_log(val)
+		if debug?
+			Lich.log val
+		end
+	end
+	
+	def get_character_data(&block)
+		do_login
+		if login_key
+			read_all_characters
+			return error == nil
+		else
+			false
+		end
+	end
+	
+	def get_launch_data(reconnect_if_wanted, &block)
+	
+		if login_data[:game_code] and login_data[:char_name]
+			do_login
+			if login_key
+				debug_log "Choosing game"
+				do_choose_game
+				read_characters
+				if sign_in?
+					debug_log "Getting launch data"
+					read_launch_data(block)
+				else
+					debug_log "NOT getting launch data"
+				end
+			else
+				@error = "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
+			end
+		else
+			@error = "Required data not set.  Must set 'game_code' and 'char_name' to login_data"
+			reconnect_if_wanted = nil
+		end
+
+		login_server.close unless login_server.closed?
+		if error
+			report_error(reconnect_if_wanted, block)
+		end
+		
+		return (error == nil)
+	end
+end
+
 main_thread = Thread.new {
 	       test_mode = false
 	 $SEND_CHARACTER = '>'
@@ -10539,98 +11010,19 @@ main_thread = Thread.new {
 				end
 			}
 	
-			login_server = nil
-			connect_thread = nil
-			timeout_thread = Thread.new {
-				sleep 30
-				$stdout.puts "error: timed out connecting to eaccess.play.net:7900"
-				Lich.log "error: timed out connecting to eaccess.play.net:7900"
-				connect_thread.kill rescue()
-				login_server = nil
-			}
-			connect_thread = Thread.new {
-				begin
-					login_server = TCPSocket.new('eaccess.play.net', 7900)
-				rescue
-					login_server = nil
-					$stdout.puts "error connecting to server: #{$!}"
-					Lich.log "error connecting to server: #{$!}"
-				end
-			}
-			connect_thread.join
-			timeout_thread.kill rescue()
-
-			if login_server
-				login_server.puts "K\n"
-				hashkey = login_server.gets
-				if 'test'[0].class == String
-					password = data[:password].split('').collect { |c| c.getbyte(0) }
-					hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
-				else
-					password = data[:password].split('').collect { |c| c[0] }
-					hashkey = hashkey.split('').collect { |c| c[0] }
-				end
-				password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
-				password = password.collect { |c| c.chr }.join
-				login_server.puts "A\t#{data[:user_id]}\t#{password}\n"
-				password = nil
-				response = login_server.gets
-				login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
-				if login_key
-					login_server.puts "M\n"
-					response = login_server.gets
-					if response =~ /^M\t/
-						login_server.puts "F\t#{data[:game_code]}\n"
-						response = login_server.gets
-						if response =~ /NORMAL|PREMIUM|TRIAL|INTERNAL|FREE/
-							login_server.puts "G\t#{data[:game_code]}\n"
-							login_server.gets
-							login_server.puts "P\t#{data[:game_code]}\n"
-							login_server.gets
-							login_server.puts "C\n"
-							char_code = login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/).find { |c| c.split("\t")[1] == data[:char_name] }.split("\t")[0]
-							login_server.puts "L\t#{char_code}\tSTORM\n"
-							response = login_server.gets
-							if response =~ /^L\t/
-								login_server.close unless login_server.closed?
-								launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-								if data[:frontend] == 'wizard'
-									launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
-								end
-								if data[:custom_launch]
-									launch_data.push "CUSTOMLAUNCH=#{data[:custom_launch]}"
-									if data[:custom_launch_dir]
-										launch_data.push "CUSTOMLAUNCHDIR=#{data[:custom_launch_dir]}"
-									end
-								end
-							else
-								login_server.close unless login_server.closed?
-								$stdout.puts "error: unrecognized response from server. (#{response})"
-								Lich.log "error: unrecognized response from server. (#{response})"
-							end
-						else
-							login_server.close unless login_server.closed?
-							$stdout.puts "error: unrecognized response from server. (#{response})"
-							Lich.log "error: unrecognized response from server. (#{response})"
-						end
-					else
-						login_server.close unless login_server.closed?
-						$stdout.puts "error: unrecognized response from server. (#{response})"
-						Lich.log "error: unrecognized response from server. (#{response})"
-					end
-				else
-					login_server.close unless login_server.closed?
-					$stdout.puts "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
-					Lich.log "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
-					reconnect_if_wanted.call
-				end
-			else
+			eaccessConnection = LichLoginEAccess.new
+			unless eaccessConnection.connect
 				$stdout.puts "error: failed to connect to server"
 				Lich.log "error: failed to connect to server"
 				reconnect_if_wanted.call
 				Lich.log "info: exiting..."
 				Gtk.queue { Gtk.main_quit } if defined?(Gtk)
 				exit
+			else
+				eaccessConnection.login_data = data
+				eaccessConnection.get_launch_data(reconnect_if_wanted)
+				launch_data = eaccessConnection.launch_data
+				eaccessConnection.login_data = nil
 			end
 		else
 			$stdout.puts "error: failed to find login data for #{char_name}"
@@ -10652,7 +11044,7 @@ main_thread = Thread.new {
 		done = false
 		Gtk.queue {
 
-			login_server = nil
+			eaccessConnection = nil
 			window = nil
 			install_tab_loaded = false
 
@@ -10690,91 +11082,21 @@ main_thread = Thread.new {
 					quick_box.pack_start(char_box, false, false, 0)
 					play_button.signal_connect('clicked') {
 						play_button.sensitive = false
-						begin
-							login_server = nil
-							connect_thread = Thread.new {
-								login_server = TCPSocket.new('eaccess.play.net', 7900)
-							}
-							300.times {
-								sleep 0.1
-								break unless connect_thread.status
-							}
-							if connect_thread.status
-								connect_thread.kill rescue()
-								msgbox.call "error: timed out connecting to eaccess.play.net:7900"
-							end
-						rescue
-							msgbox.call "error connecting to server: #{$!}"
-							play_button.sensitive = true
-						end
-						if login_server
-							login_server.puts "K\n"
-							hashkey = login_server.gets
-							if 'test'[0].class == String
-								password = login_info[:password].split('').collect { |c| c.getbyte(0) }
-								hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
-							else
-								password = login_info[:password].split('').collect { |c| c[0] }
-								hashkey = hashkey.split('').collect { |c| c[0] }
-							end
-							password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
-							password = password.collect { |c| c.chr }.join
-							login_server.puts "A\t#{login_info[:user_id]}\t#{password}\n"
-							password = nil
-							response = login_server.gets
-							login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
-							if login_key
-								login_server.puts "M\n"
-								response = login_server.gets
-								if response =~ /^M\t/
-									login_server.puts "F\t#{login_info[:game_code]}\n"
-									response = login_server.gets
-									if response =~ /NORMAL|PREMIUM|TRIAL|INTERNAL|FREE/
-										login_server.puts "G\t#{login_info[:game_code]}\n"
-										login_server.gets
-										login_server.puts "P\t#{login_info[:game_code]}\n"
-										login_server.gets
-										login_server.puts "C\n"
-										char_code = login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/).find { |c| c.split("\t")[1] == login_info[:char_name] }.split("\t")[0]
-										login_server.puts "L\t#{char_code}\tSTORM\n"
-										response = login_server.gets
-										if response =~ /^L\t/
-											login_server.close unless login_server.closed?
-											launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-											if login_info[:frontend] == 'wizard'
-												launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
-											end
-											if login_info[:custom_launch]
-												launch_data.push "CUSTOMLAUNCH=#{login_info[:custom_launch]}"
-												if login_info[:custom_launch_dir]
-													launch_data.push "CUSTOMLAUNCHDIR=#{login_info[:custom_launch_dir]}"
-												end
-											end
-											window.destroy
-											done = true
-										else
-											login_server.close unless login_server.closed?
-											msgbox.call("Unrecognized response from server. (#{response})")
-											play_button.sensitive = true
-										end
-									else
-										login_server.close unless login_server.closed?
-										msgbox.call("Unrecognized response from server. (#{response})")
-										play_button.sensitive = true
-									end
-								else
-									login_server.close unless login_server.closed?
-									msgbox.call("Unrecognized response from server. (#{response})")
-									play_button.sensitive = true
-								end
-							else
-								login_server.close unless login_server.closed?
-								msgbox.call "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
-								play_button.sensitive = true
-							end
-						else
+						
+						eaccessConnection = LichLoginEAccess.new
+						unless eaccessConnection.connect
 							msgbox.call "error: failed to connect to server"
 							play_button.sensitive = true
+						else
+							eaccessConnection.login_data = login_info
+							if eaccessConnection.get_launch_data(nil) { |error| msgbox.call(error); play_button.sensitive = true; }
+								launch_data = eaccessConnection.launch_data
+								window.destroy
+								done = true
+							else
+								play_button.sensitive = true
+							end
+							eaccessConnection.login_data = nil
 						end
 					}
 					remove_button.signal_connect('clicked') {
@@ -11252,133 +11574,114 @@ main_thread = Thread.new {
 				iter = liststore.append
 				iter[1] = 'working...'
 				Gtk.queue {
-					begin
-						login_server = nil
-						connect_thread = Thread.new {
-							login_server = TCPSocket.new('eaccess.play.net', 7900)
-						}
-						300.times {
-							sleep 0.1
-							break unless connect_thread.status
-						}
-						if connect_thread.status
-							connect_thread.kill rescue()
-							msgbox.call "error: timed out connecting to eaccess.play.net:7900"
-						end
-					rescue
-						msgbox.call "error connecting to server: #{$!}"
+
+					login_info = Hash.new
+					login_info[:password] = pass_entry.text
+					login_info[:user_id] = user_id_entry.text
+
+					eaccessConnection = LichLoginEAccess.new
+					unless eaccessConnection.connect
+						# Error during connect!
+						msgbox.call eaccessConnection.error
 						connect_button.sensitive = true
 						user_id_entry.sensitive = true
 						pass_entry.sensitive = true
-					end
-					disconnect_button.sensitive = true
-					if login_server
-						login_server.puts "K\n"
-						hashkey = login_server.gets
-						if 'test'[0].class == String
-							password = pass_entry.text.split('').collect { |c| c.getbyte(0) }
-							hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
-						else
-							password = pass_entry.text.split('').collect { |c| c[0] }
-							hashkey = hashkey.split('').collect { |c| c[0] }
-						end
-						# pass_entry.text = String.new
-						password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
-						password = password.collect { |c| c.chr }.join
-						login_server.puts "A\t#{user_id_entry.text}\t#{password}\n"
-						password = nil
-						response = login_server.gets
-						login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
-						if login_key
-							login_server.puts "M\n"
-							response = login_server.gets
-							if response =~ /^M\t/
-								liststore.clear
-								for game in response.sub(/^M\t/, '').scan(/[^\t]+\t[^\t^\n]+/)
-									game_code, game_name = game.split("\t")
-									login_server.puts "N\t#{game_code}\n"
-									if login_server.gets =~ /STORM/
-										login_server.puts "F\t#{game_code}\n"
-										if login_server.gets =~ /NORMAL|PREMIUM|TRIAL|INTERNAL|FREE/
-											login_server.puts "G\t#{game_code}\n"
-											login_server.gets
-											login_server.puts "P\t#{game_code}\n"
-											login_server.gets
-											login_server.puts "C\n"
-											for code_name in login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/)
-												char_code, char_name = code_name.split("\t")
-												iter = liststore.append
-												iter[0] = game_code
-												iter[1] = game_name
-												iter[2] = char_code
-												iter[3] = char_name
-											end
-										end
-									end
-								end
-								disconnect_button.sensitive = true
-							else
-								login_server.close unless login_server.closed?
-								msgbox.call "Unrecognized response from server (#{response})"
-							end
-						else
-							login_server.close unless login_server.closed?
+					else
+						eaccessConnection.login_data = login_info
+						get_data_successful = eaccessConnection.get_character_data do |error| 
+							# error!
+							msgbox.call(error)
 							disconnect_button.sensitive = false
 							connect_button.sensitive = true
 							user_id_entry.sensitive = true
 							pass_entry.sensitive = true
-							msgbox.call "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
+						end
+						eaccessConnection.login_data = nil
+						
+						if get_data_successful
+							liststore.clear
+							# Success!
+							# read the list of characters
+							eaccessConnection.characters.each do |game_code, char_data|
+								char_data.each do |char_name, full_char_data|
+									iter = liststore.append
+									iter[0] = full_char_data[0]
+									iter[1] = full_char_data[1]
+									iter[2] = full_char_data[2]
+									iter[3] = full_char_data[3]
+								end
+							end
+							disconnect_button.sensitive = true
+						else
+							# Ensure the reset of UI for another attempt
+							eaccessConnection = nil
+							disconnect_button.sensitive = false
+							connect_button.sensitive = true
+							user_id_entry.sensitive = true
+							pass_entry.sensitive = true
 						end
 					end
 				}
 			}
 			treeview.signal_connect('cursor-changed') {
-				if login_server
+				if eaccessConnection
 					play_button.sensitive = true
 				end
 			}
 			disconnect_button.signal_connect('clicked') {
+				eaccessConnection = nil
 				disconnect_button.sensitive = false
 				play_button.sensitive = false
 				liststore.clear
-				login_server.close unless login_server.closed?
 				connect_button.sensitive = true
 				user_id_entry.sensitive = true
 				pass_entry.sensitive = true
 			}
 			play_button.signal_connect('clicked') {
 				play_button.sensitive = false
-				game_code = treeview.selection.selected[0]
-				char_code = treeview.selection.selected[2]
-				if login_server and not login_server.closed?
-					login_server.puts "F\t#{game_code}\n"
-					login_server.gets
-					login_server.puts "G\t#{game_code}\n"
-					login_server.gets
-					login_server.puts "P\t#{game_code}\n"
-					login_server.gets
-					login_server.puts "C\n"
-					login_server.gets
-					login_server.puts "L\t#{char_code}\tSTORM\n"
-					response = login_server.gets
-					if response =~ /^L\t/
-						login_server.close unless login_server.closed?
-						port = /GAMEPORT=([0-9]+)/.match(response).captures.first
-						host = /GAMEHOST=([^\t\n]+)/.match(response).captures.first
-						key = /KEY=([^\t\n]+)/.match(response).captures.first
-						launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-						login_server.close unless login_server.closed?
-						if wizard_option.active?
-							launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=WIZ") }
-						elsif suks_option.active?
-							launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=SUKS") }
-						end
-						if custom_launch_option.active?
-							launch_data.push "CUSTOMLAUNCH=#{custom_launch_entry.child.text}"
-							unless custom_launch_dir.child.text.empty? or custom_launch_dir.child.text == "(enter working directory for command)"
-								launch_data.push "CUSTOMLAUNCHDIR=#{custom_launch_dir.child.text}"
-							end
-						end
+				
+				login_info = Hash.new
+				login_info[:password] = pass_entry.text
+				login_info[:user_id] = user_id_entry.text
+				login_info[:game_code] = treeview.selection.selected[0]
+				login_info[:char_name] = treeview.selection.selected[3]
+
+				if custom_launch_option.active?
+					login_info[:custom_launch] = custom_launch_entry.child.text
+					unless custom_launch_dir.child.text.empty? or custom_launch_dir.child.text == "(enter working directory for command)"
+						login_info[:custom_launch_dir] = custom_launch_dir.child.text
+					end
+				end
+				if wizard_option.active?
+					login_info[:game_file] = "WIZARD.EXE"
+					login_info[:game_type] = "WIZ"
+				elsif suks_option.active?
+					login_info[:game_file] = "WIZARD.EXE"
+					login_info[:game_type] = "SUKS"
+				end
+
+				eaccessConnection = LichLoginEAccess.new
+				unless eaccessConnection.connect
+					# Error during connect!
+					msgbox.call eaccessConnection.error
+					disconnect_button.sensitive = false
+					play_button.sensitive = false
+					connect_button.sensitive = true
+					user_id_entry.sensitive = true
+					pass_entry.sensitive = true
+				else
+					eaccessConnection.login_data = login_info
+					success = eaccessConnection.get_launch_data(nil) { |error|
+						eaccessConnection = nil
+						disconnect_button.sensitive = false
+						play_button.sensitive = false
+						connect_button.sensitive = true
+						user_id_entry.sensitive = true
+						pass_entry.sensitive = true
+					}
+					eaccessConnection.login_data = nil
+					if success
+						launch_data = eaccessConnection.launch_data
 						if make_quick_option.active?
 							if wizard_option.active?
 								frontend = 'wizard'
@@ -11403,20 +11706,7 @@ main_thread = Thread.new {
 						pass_entry.text = String.new
 						window.destroy
 						done = true
-					else
-						login_server.close unless login_server.closed?
-						disconnect_button.sensitive = false
-						play_button.sensitive = false
-						connect_button.sensitive = true
-						user_id_entry.sensitive = true
-						pass_entry.sensitive = true
 					end
-				else
-					disconnect_button.sensitive = false
-					play_button.sensitive = false
-					connect_button.sensitive = true
-					user_id_entry.sensitive = true
-					pass_entry.sensitive = true
 				end
 			}
 			user_id_entry.signal_connect('activate') {
