@@ -986,6 +986,9 @@ module Lich
 		Lich.find_hosts_file if @@hosts_file.nil?
 		return @@hosts_file
 	end
+	def Lich.hosts_file_backup
+		@@hosts_file_backup ||= "#{hosts_file}.lich_bak"
+	end
 	def Lich.find_hosts_file
 		if defined?(Win32)
 			begin
@@ -5819,8 +5822,12 @@ def respond(first = "", *messages)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str.split(/\r?\n/).each { |line| Script.new_script_output(line); Buffer.update(line, Buffer::SCRIPT_OUTPUT) }
+		if $frontend_overlay == 'genie3'
+			# Replace all \n with \r\n (if it doesn't already have the \r)
+			str = str.gsub(/(?<!\r)\n/, "\r\n")
+		end
 		if $frontend == 'stormfront'
-			str = "<output class=\"mono\"/>\r\n#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"#{XMLData.current_output_class}\"/>\r\n"
+			str = "<output class=\"mono\"/>#{str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}<output class=\"#{XMLData.current_output_class}\"/>"
 		elsif $frontend == 'profanity'
 			str = str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
 		end
@@ -5849,6 +5856,10 @@ def _respond(first = "", *messages)
 		end
 		messages.flatten.each { |message| str += sprintf("%s\r\n", message.to_s.chomp) }
 		str.split(/\r?\n/).each { |line| Script.new_script_output(line); Buffer.update(line, Buffer::SCRIPT_OUTPUT) } # fixme: strip/separate script output?
+		if $frontend_overlay == 'genie3'
+			# Replace all \n with \r\n (if it doesn't already have the \r)
+			str = str.gsub(/(?<!\r)\n/, "\r\n")
+		end
 		reentrant_synchronize($_IS_PROCESSING_LINE_MUTEX) {
 			while XMLData.in_stream do
 				$_IS_PROCESSING_LINE_MUTEX.sleep 0.05
@@ -6527,6 +6538,7 @@ def monsterbold_end
 end
 
 def do_client(client_string)
+	client_string.strip!
 #	Buffer.update(client_string, Buffer::UPSTREAM)
 	client_string = UpstreamHook.run(client_string)
 #	Buffer.update(client_string, Buffer::UPSTREAM_MOD)
@@ -10483,6 +10495,13 @@ else
 	Lich.log "info: no force-mode info given"
 end
 
+if ARGV.include?('--genie3')
+	# Genie3 uses the same XML tags as stormfront, but it handles carriage returns slightly differently, so we need to
+	# be able to account for that.  In effect, Genie's formatting is an 'overlay' on stormfront's.
+	$frontend = 'stormfront'
+	$frontend_overlay = 'genie3'
+end
+
 if defined?(Gtk)
 	Gtk.queue { Gtk::Window.default_icon = Gdk::Pixbuf.new(Zlib::Inflate.inflate("eJyVl8tSE1EQhieTggULX8utr2CVOzc+gpXMhUDIBYhIAuQCAQEDKDEiF9eWZVneUDc+gk+gMtKN+doTJ1pSEP45/Z/uPn07k+u3bt/wvGsLfsbzPfn1vLvyl9y843n68Vw+cpdryYWLMoIS0H9JFf0QlAelSQNB3wVFgr6B/r6WJv2K5jnWXrDWFBQLmnWl6kFd0IygYop0SVARaSjoJagqqIxmXXuFlpKgiqAZ1l6juSCoBlLpG6IWC1p0fX7rSqvued9x3ozv+0kkj/P6ePmTBGxT8ntUKa8uKE+YRqQN1YL0gxkSzUrpyON5igdqLSdoWdAzKA3XRoAHyluhuDQ92V/WEvm/io5pdNjOOlZrSNdABfTqjlVBC4LmBFXwpMkOTXubdFbdZLddXpcoLwkK8WUdnu4dIC0SR9XXdXl9kPq3iVQL6pAS1Lw8cKWq9JADasC2OaBSmrihhXIqqEeYqiSsxwF1bSBoD+NqSP3ry6M/zNWugEWc11mjhdGisXSrhuBMHlWwTFiOCb2Ww6ygI9aa9O2AtTYBV80ajEPqc4MdBxjvEPWCoH0yqzW7ImgL6UO3olcI6bSgXfYG9JTa2CExOXnMjSVPTExc2ci5R9jGbgi558TaaCElWMflEHVbaNLeKSGYxSkrxk3IM+jTs2QmJyevJormc4MQzDIuzJd1wldEqm5khw3NAdokqER8uzjRogjKGFRnFzETUhhFynONvRGzYA6plVfEbCGqEVmJ2NChRmM2xAyUkH7rssOSGeNASDJtx4EgP5vNJjRUk361IakddcahTBoiPRHUGSc9cgdN7GrWgDipUU/84crOOLUt2nis9DRFWsPoyThpndYJ4ZnraVpGDnbPtLCmCTkep0qltiNkFAYpmhukP2BEBa7SNN6Aqhvh1SkO5fUpMbO7lMJ7DK+Q4p8Vm824OZenzWwXUhGTEZMkj7Tk+nLVKlK8EXMhT+dP45pdUlXXeEywI0ogYqbY5ZijpPKu8cANZ8ABQ7ohQ37N8dC1toz0qevfSKIaSJ/gi/EKKby+yws5W8AcUfTI7UfVZ++e9iqjd1h2amqKF6MafEusvcjsU9c5V7llsgV5D7QAr8xaB9QDzcOrsKYzWYvC7jy71RRV2FZlm+V5F9fK8Obdc2xC3nHrOsL7HIVnL0F2rcXw7BLNoM/SHhNi5Z2zprU+Q2JV+tFtFr217uOBrn2SR+2xq1fc30fuZzpHryaG7xfUrqHswmGMfBfzxbd/s4Z2U1jI7PteQgZGkVhL/txl3zV/AnftNz0=".unpack('m')[0]).unpack('c*'), false) }
 end
@@ -10490,6 +10509,7 @@ end
 module RedirectHost
 	@@lich_hosts_comment = " # Lich: "
 	def RedirectHost.redirect(real_host, new_addr)
+		Lich.log "Modifying hosts: #{Lich.hosts_file_backup}"
 		File.open("#{Lich.hosts_file_backup}", "w") do |dupe|
 			redirected = false
 			File.foreach("#{Lich.hosts_file}") do |line| 
@@ -10525,7 +10545,6 @@ module RedirectHost
 					old_val = $1
 					if old_val =~ /#{@@lich_hosts_comment}(.*)/
 						line = $1.strip
-						puts "Line val: #{line}"
 					end
 				end
 				
@@ -10582,15 +10601,16 @@ class EAccessConnection
 	def is_valid?
 		subscription =~ /KEY/
 	end
-	
+
 	def read
 		val = login_server.gets
-		Lich.log "LichLoginEAccess.read: #{val}" if debug?
+		Lich.log "#{self.class}.read: #{val}" if debug?
 		val = process_read_line(val)
 		val
 	end
+
 	def write(val)
-		Lich.log "LichLoginEAccess.write: #{val}" if debug?
+		Lich.log "#{self.class}.write: #{val}" if debug?
 		val = process_write_line(val)
 		login_server.puts(val)
 	end
@@ -10641,7 +10661,7 @@ class EAccessConnection
 			if game_data =~ /GAMEHOST=([^\t\n]+)/
 				@game_host = $1
 			end
-			if game_data =~ /GAMEHOST=([^\t\n]+)/
+			if game_data =~ /GAMEPORT=([^\t\n]+)/
 				@game_port = $1
 			end
 			if game_data =~ /GAMECODE=([^\t\n]+)/
@@ -10957,6 +10977,93 @@ class LichLoginEAccess < EAccessConnection
 	end
 end
 
+class PassthroughEAccess < EAccessConnection
+	attr_reader :client_socket
+	attr_accessor :fake_game_host, :fake_game_port
+	@raw_launch_data
+
+	def process_read_line(line)
+		super(line)
+		if line =~ /^L\t/
+			@raw_launch_data = line
+		end
+		line
+	end
+
+	def process_write_line(line)
+		super(line)
+		line
+	end
+
+	def initialize(socket)
+		@client_socket = socket
+	end
+
+	def read_launch_data(&block)
+		while true do
+			# Read from client and send to server
+			line = client_socket.gets
+			write line
+
+			# Read response from server
+			line = read
+			if line =~ /^L\t/
+				Lich.log "Found launch data"
+				return
+			end
+			client_socket.puts line
+		end
+	end
+
+	def send_launch_data
+		new_launch_data = @raw_launch_data.sub(/GAMEHOST=[^\t]+/, "GAMEHOST=#{fake_game_host}").sub(/GAMEPORT=[^\t]+/, "GAMEPORT=#{fake_game_port}")
+		client_socket.puts new_launch_data
+	end
+end
+
+def connect_to_game_server(gamehost, gameport)
+	gamehost, gameport = Lich.fix_game_host_port(gamehost, gameport)
+	Lich.log "info: connecting to game server (#{gamehost}:#{gameport})"
+	begin
+		connect_thread = Thread.new {
+			Game.open(gamehost, gameport)
+		}
+		300.times {
+			sleep 0.1
+			break unless connect_thread.status
+		}
+		if connect_thread.status
+			connect_thread.kill rescue()
+			raise "error: timed out connecting to #{gamehost}:#{gameport}"
+		end
+	rescue
+		Lich.log "error: #{$!}"
+		gamehost, gameport = Lich.break_game_host_port(gamehost, gameport)
+		Lich.log "info: connecting to game server (#{gamehost}:#{gameport})"
+		begin
+			connect_thread = Thread.new {
+				Game.open(gamehost, gameport)
+			}
+			300.times {
+				sleep 0.1
+				break unless connect_thread.status
+			}
+			if connect_thread.status
+				connect_thread.kill rescue()
+				raise "error: timed out connecting to #{gamehost}:#{gameport}"
+			end
+		rescue
+			Lich.log "error: #{$!}"
+			$_CLIENT_.close rescue()
+			reconnect_if_wanted.call
+			Lich.log "info: exiting..."
+			Gtk.queue { Gtk.main_quit } if defined?(Gtk)
+			exit
+		end
+	end
+	Lich.log 'info: connected'
+end
+
 main_thread = Thread.new {
 	       test_mode = false
 	 $SEND_CHARACTER = '>'
@@ -11119,6 +11226,8 @@ main_thread = Thread.new {
 				quick_game_entry_tab.pack_start(quick_sw, true, true, 5)
 			end
 
+			# if block to allow my IDE to fold this comment
+			if true
 =begin
 			#
 			# game entry tab
@@ -11477,6 +11586,7 @@ main_thread = Thread.new {
 				connect_button.clicked
 			}
 =end
+			end
 
 			#
 			# old game entry tab
@@ -11868,6 +11978,8 @@ main_thread = Thread.new {
 				end
 			}
 
+			# if block to allow my IDE to fold this comment
+			if true
 =begin
 			#
 			# options tab
@@ -11992,6 +12104,7 @@ main_thread = Thread.new {
 				save_button.sensitive = false
 			}
 =end
+			end
 
 			#
 			# put it together and show the window
@@ -12306,52 +12419,155 @@ main_thread = Thread.new {
 				File.delete(sal_filename) rescue()
 			end
 		end
-		gamehost, gameport = Lich.fix_game_host_port(gamehost, gameport)
-		Lich.log "info: connecting to game server (#{gamehost}:#{gameport})"
+		connect_to_game_server(gamehost, gameport)
+	elsif ARGV.include?('--eaccess')
+		unless Lich.hosts_file
+			Lich.log "error: cannot find hosts file"
+			$stdout.puts "error: cannot find hosts file"
+			exit
+		end
+
+		access_listener = nil
+		listener = nil
+
+		# Redirect host: eaccess.play.net:7900 -> 127.0.0.1
+		Lich.log "Redirecting eaccess.play.net via hosts"
+		RedirectHost.redirect("eaccess.play.net", "127.0.0.1")
+
+		# Wait for connection to 127.0.0.1:7900
+		Lich.log "Starting TCP server to listen for port 7900"
 		begin
-			connect_thread = Thread.new {
-				Game.open(gamehost, gameport)
-			}
-			300.times {
-				sleep 0.1
-				break unless connect_thread.status
-			}
-			if connect_thread.status
-				connect_thread.kill rescue()
-				raise "error: timed out connecting to #{gamehost}:#{gameport}"
+			access_listener = TCPServer.new('127.0.0.1', 7900)
+			begin
+				access_listener.setsockopt(Socket::SOL_SOCKET,Socket::SO_REUSEADDR,1)
+			rescue
+				Lich.log "warning: setsockopt with SO_REUSEADDR failed: #{$!}"
 			end
 		rescue
-			Lich.log "error: #{$!}"
-			gamehost, gameport = Lich.break_game_host_port(gamehost, gameport)
-			Lich.log "info: connecting to game server (#{gamehost}:#{gameport})"
+			sleep 1
+			if (error_count += 1) >= 30
+				$stdout.puts 'error: failed to bind to the proper port'
+				Lich.log 'error: failed to bind to the proper port'
+				exit!
+			else
+				retry
+			end
+		end
+		client_socket = nil
+		access_thread = Thread.new { client_socket = SynchronizedSocket.new(access_listener.accept) }
+		# Wait for access-client to connect
+		Lich.log "Waiting for client to connect to eaccess"
+		300.times { sleep 0.1; break unless access_thread.status }
+
+		passthrough = PassthroughEAccess.new(client_socket)
+
+		# When connection is established, un-redirect eaccess.play.net
+		# Remove the redirection so that we can connect to it.
+		RedirectHost.remove_redirection("eaccess.play.net")
+
+		# Start passthrough-eaccess:
+		if passthrough.connect
+			# Act as middle-man for 127.0.0.1:7900 <-> eaccess.play.net:7900
+			# When client requests launch data, modify data-in-flight to point GAMEHOST=127.0.0.1 and GAMEPORT=game_port
+			passthrough.read_launch_data { |error|
+				$stdout.puts passthrough.error
+				Lich.log passthrough.error
+				exit!
+			}
+
+			Lich.log "Starting listener for game port"
 			begin
-				connect_thread = Thread.new {
-					Game.open(gamehost, gameport)
-				}
-				300.times {
-					sleep 0.1
-					break unless connect_thread.status
-				}
-				if connect_thread.status
-					connect_thread.kill rescue()
-					raise "error: timed out connecting to #{gamehost}:#{gameport}"
+				# bind to a random port - this is for listening for game connection
+				listener = TCPServer.new('127.0.0.1', nil)
+				begin
+					listener.setsockopt(Socket::SOL_SOCKET,Socket::SO_REUSEADDR,1)
+				rescue
+					Lich.log "warning: setsockopt with SO_REUSEADDR failed: #{$!}"
 				end
 			rescue
-				Lich.log "error: #{$!}"
+				sleep 1
+				if (error_count += 1) >= 30
+					$stdout.puts 'error: failed to bind to an available port'
+					Lich.log 'error: failed to bind to an available port'
+					exit!
+				else
+					retry
+				end
+			end
+			Lich.log "... Listener created"
+
+			Lich.log "Reading real game host"
+			gamehost = passthrough.game_host
+			Lich.log "Reading real game port"
+			gameport = passthrough.game_port
+			Lich.log "...#{gameport}"
+			Lich.log "Setting fake game host"
+			passthrough.fake_game_host = gamehost
+			Lich.log "Setting fake game port"
+			passthrough.fake_game_port = listener.addr[1]
+			Lich.log "Starting game port accept thread"
+			accept_thread = Thread.new { $_CLIENT_ = SynchronizedSocket.new(listener.accept) }
+
+			Lich.log "Redirecting #{gamehost} via hosts"
+			RedirectHost.redirect(gamehost, "127.0.0.1")
+
+			# When passthrough-eaccess is finished, start timeout for listening connection on game_port.
+			Lich.log "Sending launch data"
+			passthrough.send_launch_data
+
+			# Wait for game to connect
+			Lich.log "Waiting for connection on game port"
+			300.times { sleep 0.1; break unless accept_thread.status }
+
+			Lich.log "Removing redirection for #{gamehost}"
+			RedirectHost.remove_redirection(gamehost)
+
+			if defined?(Win32) and not $_CLIENT_
+				Lich.log "error: timeout waiting for client to connect"
+				accept_thread.kill if accept_thread.status
+				Dir.chdir(LICH_DIR)
+				listener.close rescue()
+				client_socket.close rescue()
+				access_listener.close rescue()
 				$_CLIENT_.close rescue()
 				reconnect_if_wanted.call
 				Lich.log "info: exiting..."
 				Gtk.queue { Gtk.main_quit } if defined?(Gtk)
 				exit
 			end
+			accept_thread.kill if accept_thread.status
+			Dir.chdir(LICH_DIR)
+			unless $_CLIENT_
+				Lich.log "error: timeout waiting for client to connect"
+				Lich.msgbox(:message => "error: timeout waiting for client to connect", :icon => :error)
+				listener.close rescue()
+				client_socket.close rescue()
+				access_listener.close rescue()
+				$_CLIENT_.close rescue()
+				reconnect_if_wanted.call
+				Lich.log "info: exiting..."
+				Gtk.queue { Gtk.main_quit } if defined?(Gtk)
+				exit
+			end
+			Lich.log 'info: client connected'
+			listener.close rescue()
+			client_socket.close rescue()
+			access_listener.close rescue()
+		else
+			$stdout.puts passthrough.error
+			Lich.log passthrough.error
+			exit!
 		end
-		Lich.log 'info: connected'
+
+		# Connect to the actual game
+		connect_to_game_server(gamehost, gameport)
 	elsif game_host and game_port
 		unless Lich.hosts_file
 			Lich.log "error: cannot find hosts file"
 			$stdout.puts "error: cannot find hosts file"
 			exit
 		end
+
 		game_quad_ip = IPSocket.getaddress(game_host)
 		error_count = 0
 		begin
@@ -12589,6 +12805,14 @@ main_thread = Thread.new {
 					client_string = $_CLIENT_.gets
 					$_CLIENTBUFFER_.push(client_string.dup)
 					Game._puts(client_string)
+				end
+
+				if $frontend_overlay == "genie3"
+					2.times {
+						sleep 0.3
+						$_CLIENTBUFFER_.push("#{$cmd_prefix}\r\n")
+						Game._puts($cmd_prefix)
+					}
 				end
 			end
 
