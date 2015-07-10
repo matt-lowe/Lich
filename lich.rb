@@ -11016,6 +11016,8 @@ main_thread = Thread.new {
 							response = login_server.gets
 							if response =~ /^M\t/
 								liststore.clear
+								# Reset the sort order. Necessary for when the user connects, disconnects, and connects again
+  								liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
 								for game in response.sub(/^M\t/, '').scan(/[^\t]+\t[^\t^\n]+/)
 									game_code, game_name = game.split("\t")
 									login_server.puts "N\t#{game_code}\n"
