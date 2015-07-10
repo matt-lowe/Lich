@@ -10827,6 +10827,7 @@ main_thread = Thread.new {
 			login_button_box.pack_end(disconnect_button, false, false, 5)
 
 			liststore = Gtk::ListStore.new(String, String, String, String)
+			liststore.set_default_sort_func{|a,b| a[1] != b[1] ? a[1] <=> b[1] : a[3] <=> b[3]}
 			liststore.set_sort_column_id(1, Gtk::SORT_ASCENDING)
 
 			renderer = Gtk::CellRendererText.new
@@ -11037,6 +11038,8 @@ main_thread = Thread.new {
 										end
 									end
 								end
+								# Must come after the liststore is populated or records are lost.
+								liststore.set_sort_column_id(Gtk::TreeSortable::DEFAULT_SORT_COLUMN_ID)
 								disconnect_button.sensitive = true
 							else
 								login_server.close unless login_server.closed?
