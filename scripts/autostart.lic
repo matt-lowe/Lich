@@ -8,16 +8,20 @@
 	  author: Tillmen (tillmen@lichproject.org)
 	    game: any
 	    tags: core
-	 version: 0.3
-	required: Lich >= 4.6.0
+	 version: 0.4
+	required: Lich >= 4.6.22
 
 	changelog:
+		0.4 (2015-07-12):
+			start infomon before other scripts
 		0.3 (2014-11-23):
 			add default settings on first run
 		0.2 (2014-11-10):
 			auto add infomon to global autostart list
 
 =end
+
+# todo: add option to allow the repository script to start and finish updates before starting other scripts
 
 if Settings['scripts'].nil?
 	Settings['scripts'] = Array.new
@@ -30,11 +34,25 @@ if Settings['scripts'].nil?
 end
 
 if script.vars.empty?
+	sleep 1
 	did_something = false
 	for script_list in [ Settings['scripts'], CharSettings['scripts'] ]
 		if script_list.class == Array
 			for script_info in script_list
-				start_script(script_info[:name], script_info[:args])
+				if script_info[:name] == 'infomon'
+					Script.start(script_info[:name], :args => script_info[:args])
+					sleep 2.5
+				end
+				did_something = true
+			end
+		end
+	end
+	for script_list in [ Settings['scripts'], CharSettings['scripts'] ]
+		if script_list.class == Array
+			for script_info in script_list
+				if script_info[:name] != 'infomon'
+					Script.start(script_info[:name], :args => script_info[:args])
+				end
 				did_something = true
 			end
 		end

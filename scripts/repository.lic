@@ -9,19 +9,27 @@
 	contributors: SpiffyJr (theman@spiffyjr.me)
 	        game: any
 	        tags: core
-	     version: 2.29
+	     version: 2.33
 
 	changelog:
-		2.29 (2015-06-03):
-			don't ask for a password for author "nobody"
-		2.28 (2015-05-21):
-			don't infomon and lnet: infomon failed to start on some machines
-		2.27 (2015-05-14):
-			give progress updates while uploading the map database if it's slow
+		2.33 (2017-03-04):
+			don't ask for a password to upload playershops.xml
+		2.32 (2017-03-04):
+			change checkout-mapdb time limit to 12 hours
+		2.31 (2016-04-04):
+			give DragonRealms Fallen its own map database
 
 =end
 =begin
 
+		2.30 (2015-07-27):
+			fix for losing previous map data when using checkout-mapdb under certain conditions
+		2.29 (2015-06-03):
+			don't ask for a password for author "nobody"
+		2.28 (2015-05-21):
+			don't restart infomon and lnet: infomon failed to start on some machines
+		2.27 (2015-05-14):
+			give progress updates while uploading the map database if it's slow
 		2.26 (2015-04-21):
 			auto load/restart spell-list.xml, gameobj-data.xml, lnet, infomon after downloading
 			check for missing map images even if the map database was up-to-date
@@ -114,7 +122,8 @@ require 'digest/md5'
 hostname           = 'repo.lichproject.org'
 port               = 7157
 ca_cert            = OpenSSL::X509::Certificate.new("-----BEGIN CERTIFICATE-----\nMIIDlTCCAn2gAwIBAgIJAKuu65i5NsruMA0GCSqGSIb3DQEBCwUAMGExCzAJBgNV\nBAYTAlVTMREwDwYDVQQIDAhJbGxpbm9pczESMBAGA1UECgwJTWF0dCBMb3dlMQ8w\nDQYDVQQDDAZSb290Q0ExGjAYBgkqhkiG9w0BCQEWC21hdHRAaW80LnVzMB4XDTE0\nMDYwNzE3NDUwMFoXDTI0MDYwNDE3NDUwMFowYTELMAkGA1UEBhMCVVMxETAPBgNV\nBAgMCElsbGlub2lzMRIwEAYDVQQKDAlNYXR0IExvd2UxDzANBgNVBAMMBlJvb3RD\nQTEaMBgGCSqGSIb3DQEJARYLbWF0dEBpbzQudXMwggEiMA0GCSqGSIb3DQEBAQUA\nA4IBDwAwggEKAoIBAQCcIRn0IMCNYeL5agKmkdedgJXsIyTJS8qKrY6EvQsq4tt0\nmO3Or9K8IaDl7qFdQ9nfSJ5phNgoCy9wZ9rDWv5FhY5MnnVHGr3fCa7RkMxJFR/N\nwiD4ihQlixOUly76glceyc/6QQS9bNe96evZDstERGAFfzgHY4qAlyurR6mBu9Mb\nyyCRok6xMRnjrbTMNkvvOsuG0sY9ot+SLHGgU3qT7+wVh/CbWcjeF7/Qwa//fbFk\nmq5c1FuvhU3DanSSz+VuWudPFSyZ3r5pYrLMJWsyomDa4gkL2bJ5jya2BWDMXvSS\nCpdQgPDIlClMfAFLd/Ss8ZIGa6uNFcSK6Xca51ClAgMBAAGjUDBOMB0GA1UdDgQW\nBBScbglRiGzz9yzuhgBwFYjgimeByDAfBgNVHSMEGDAWgBScbglRiGzz9yzuhgBw\nFYjgimeByDAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQA7MLZYfqam\n5aaSBqQpT6sOGDtVc9koIok59oTQmNXqe+awg2VUnAiesxtLd+FWGUMp8XzHdGWw\nH3O6kAUkPm/in001X7TRAhbgDujfTRbTzxND0XrjuEzDMALs3YpDM1pMXqC7RXWA\n7z+N0gRaUgmh1rMbk/qA3cAfC2dwf2j3NYy3bDw3lMpdyIwAfOQxiZVglYgX3dgT\nU9b//gsUyPCvlpL0mYcmhOOLt6oqQhMJaw1I6A9xMe2kO2L+8KPGK2u1B+P5/Sx0\nFE8LIp5KA3a7yRbOty19NsGR+yW7WwV7BL6c6GOKb/iKJBLYzTmNG6m16hRrxDGj\ntGu91I0ORptB\n-----END CERTIFICATE-----")
-client_version     = '2.29'
+client_version     = '2.33'
+mapdb_reloaded     = false
 cmd                = Array.new
 cmd_author         = nil
 cmd_password       = nil
@@ -719,7 +728,7 @@ download_mapdb = proc {
 			game = 'gsiv'
 		end
 	elsif XMLData.game =~ /^DR/i
-		if XMLData.game =~ /^DRX$|^DRPlat$/i
+		if XMLData.game =~ /^DRF$|^DRX$/i
 			game = XMLData.game.downcase
 		else
 			game = 'dr'
@@ -750,7 +759,6 @@ download_mapdb = proc {
 		else
 			response['size'] = response['size'].to_i
 			newfilename = "#{$data_dir}#{XMLData.game}/map-#{response['timestamp']}.dat"
-
 			tempfilename = "#{$temp_dir}#{rand(100000000)}.repo"
 			echo 'downloading map database...'
 			File.open(tempfilename, 'wb') { |f|
@@ -833,6 +841,7 @@ download_mapdb = proc {
 			}
 			echo 'loading map database...'
 			Map.reload
+			mapdb_reloaded = true
 		end
 		image_filenames = Array.new
 		Map.list.each { |room| image_filenames.push(room.image) if room.image and not image_filenames.include?(room.image) }
@@ -1536,7 +1545,7 @@ elsif (cmd[0] =~ /^upload$/i)
 	game      = (cmd_game || get_game_from_comments.call(comments) || (if XMLData.game =~ /^GS/; 'GS'; elsif XMLData.game =~ /^DR/; 'DR'; else; 'other'; end))
 	password  = (cmd_password || Settings["password:#{author.downcase.gsub(/[^a-z]/, '')}"])
 	if password.nil?
-		if author == 'nobody'
+		if (author == 'nobody') or (file =~ /^playershops\.xml$/i)
 			password = 'nothing'
 		else
 			echo "error: no password is saved for author #{author}"
@@ -1781,7 +1790,7 @@ elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
 		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
 		exit
 	end
-	if XMLData.game =~ /^GSF$|^GSPlat$|^GSIV$|^DR$|^DRX$|^DRPlat$/i
+	if XMLData.game =~ /^GSF$|^GSPlat$|^GSIV$|^DR$|^DRF$|^DRX$/i
 		game = XMLData.game.downcase
 	else
 		echo 'error: unknown game'
@@ -1811,7 +1820,8 @@ elsif (cmd[0] =~ /^checkout-?map(?:db)?$/i)
 			end
 			echo 'success;  running download-mapdb now...'
 			download_mapdb.call
-			echo "edit your map database and     ;#{script.name} upload-mapdb     within 24 hours."
+			Map.reload unless mapdb_reloaded # mapdb on disk may have been updated by another character, leaving the in memory mapdb on this character out of date
+			echo "edit your map database and     ;#{script.name} upload-mapdb     within 12 hours."
 		end
 	ensure
 		ssl_socket.close rescue nil
@@ -1911,7 +1921,7 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 		echo "error: extra words on command line: #{cmd[1..-1].join(' ')}"
 		exit
 	end
-	if XMLData.game =~ /^GSF$|^GSPlat$|^GSIV$|^DR$|^DRX$|^DRPlat$/i
+	if XMLData.game =~ /^GSF$|^GSPlat$|^GSIV$|^DR$|^DRF$|^DRX$/i
 		game = XMLData.game.downcase
 	else
 		echo 'error: unknown game'
@@ -1969,18 +1979,20 @@ elsif (cmd[0] =~ /^upload-?map(?:db)?$/i)
 			echo "password saved for author #{author}"
 		end
 		echo 'uploading map database...'
+		start_time = Time.now.to_f
 		progress = 0
 		progress_time = Time.now.to_i
+		chunk_size = 16384
 		File.open(tempfilename, 'rb') { |f|
-			(size / 1_000_000).times {
-				ssl_socket.write(f.read(1_000_000))
-				progress += 1000000
-				if ((Time.now.to_i - progress_time) > 10)
+			(size / chunk_size).times {
+				ssl_socket.write(f.read(chunk_size))
+				progress += chunk_size
+				if ((Time.now.to_i - progress_time) > 9)
 					progress_time = Time.now.to_i
-					echo "still uploading (#{((progress*100)/size).round}%)..."
+					echo "still uploading (#{((progress*100)/size).round}%, #{(((progress/1024.0)/(Time.now.to_f-start_time))*10).round/10.0} KB/s)..."
 				end
 			}
-			ssl_socket.write(f.read(size % 1_000_000)) unless (size % 1_000_000) == 0
+			ssl_socket.write(f.read(size % chunk_size)) unless (size % chunk_size) == 0
 		}
 		response = ssl_socket.geth
 		if response['warning']

@@ -4,15 +4,46 @@
 	Use   ;magic   to see what spells you have on.
 	Use   ;banks   to see how poor you are.
 
-	Based on Shaelun's infomonitor.lic
-
-	  author: Tillmen (tillmen@lichproject.org
-	    game: Gemstone
-	    tags: core
-	required: Lich > 4.6.10
-	 version: 1.3
+	         author: Tillmen (tillmen@lichproject.org)
+	original author: Shaelun
+	           game: Gemstone
+	           tags: core
+	       required: Lich > 4.6.10
+	        version: 1.16
 
 	changelog:
+      1.16 (2018-07-30):
+         Rename Core Tap Recovery to match spell active
+		1.15 (2018-07-22):
+         improved tracking for Core Tap
+         fix spell active match for Cloak of Shadows
+		1.14 (2017-10-08):
+			detect Mage Armor in spell active
+		1.13 (2017-01-15):
+			rapid fire recovery/penalty fixes
+			somewhat fix lumnis tracking for the new system
+
+=end
+=begin
+
+		1.12 (2017-01-09):
+			fix mana leech cooldown timer (Drafix)
+		1.11 (2016-09-19):
+			added Duck and Weave cman support
+		1.10 (2016-05-15):
+			added death message for ants to the missing xml workaround
+		1.9 (2016-01-13):
+			update lumnis start time from "lumnis info"
+		1.8 (2015-07-02):
+			add support for Medatative Resistance (Takoa)
+		1.7 (2015-05-28):
+			add FoF offset to magic bonuses output
+		1.6 (2015-05-21):
+			recognize Vornavis Caravansary bank as a Vornavis bank
+		1.5 (2015-02-21):
+			remove broken ;magic save/load commands
+		1.4 (2015-02-01):
+			added minotaur magus death message for xml fail workaround
 		1.3 (2014-12-17):
 			recognize spells in "spell active" that have an "Indefinite" time left
 		1.2 (2014-11-14):
@@ -22,6 +53,7 @@
 
 =end
 
+
 unless XMLData.game =~ /^(?:GSF|GSIV|GSPlat|GSTest)$/
 	echo "This script is meant for Gemstone Prime, Platinum, or Shattered.  It will likely cause problems on whatever game you're trying to run it on..."
 	exit
@@ -30,6 +62,7 @@ end
 hide_me
 setpriority(1)
 
+=begin
 get_lich_server = proc {
 	begin
 		lich_server = TCPSocket.open('216.224.171.85', 7153)
@@ -40,6 +73,7 @@ get_lich_server = proc {
 	end
 	lich_server
 }
+=end
 
 sleep(0.1) until Char.name and not Char.name.empty?
 CharSettings['active_spells'] = Hash.new unless CharSettings['active_spells'].class == Hash
@@ -53,7 +87,7 @@ bank_titles = {
 	"Wehnimer's Landing"          => [ '[First Elanith Bank, Teller]', '[Clenchfist Bros. Banking, Lobby]'],
 	'Kharam-Dzu'                  => [ '[The Bank of Kharam-Dzu]' ],
 	'Icemule Trace'               => [ '[Icemule Trace, Bank]' ],
-	'Vornavis'                    => [ '[Bank of Vornavis, Solhaven]' ],
+	'Vornavis'                    => [ '[Bank of Vornavis, Solhaven]', '[Mercantylers\' Banking Hall]' ],
 	"River's Rest"                => [ "[River's Rest Bank, Teller]" ],
 	"Kharag 'doth Dzulthu"        => [ '[Bank of Zul Logoth]' ],
 	'United City-States'          => [ '[United Bank of City-States]', '[The United Bank of City-States]' ],
@@ -218,7 +252,6 @@ CharSettings['active_spells'].each_pair { |spell_num,timeleft|
 	end
 }
 Spellsong.load_serialized = CharSettings['Spellsong'] if CharSettings['Spellsong']
-Gift.load_serialized = CharSettings['Gift'] if CharSettings['Gift']
 
 #
 # Register ;magic and ;banks commands
@@ -256,7 +289,6 @@ save_proc = proc {
 		end
 	}
 	CharSettings['Spellsong'] = Spellsong.serialize
-	CharSettings['Gift'] = Gift.serialize
 	CharSettings.save
 	if not CharSettings['uploaded_spell_ranks'] and defined?(LNet.upload_spell_ranks)
 		if LNet.upload_spell_ranks
@@ -318,7 +350,8 @@ Thread.new {
 #
 fix_gameobj_status = proc { |server_string|
 	# false positive: shudders with sporadic convulsions as pearlescent ripples envelop .*? body
-	if server_string =~ /^(?:The fire in the|With a surprised grunt, the|A sudden blue fire bursts over the hair of a|You hear a sound like a weeping child as a white glow separates itself from the|A low gurgling sound comes from deep within the chest of the|The|A) (?:<pushBold\/>)?<a.*?exist=["'](\-?[0-9]+)["'].*?>.*?<\/a>(?:<popBold\/>)?(?:'s)? (?:body as it rises, disappearing into the heavens|falls to the ground and dies|falls back into a heap and dies|body goes rigid and collapses to the ground, dead|body goes rigid and collapses to the floor, dead|slowly settles to the ground and begins to dissipate|falls to the ground motionless|body goes rigid and <pushBold\/><a.*?>\w+<\/a><popBold\/> eyes roll back into <pushBold\/><a.*?>\w+<\/a><popBold\/> head as <pushBold\/><a.*?>\w+<\/a><popBold\/> dies|growls one last time, and crumples to the ground in a heap|spins backwards and collapses dead|falls to the ground as the stillness of death overtakes <pushBold\/><a.*?>(?:him|her|it)<\/a><popBold\/>|crumples to the ground motionless|howls in agony one last time and dies|howls in agony while falling to the ground motionless|moans pitifully as <pushBold\/><a.*?>(?:he|she|it)<\/a><popBold\/> is released|careens to the ground and crumples in a heap|hisses one last time and dies|flutters its wings one last time and dies|slumps to the ground with a final snarl|horn dims as (?:his|her) lifeforce fades away|blinks in astonishment, then collapses in a motionless heap|collapses in a heap, its huge girth shaking the floor around it|goes limp and .*? falls over as the fire slowly fades from .*? eyes|eyes slowly fades|sputters violently, cascading flames all around as .*? collapses in a final fiery display|falls to the ground in a clattering, motionless heap|goes limp and .*? falls over as the fire slowly fades from .*? eyes|collapses to the ground and shudders once before finally going still|crumbles into a pile of rubble|shudders once before .*? finally goes still|as .*? falls slack against the ground|totters for a moment and then falls to the ground like a pillar, breaking into pieces that fly out in every direction|collapses into a pile of rubble|rumbles in agony as .*? teeters for a moment, then falls directly at you|twists and coils violently in .*? death throes, finally going still|twitches one final time before falling still upon the floor|, consuming .*? form in the space of a breath|screams one last time and dies|breathes .*? last gasp and dies|rolls over and dies|as .*? falls slack against the floor|collapses to the ground, emits a final squeal, and dies|cries out in pain one last time and dies|crumples to a heap on the ground and dies|collapses to the ground, emits a final sigh, and dies|crumples to the ground and dies|lets out a final caterwaul and dies|screams evilly one last time and goes still|gurgles eerily and collapses into a puddle of water|shudders, then topples to the ground|shudders one last time before lying still|violently for a moment, then goes still|grumbles in pain one last time before lying still|rumbles in agony and goes still|falls to the ground dead|collapses to the ground, emits a final bleat, and dies|topples to the ground motionless|shudders violently for a moment, then goes still)[\.!]\r?\n?$/
+#The earth elemental rumbles in agony as it teeters for a moment, then tumbles to the ground with a thundering crash! 
+	if server_string =~ /^(?:The fire in the|With a surprised grunt, the|A sudden blue fire bursts over the hair of a|You hear a sound like a weeping child as a white glow separates itself from the|A low gurgling sound comes from deep within the chest of the|The|A|One last prolonged bovine moan escapes from the) (?:<pushBold\/>)?<a.*?exist=["'](\-?[0-9]+)["'].*?>.*?<\/a>(?:<popBold\/>)?(?:'s)? (?:body as it rises, disappearing into the heavens|falls to the ground and dies(?:, its feelers twitching)?|falls back into a heap and dies|body goes rigid and collapses to the ground, dead|body goes rigid and collapses to the floor, dead|slowly settles to the ground and begins to dissipate|falls to the ground motionless|body goes rigid and <pushBold\/><a.*?>\w+<\/a><popBold\/> eyes roll back into <pushBold\/><a.*?>\w+<\/a><popBold\/> head as <pushBold\/><a.*?>\w+<\/a><popBold\/> dies|growls one last time, and crumples to the ground in a heap|spins backwards and collapses dead|falls to the ground as the stillness of death overtakes <pushBold\/><a.*?>(?:him|her|it)<\/a><popBold\/>|crumples to the ground motionless|howls in agony one last time and dies|howls in agony while falling to the ground motionless|moans pitifully as <pushBold\/><a.*?>(?:he|she|it)<\/a><popBold\/> is released|careens to the ground and crumples in a heap|hisses one last time and dies|flutters its wings one last time and dies|slumps to the ground with a final snarl|horn dims as (?:his|her) lifeforce fades away|blinks in astonishment, then collapses in a motionless heap|collapses in a heap, its huge girth shaking the floor around it|goes limp and .*? falls over as the fire slowly fades from .*? eyes|eyes slowly fades|sputters violently, cascading flames all around as .*? collapses in a final fiery display|falls to the ground in a clattering, motionless heap|goes limp and .*? falls over as the fire slowly fades from .*? eyes|collapses to the ground and shudders once before finally going still|crumbles into a pile of rubble|shudders once before .*? finally goes still|totters for a moment and then falls to the ground like a pillar, breaking into pieces that fly out in every direction|collapses into a pile of rubble|rumbles in agony as .*? teeters for a moment, then falls directly at you|twists and coils violently in .*? death throes, finally going still|twitches one final time before falling still upon the floor|, consuming .*? form in the space of a breath|screams one last time and dies|breathes .*? last gasp and dies|rolls over and dies|as .*? falls (?:slack|still) against the (?:floor|ground)|collapses to the ground, emits a final squeal, and dies|cries out in pain one last time and dies|crumples to a heap on the ground and dies|collapses to the ground, emits a final sigh, and dies|crumples to the ground and dies|lets out a final caterwaul and dies|screams evilly one last time and goes still|gurgles eerily and collapses into a puddle of water|shudders, then topples to the ground|shudders one last time before lying still|violently for a moment, then goes still|grumbles in pain one last time before lying still|rumbles in agony and goes still|falls to the ground dead|collapses to the ground, emits a final bleat, and dies|topples to the ground motionless|shudders violently for a moment, then goes still|rumbles in agony as .*? teeters for a moment, then tumbles to the ground with a thundering crash)[\.!]\r?\n?$/
 		npc_id = $1
 		if npc = GameObj.npcs.find { |obj| obj.id == npc_id }
 			npc.status = 'dead'
@@ -406,7 +439,7 @@ while line = get
 					else
 						lastcircle = nil
 						Spell.active.compact!
-						total_boltAS, total_physicalAS, total_boltDS, total_physicalDS, total_elementalCS, total_mentalCS, total_spiritCS, total_sorcererCS, total_elementalTD, total_mentalTD, total_spiritTD, total_sorcererTD, total_strength, total_dodging, total_combatmaneuvers, total_damagefactor, total_block, total_constitution, total_health, total_uaf, total_asg = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+						total_boltAS, total_physicalAS, total_boltDS, total_physicalDS, total_elementalCS, total_mentalCS, total_spiritCS, total_sorcererCS, total_elementalTD, total_mentalTD, total_spiritTD, total_sorcererTD, total_strength, total_dodging, total_combatmaneuvers, total_damagefactor, total_block, total_constitution, total_health, total_uaf, total_asg, total_fof_offset = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 						Spell.active.sort_by { |spell| spell.num.to_i }.each { |spell|
 							if CharSettings['show_circles'] and (spell.circle != lastcircle) then output.concat("\r\n- #{spell.circlename}:\r\n") end
 							bonus_string = ' - '
@@ -495,6 +528,14 @@ while line = get
 									bonus_string.concat "#{spell.asg} AsG, "
 									total_asg += spell.asg.to_i
 								end
+								begin
+									if spell.fof_offset.to_i != 0
+										bonus_string.concat "#{spell.fof_offset} FoF offset, "
+										total_fof_offset += spell.fof_offset.to_i
+									end
+								rescue
+									nil
+								end
 							end
 							output.concat(sprintf("  %04s:  %-023s - %s%s\n", spell.num.to_s, spell.name, spell.remaining, bonus_string.chop.chop))
 							lastcircle = spell.circle
@@ -524,6 +565,7 @@ while line = get
 							total_defense_string = total_defense_string + total_sorcererTD.to_s + ' sorcTD, ' if total_sorcererTD != 0
                             total_defense_string = total_defense_string + total_block.to_s + '% block, ' if total_block != 0
                             total_defense_string = total_defense_string + total_asg.to_s + ' AsG, ' if total_asg != 0
+                            total_defense_string = total_defense_string + total_fof_offset.to_s + ' FoF offset, ' if total_fof_offset != 0
                             total_defense_string.chop!.chop!
                             
 							total_stat_string = total_stat_string + total_strength.to_s + ' str, ' if total_strength != 0
@@ -544,52 +586,34 @@ while line = get
 						end
 					end					
 					if CharSettings['show_gift']
-						giftleft = Gift.remaining
-						unless Time.now > Gift.restarts_on
-							cyclemins = (Gift.restarts_on.to_i - Time.now.to_i) / 60.00
-							days = cyclemins.as_time.slice(/\d+/).to_i / 24
-							hours = cyclemins.as_time.slice(/\d+/).to_i % 24
-							mins, secs = cyclemins.as_time.split(':')[-2..-1]
-							mins, secs = mins.to_i, secs.to_i
-							if days > 1
-								output.concat("Your Gift of Lumnis cycle will restart in #{days} days, ")
-							elsif days == 1
-								output.concat("Your Gift of Lumnis cycle will restart in #{days} day, ")
-							else
-								output.concat("Your Gift of Lumnis cycle will restart in 0 days, ")
+						if CharSettings['lumnis start exp'] and CharSettings['lumnis 3x exp'] and CharSettings['lumnis 2x exp']
+							exp_diff = Char.exp - CharSettings['lumnis start exp']
+							if exp_diff < (CharSettings['lumnis 3x exp'] * 3)
+								exp = exp_diff / 3
+								output.concat "You have used #{exp}/#{CharSettings['lumnis 3x exp']} (#{exp*100/CharSettings['lumnis 3x exp']}%) of your 3x multiplier and 0/#{CharSettings['lumnis 3x exp']} (0%) of your 2x multiplier this week for a total of #{exp_diff} experience.\n"
+							elsif exp_diff < ((CharSettings['lumnis 3x exp'] * 3) + (CharSettings['lumnis 2x exp'] * 2))
+								exp = (exp_diff - (CharSettings['lumnis 3x exp'] * 3)) / 2
+								output.concat "You have used #{CharSettings['lumnis 3x exp']}/#{CharSettings['lumnis 3x exp']} (100%) of your 3x multiplier and #{exp}/#{CharSettings['lumnis 2x exp']} (#{exp*100/CharSettings['lumnis 2x exp']}%) of your 2x multiplier this week for a total of #{exp_diff} experience.\n"
+							elsif CharSettings['lumnis next start'] >= Time.now.to_i
+								output.concat "You have used up your Gift of Lumnis this week for a total of #{(CharSettings['lumnis 3x exp']*3)+(CharSettings['lumnis 2x exp']*2)} experience.\n"
 							end
-							if hours == 1
-								output.concat("#{hours} hour, ")
-							elsif hours > 1
-								output.concat("#{hours} hours, ")
+						end
+						if CharSettings['lumnis next start']
+							if CharSettings['lumnis next start'] < Time.now.to_i
+								output.concat "Your Gift of Lumnis cycle will start when you gain some experience.\n\n"
 							else
-								output.concat("0 hours, ")
+								cycleminstime = ((CharSettings['lumnis next start'] - Time.now.to_i) / 60.00).as_time
+								days = cycleminstime.slice(/\d+/).to_i / 24
+								hours = cycleminstime.slice(/\d+/).to_i % 24 
+								mins, secs = cycleminstime.split(':')[-2..-1]
+								mins, secs = mins.to_i, secs.to_i
+								foo = Array.new
+								foo.push "#{days} day#{'s' if days > 1}" if days > 0
+								foo.push "#{hours} hour#{'s' if hours > 1}" if hours > 0
+								foo.push "#{mins} minute#{'s' if mins > 1}" if mins > 0
+								foo.push "#{secs} second#{'s' if secs > 1}" if (secs > 0) and (days == 0) and (hours == 0)
+								output.concat "Your Gift of Lumnis cycle will restart in #{foo.join(', ')}.\n\n"
 							end
-							if mins == 1
-								output.concat("#{mins} minute, ")
-							elsif mins > 1
-								output.concat("#{mins} minutes, ")
-							else
-								output.concat("0 minutes, ")
-							end
-							if secs > 1
-								output.concat("#{secs} seconds.")
-							elsif secs == 1
-								output.concat("#{secs} second.")
-							else
-								output.concat("0 seconds.")
-							end
-							output.concat("\n\n")
-							if giftleft <= 0
-								nil
-							elsif giftleft < 10800
-								output.concat("Time remaining for double learning: #{(giftleft / 60).as_time}.\n\n")
-							else
-								giftleft -= 10800
-								output.concat("Time remaining for triple learning: #{(giftleft / 60).as_time}.\n\n")
-							end
-						else
-							output.concat("Your Gift of Lumnis cycle will begin when you next learn from an experience.\n\n")
 						end
 					end
 					respond output
@@ -604,8 +628,8 @@ while line = get
 					respond '   ;magic bonuses             - Toggles the display of spell bonuses with the active spell list.'
 					respond '   ;magic gift                - Toggles the display of Gift of Lumnis information with the active spell list.'
 					respond '   ;magic messages            - Toggles the display of a duration message after each cast.'
-					respond '   ;magic save                - Saves your currently active spells and currently tracked skills/stats on the Lich server.'
-					respond '   ;magic load                - Load your currently active spells and skills/stats from the Lich server.'
+#					respond '   ;magic save                - Saves your currently active spells and currently tracked skills/stats on the Lich server.'
+#					respond '   ;magic load                - Load your currently active spells and skills/stats from the Lich server.'
 					respond
 				elsif mobj.captures.first =~ /clear|reset/i
 					if mobj.captures[1].nil? or mobj.captures[1].empty?
@@ -679,6 +703,8 @@ while line = get
 						end
 					end
 				elsif mobj.captures.first =~ /save/i
+					echo 'this function no longer works'
+=begin
 					if $SAFE == 0
 						echo("Saving your current active spells on the Lich server for later use on a different computer... please be patient, it can sometimes take up to half a minute to initiate the connection...")
 						if lich_server = get_lich_server.call
@@ -710,7 +736,10 @@ while line = get
 					else
 						echo 'This script must be trusted to use this function. (;trust infomon)'
 					end
+=end
 				elsif mobj.captures.first =~ /load/i
+					echo 'this function no longer works'
+=begin
 					if $SAFE == 0
 						echo("Loading your current active spells from the remote cache on the Lich server... please be patient, it can sometimes take up to half a minute to initiate the connection...")
 						if lich_server = get_lich_server.call
@@ -753,6 +782,7 @@ while line = get
 					else
 						echo 'This script must be trusted to use this function. (;trust infomon)'
 					end
+=end
 				else
 					echo "Magic error! Type ';magic help' for usage information."
 				end
@@ -848,13 +878,53 @@ while line = get
 			}
 #		elsif line =~ /^You stop singing\.$|^But you are not singing any spellsongs\.$/
 #			Spell.list.each { |spell| spell.putdown if spell.circle.to_i == 10 }
-		elsif line =~ /^The soft feeling of serenity slowly dissipates from your mind\.$/
-			Gift.ended
-			CharSettings['Gift'] = Gift.serialize
+#		elsif line =~ /^The soft feeling of serenity slowly dissipates from your mind\.$/
+#			nil
+		elsif line =~ /^The global Lumnis experience boost currently multiplies your first (\d+) experience points by 3, and your next (\d+) experience points by 2, for a total bonus of/
+			CharSettings['lumnis 3x exp'] = $1.to_i
+			CharSettings['lumnis 2x exp'] = $2.to_i
+		elsif line =~ /^Your Gift of Lumnis (is currently in effect|has expired for this week)\.\s+It is scheduled to refresh in (\d+ days?, )?(\d+ hours? and )?(\d+) minutes?\./
+			days = $2
+			hours = $3
+			minutes = $4.to_i
+			days = (days ? days.slice(/\d+/).to_i : 0)
+			hours = (hours ? hours.slice(/\d+/).to_i : 0)
+			CharSettings['lumnis next start'] = Time.now.to_i + (minutes * 60) + (hours * 3600) + (days * 86400)
 		elsif line =~ /^A soft feeling of serenity touches your mind, providing you with a clearer understanding of recent events\.$/
-			Gift.started
-			CharSettings['Gift'] = Gift.serialize
-#		elsif line =~ /^You feel a strange sense of serenity and find that you are able to reflect on recent events with uncommon clarity and understanding\.$/
+			CharSettings['lumnis start exp'] = Char.exp
+			CharSettings['lumnis next start'] = Time.now.to_i + 604800
+			status_squelching = false
+			status_hook_name = 'infomon_lumnis_contest_status'
+			status_hook_proc = proc { |s|
+				if status_squelching
+					DownstreamHook.remove(status_hook_name) if s =~ /<prompt/
+					nil
+				elsif s =~ /^The global Lumnis/
+					status_squelching = true
+					nil
+				else
+					s
+				end
+			}
+			DownstreamHook.add(status_hook_name, status_hook_proc)
+			info_squelching = false
+			info_hook_name = 'infomon_lumnis_info'
+			info_hook_proc = proc { |s|
+				if info_squelching
+					DownstreamHook.remove(info_hook_name) if s =~ /<prompt/
+					nil
+				elsif s =~ /^Your Gift of Lumnis/
+					info_squelching = true
+					nil
+				else
+					s
+				end
+			}
+			DownstreamHook.add(info_hook_name, info_hook_proc)
+			silence_me unless undo_silence = silence_me
+			put 'lumnis contest status'
+			put 'lumnis info'
+			silence_me if undo_silence
 		elsif line == 'Repeating the sign has no effect!'
 			if spell_name = [ 'Sign of Striking', 'Sign of Smiting', 'Sign of Swords', 'Sign of Warding', 'Sign of Defending', 'Sign of Shields', 'Sign of Deflection', 'Sign of Dissipation' ].find { |name| (XMLData.active_spells[name] > Time.now) and not Spell[name].active? }
 				spell = Spell[spell_name]
@@ -1134,7 +1204,7 @@ while line = get
 			time_added += Spell[6666].minsleft
 			Spell[6666].putup
 			Spell[6666].timeleft = time_added
-		elsif line =~ spell_up_msgs_re
+		elsif line =~ spell_up_msgs_re and not $timers_test
 			spell = Spell.list.find { |s| line =~ /^#{s.msgup}$/ }
 			if spell.num == 218
 				if line =~ /^You infuse your (.*?) spirit with the mana necessary to maintain its corporeal form\.$/
@@ -1150,12 +1220,36 @@ while line = get
 				end
 			elsif spell.num == 9043
 				Spell[9042].putdown
+			elsif spell.num == 9627
+				Spell[9052].timeleft = 5
+				Spell[9052].putup
+			elsif (spell.num == 515) and (recovery = Spell[599])
+				recovery.putup
+			elsif spell.num == 597
+				Spell[515].putup
+				respond "[ #{Spell[515].name}: +#{Spell[515].timeleft.as_time}, #{Spell[515].remaining} remaining. ]" if CharSettings['show_messages']
+				if recovery = Spell[599]
+					recovery.putup
+				end
+			elsif spell.name =~ /^Meditative Resistance/
+				Spell.list.each { |s| s.putdown if s.name =~ /^Meditative/ }
+			end
+			if (spell.name == 'Core Tap Recovery') and (line != 'You are too exhausted to cast Core Tap right now.')
+				thresholds = [ [210,4], [135,3], [60,2], [0,1] ]
+				max_uses = thresholds.find { |foo| Skills.elearth >= foo[0] }[1]
+				if (max_uses > 1) and not Spell['Core Tap Recovery (1 Charge)'].active?
+					spell = Spell['Core Tap Recovery (1 Charge)']
+				elsif (max_uses > 2) and not Spell['Core Tap Recovery (2 Charges)'].active?
+					spell = Spell['Core Tap Recovery (2 Charges)']
+				elsif (max_uses > 3) and not Spell['Core Tap Recovery (3 Charges)'].active?
+					spell = Spell['Core Tap Recovery (3 Charges)']
+				end
 			end
 			if (spell.circle.to_i == 10) and not Spell.active.any? { |s| s.circle.to_i == 10 }
 				Spellsong.renewed
 			end
 			if spell.nil?
-				echo("Error finding matching spell-active message!")
+				echo "Error finding matching spell-active message!"
 			elsif line =~ /^Your punishment does not end for another ([0-9]+) minutes?\.$/
 				spell.putup
 				spell.timeleft = $1.to_f
@@ -1185,23 +1279,34 @@ while line = get
 					respond "[ #{spell.name}: +#{spell.time_per.as_time}, #{spell.remaining} remaining. ]" if CharSettings['show_messages']
 				end
 			elsif spell.num.to_i == 9516
-				# fixme
-				mana_per_minute = (1+(Skills.emc/20))*2.5
+				rate = maxmana / 30
+				rate += 1 if Skills.to_bonus(Skills.emc) >= 100
+				rate += [Skills.to_bonus(Skills.emc)-100, 0].max / 20
+				mana_time = total_mana_drained = mana_recovered = 0
 				mana_drained = line.slice(/[0-9]+/).to_i
+
 				if spell.active?
-					time_before = spell.timeleft
-					mana_drained += time_before * mana_per_minute
-					timeleft = (mana_drained/mana_per_minute).ceil
-#					mana_drained += time_before.ceil * mana_per_minute
-#					timeleft = (mana_drained/mana_per_minute.to_f).ceil
-					spell.timeleft = timeleft
-					respond "[ #{spell.name}: +#{(timeleft - time_before).as_time}, #{spell.remaining} remaining. ]" if CharSettings['show_messages']
-				else
-					timeleft = (mana_drained/mana_per_minute).ceil.to_f
-					spell.putup
-					spell.timeleft = timeleft
-					respond "[ #{spell.name}: +#{timeleft.as_time}, #{spell.remaining} remaining. ]" if CharSettings['show_messages']
+					total_mana_drained = UserVars.total_mana_drained
+					mana_time = UserVars.mana_time
 				end
+
+				if mana_time >= 1 and spell.timeleft < mana_time
+					mana_recovered = (mana_time - spell.timeleft.to_i) * rate
+				end
+
+				total_mana_drained = total_mana_drained - mana_recovered + mana_drained
+
+				if spell.active?
+					spell.timeleft = (total_mana_drained/rate.to_f).ceil - (1 - spell.timeleft % 1) 
+				else
+					spell.putup
+					spell.timeleft = (total_mana_drained/rate.to_f).ceil
+				end
+
+				UserVars.total_mana_drained = total_mana_drained
+				UserVars.mana_time = spell.timeleft.to_i
+
+				respond "[ #{spell.name}: +#{spell.timeleft.as_time}, #{spell.remaining} remaining. ]" if CharSettings['show_messages']
 			elsif (spell.num.to_i >= 9000 and spell.num.to_i != 9011) or (spell.num.to_i == 725)
 				spell.putup
                 respond "[ #{spell.name}: +#{spell.time_per.as_time}, #{spell.remaining} remaining. ]" if CharSettings['show_messages']
@@ -1290,7 +1395,16 @@ while line = get
 					respond "[ #{spell.name}: +#{spell.time_per(options).as_time}, #{spell.remaining} remaining. ]" if CharSettings['show_messages']
 				end
 			end
-		elsif line =~ spell_dn_msgs_re
+		   if spell == Spell['Core Tap Recovery']
+            Spell['Core Tap Recovery (3 Charges)'].putdown if Spell['Core Tap Recovery (3 Charges)'].active?
+            Spell['Core Tap Recovery (2 Charges)'].putdown if Spell['Core Tap Recovery (2 Charges)'].active?
+            Spell['Core Tap Recovery (1 Charge)'].putdown if Spell['Core Tap Recovery (1 Charge)'].active?
+         elsif spell == Spell['Core Tap Recovery (3 Charges)']
+            Spell['Core Tap Recovery (2 Charges)'].putdown
+         elsif spell == Spell['Core Tap Recovery (2 Charges)']
+            Spell['Core Tap Recovery (1 Charge)'].putdown
+		   end
+		elsif line =~ spell_dn_msgs_re and not $timers_test
 			if spell = (Spell.active.find { |s| line =~ /^#{s.msgdn}$/ } || Spell.list.find { |s| line =~ /^#{s.msgdn}$/ })
 				if (spell.num == 218) and servant_type
 					if line =~ /(?:An?|The) #{servant_type} spirit fades into ethereal form and wafts away\.$/
@@ -1303,6 +1417,12 @@ while line = get
 				elsif spell.num == 9009
 					unless spell.timeleft > 50
 						spell.putdown
+					end
+				elsif (spell.num == 515) and (penalty = Spell[597])
+					penalty.putdown
+					spell.putdown
+					if (recovery = Spell[599]) and (recovery.timeleft > 0)
+						respond "[ #{recovery.name}: +#{recovery.timeleft.as_time}, #{recovery.remaining} remaining. ]" if CharSettings['show_messages']
 					end
 				else
 					spell.putdown
@@ -1338,7 +1458,7 @@ while line = get
 			$infomon_cutthroat = false
 		elsif line == "You currently have the following active spells:"
 			while (line = get)
-				if line =~ /([A-z0-9\s\'\(\)]+) \.+ (([0-9]+)\:([0-9]+)\:([0-9]+)|Indefinite)$/
+				if line =~ /([A-z0-9\s\'\(\)\-]+) \.* (([0-9]+)\:([0-9]+)\:([0-9]+)|Indefinite)$/
 					spell_name = $1
 					if $2 == 'Indefinite'
 						spell_time = 599.0
@@ -1348,6 +1468,10 @@ while line = get
 					if spell_name == 'Raise Dead Recovery'
 						# fixme
 						spell_name = 'Raise Dead Cooldown'
+					elsif spell_name =~ /^Mage Armor \- /
+						spell_name = 'Mage Armor'
+					elsif spell_name =~ /^Cloak of Shadows \- /
+						spell_name = 'Cloak of Shadows'
 					end
 					if spell = Spell.list.find { |s| s.name == spell_name or s.num.to_s == spell_name }
 						spell.active = true

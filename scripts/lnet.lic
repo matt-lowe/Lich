@@ -8,11 +8,20 @@
 	    game: any
 	    tags: core
 	required: Lich >= 4.3.12
-	 version: 1.4
+	 version: 1.6
 
 	changelog:
+		1.6 (2016-01-10):
+			fixed room id lookup for ;locate command
+			added alias feature
+		1.5 (2015-11-25):
+			added reply command (DR:Etreu)
 		1.4 (2015-05-13):
 			move channel owners and moderators to the front of the ;who list
+
+=end
+=begin
+
 		1.3 (2015-01-21):
 			give a warning if the system date is outside the range of the CA cert date
 			disable SSLv2 and SSLv3
@@ -45,8 +54,9 @@ class LNet
 	@@waiting   ||= Array.new
 	@@last_recv ||= Time.now
 	@@last_send ||= Time.now
+	@@last_priv ||= nil
 	@@secret    ||= Array.new
-	@@version     = '1.3'
+	@@version     = '1.6'
 
 	@@server_restart = false
 
@@ -56,6 +66,8 @@ class LNet
 	def LNet.script=(val);  if $SAFE==0; @@script=val;    else; nil; end; end
 	def LNet.options;       if $SAFE==0; @@options;       else; nil; end; end
 	def LNet.options=(val); if $SAFE==0; @@options=val;   else; nil; end; end
+	def LNet.alias;         if $SAFE==0; @@alias;         else; nil; end; end
+	def LNet.alias=(val);   if $SAFE==0; @@alias=val;     else; nil; end; end
 
 	def LNet.server_restart;       if $SAFE==0; @@server_restart;     else; nil; end; end
 	def LNet.server_restart=(val); if $SAFE==0; @@server_restart=val; else; nil; end; end
@@ -69,6 +81,10 @@ class LNet
 
 	def LNet.last_recv
 		@@last_recv
+	end
+
+	def LNet.last_priv
+		@@last_priv
 	end
 
 	def LNet.connect
@@ -99,6 +115,9 @@ class LNet
 			ssl_socket = OpenSSL::SSL::SSLSocket.new(socket, ssl_context)
 			ssl_socket.sync_close = true
 			ssl_socket.connect
+         if $lnet_debug
+            echo ssl_socket.peer_cert.inspect
+         end
 			if (ssl_socket.peer_cert.subject.to_a.find { |n| n[0] == 'CN' }[1] != 'lichproject.org') and (ssl_socket.peer_cert.subject.to_a.find { |n| n[0] == 'CN' }[1] != 'LichNet')
 				echo "error: server certificate hostname mismatch"
 				ssl_socket.close
@@ -263,6 +282,7 @@ class LNet
 
 	def LNet.echo_thought(from, message, channel)
 		if $SAFE == 0
+			aliased_from = (LNet.alias[from] || from)
 			channel = "[#{channel}]-" unless from == '[server]'
 			if @@options['timestamps']
 				timestamp = "  (#{Time.now.strftime('%X')})"
@@ -270,21 +290,19 @@ class LNet
 				timestamp = String.new
 			end
 			if @@options['fam_window']
-				xml_thought = "<pushStream id=\"familiar\" ifClosedStyle=\"watching\"/>#{channel}#{from}: \"#{message.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}\"#{timestamp}\n<popStream/>\n"
+				xml_thought = "<pushStream id=\"familiar\" ifClosedStyle=\"watching\"/>#{channel}#{aliased_from}: \"#{message.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}\"#{timestamp}\n<popStream/>\n"
 			else
-#				xml_thought = "<stream id=\"thoughts\">#{channel}#{from}: \"#{message.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}\"#{timestamp}</stream>\n"
-				xml_thought = "<pushStream id=\"thoughts\"/>#{channel}#{from}: \"#{message.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}\"#{timestamp}\n<popStream/>\n"
+#				xml_thought = "<stream id=\"thoughts\">#{channel}#{aliased_from}: \"#{message.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}\"#{timestamp}</stream>\n"
+				xml_thought = "<pushStream id=\"thoughts\"/>#{channel}#{aliased_from}: \"#{message.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}\"#{timestamp}\n<popStream/>\n"
 			end
 			unless LNet.ignored?(from)
 				if $frontend =~ /wizard|avalon/
 					if @@options['fam_window']
-						$_CLIENT_.puts("\034GSe\r\n#{channel}#{from}: \"#{message}\"#{timestamp}\r\n\034GSf\r\n")
+						$_CLIENT_.puts("\034GSe\r\n#{channel}#{aliased_from}: \"#{message}\"#{timestamp}\r\n\034GSf\r\n")
 					else
-						$_CLIENT_.puts("You hear the faint thoughts of #{channel}#{from} echo in your mind:\n\"#{message}\"#{timestamp}\r\n")
+						$_CLIENT_.puts("You hear the faint thoughts of #{channel}#{aliased_from} echo in your mind:\n\"#{message}\"#{timestamp}\r\n")
 					end
-					Script.new_downstream("#{channel}#{from}: \"#{message}\"#{timestamp}")
-				elsif $frontend == 'suks'
-					REXML::Document.parse_stream(xml_thought, XMLData)
+					Script.new_downstream("#{channel}#{aliased_from}: \"#{message}\"#{timestamp}")
 				else
 					if defined?(_respond)
 						_respond(xml_thought)
@@ -295,7 +313,7 @@ class LNet
 			end
 			$_SERVERBUFFER_.push(xml_thought)
 			Script.new_downstream_xml(xml_thought)
-			Script.new_downstream("#{channel}#{from}: \"#{message}\"#{timestamp}")
+			Script.new_downstream("#{channel}#{aliased_from}: \"#{message}\"#{timestamp}")
 		else
 			respond "--- Lich: Untrusted script (#{Script.self.name}) called LNet.echo_thought."
 		end
@@ -615,9 +633,12 @@ class LNet
 					end
 					LNet.echo_thought('[server]', text, '')
 				elsif (@active_attributes.last['type'] == 'private') and (from = @active_attributes.last['from'])
+					@@last_priv = from
 					LNet.echo_thought(from, text, 'Private')
 				elsif (@active_attributes.last['type'] == 'privateto') and (to = @active_attributes.last['to'])
-					LNet.echo_thought(to, text, 'PrivateTo')
+					if text.length < 512 # fixme
+						LNet.echo_thought(to, text, 'PrivateTo')
+					end
 				elsif (@active_attributes.last['type'] == 'channel') and (from = @active_attributes.last['from']) and (channel = @active_attributes.last['channel'])
 					LNet.echo_thought(from, text, channel)
 				end
@@ -804,6 +825,7 @@ class LNet
 					output.concat "\n" unless data['own_channels'].empty? and data['mod_channels'].empty?
 					respond output
 				elsif (@active_attributes.last['type'] == 'spell-ranks') and (@active_attributes.last['from'] == 'server') and defined?(SpellRanks)
+               echo 'spell-ranks' if $lnet_debug
 					begin
 						# fixme: really really slow to do the whole list, also too large (1.7mb or something)
 						format = data['_format_']
@@ -989,9 +1011,9 @@ class LNet
 							also_see = (also_see + data['loot']) unless data['loot'].nil? or data['loot'].empty?
 							also_here = Array.new
 							data['pcs'].each { |pc| if pc['status'].nil?; also_here.push(pc['name']); else; also_here.push("#{pc['name']} (#{pc['status']})"); end }
-							room = Map.list.find { |room| room.title.include?(data['title']) and room.desc.include?(data['description']) and room.paths.include?(data['exits']) }
+							room = Map.list.find { |room| room.title.include?(data['title']) and room.desc.include?(data['description'].strip) and room.paths.include?(data['exits']) }
 							unless room
-								desc_regex = /#{Regexp.escape(data['description']).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
+								desc_regex = /#{Regexp.escape(data['description'].strip.sub(/\.+$/, '')).gsub(/\\\.(?:\\\.\\\.)?/, '|')}/
 								room = Map.list.find { |room| room.title.include?(data['title']) and room.paths.include?(data['exits']) and room.desc.find { |desc| desc =~ desc_regex } }
 							end
 							output.concat "#{data['title']}#{' (' + room.id.to_s + ')' if room}\n"
@@ -1018,7 +1040,7 @@ class LNet
 				else
 					# echo data.inspect
 				end
-			
+
 			end
 		rescue
 			echo $!
@@ -1072,6 +1094,9 @@ LNet.options['enemies']    = Array.new unless LNet.options['enemies'].class    =
 LNet.options['permission'] = Hash.new  unless LNet.options['permission'].class == Hash
 LNet.options['ignore']     = Array.new unless LNet.options['ignore'].class     == Array
 
+Settings['alias']          = Hash.new  unless Settings['alias'].class          == Hash
+LNet.alias = Settings['alias']
+
 if script.vars[1] =~ /^password=([^\s]+)$/i
 	if $1 == 'nil'
 		LNet.secret = nil
@@ -1093,7 +1118,7 @@ LNet.script = Script.self
 script_name = script.name.dup
 action = proc { |client_string|
 	begin
-		if client_string =~ /^(?:<c>)?#{$lich_char}(,|chat |who|locate |spells |info |skills |health |bounty |tune |untune |channels?)(.*)/
+		if client_string =~ /^(?:<c>)?#{$lich_char}(,|chat |reply |who|locate |spells |info |skills |health |bounty |tune |untune |channels?)(.*)/
 			cmd, extra = $1, $2
 			cmd = 'chat ' if cmd == ','
 			if s = (Script.running + Script.hidden).find { |val| val.name == script_name }
@@ -1291,6 +1316,12 @@ while msg = unique_get.strip
 	elsif msg =~ /^chat\s+(?!:\:|to |on |ot )(.*)/i
 		message = $1.sub(/^\.(to|on) /i, '\\1 ')
 		LNet.send_message(attr={'type'=>'channel'}, message)
+	elsif msg =~/reply\s(.+)/i
+		if LNet.last_priv
+			LNet.send_message(attr={'type'=>'private', 'to'=>LNet.last_priv}, $1)
+		else
+			echo "No private message to reply to."
+		end
 	elsif msg =~ /^who$/i
 		LNet.send_query(attr={'type'=>'connected'})
 	elsif msg =~ /^stats$/i
@@ -1314,6 +1345,36 @@ while msg = unique_get.strip
 			echo "There's no point in sending a request to someone you're ignoring."
 		else
 			LNet.send_request(attr={'type'=>type, 'to'=>name})
+		end
+	elsif msg =~ /^add\s?alias\s+([^\s]+)\s+(.+)$/i
+		real_name = $1
+		aliased_name = $2
+		old_alias = LNet.alias[real_name]
+		LNet.alias[real_name] = aliased_name
+		echo "chats from #{real_name} will now appear as #{aliased_name}"
+		if real_name !~ /^[A-Z][A-z]+:[A-Z][a-z]+$/
+			echo "The name should be entered exactly as it appears in the thought window, for example:   ;lnet add alias GSIV:Jeril StrangerDanger"
+			echo "If #{real_name} is incorrect, you can remove it using:   ;lnet remove alias #{aliased_name}"
+		end
+	elsif msg =~ /^(?:del|rem|delete|remove)\s?alias\s+(.+)$/i
+		aliased_name = $1
+		if LNet.alias.values.any? { |v| v == aliased_name }
+			LNet.alias.delete_if { |k,v| v == aliased_name }
+			echo "alias deleted"
+		else
+			echo "couldn't find an alias by that name"
+		end
+	elsif msg =~ /^aliases$/i
+		if LNet.alias.empty?
+			echo 'You have no aliases.'
+		else
+			output = "\n"
+			max_k = 0; max_v = 0; LNet.alias.each_pair { |k,v| max_k = [max_k,k.length].max; max_v = [max_v,v.length].max }
+			LNet.alias.each_pair { |k,v|
+				output.concat "   #{k.ljust(max_k)} => #{v.ljust(max_v)}\n"
+			}
+			output.concat "\n"
+			respond output
 		end
 	elsif msg =~ /^add\s?friends?\s+([A-z]+\:)?([A-z]+)$/i
 		fix_game = { 'gsf' => 'GSF', 'gsiv' => 'GSIV', 'gsplat' => 'GSPlat' }
@@ -1577,6 +1638,10 @@ while msg = unique_get.strip
 		output.concat "      <action> can be one of: locate, spells, skills, info, health, bounty, all\n"
 		output.concat "      <group> can be one of: all, friends, non-enemies, none\n"
 		output.concat "\n"
+		output.concat "#{$clean_lich_char}#{script.name} aliases                       list aliases\n"
+		output.concat "#{$clean_lich_char}#{script.name} add alias <name> <new_name>   causes chats from name to appear as new_name\n"
+		output.concat "#{$clean_lich_char}#{script.name} del alias <new_name>          delete an alias\n"
+		output.concat "\n"
 		output.concat "#{$clean_lich_char}#{script.name} ignore                        list names currently being ignored\n"
 		output.concat "#{$clean_lich_char}#{script.name} ignore <name>                 ignore chats/private chats/data requests from a person\n"
 		output.concat "#{$clean_lich_char}#{script.name} unignore <name>               unignore a person\n"
@@ -1599,7 +1664,6 @@ while msg = unique_get.strip
 		output.concat "#{$clean_lich_char}#{script.name} mod <character> on <channel>\n"
 		output.concat "#{$clean_lich_char}#{script.name} unmod <character> on <channel>\n"
 		output.concat "      <time> should be a number followed by one of: seconds, minutes, hours, days, or years (may be abbreviated to one letter)\n"
-		output.concat "      if \"for <time>\" is omitted, the ban or gag will last until undone with unban or ungag\n"
 		output.concat "\n"
 		respond output
 	else

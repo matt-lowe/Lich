@@ -7,11 +7,14 @@
 	  author: Tillmen (tillmen@lichproject.org)
 	    game: Gemstone
 	    tags: core
-	 version: 0.3
+	 version: 0.4
 	required: Lich >= 4.2.0
 
 	changelog:
-		0.3 (2015-5-13):
+		0.4 (2017-03-18):
+			Wehnimer's Landing location combining rooms type thing of some sort
+			copy image and image_coords when combining rooms
+		0.3 (2015-05-13):
 			fix objects setting
 			add messages to mapmap_move method
 			give a warning when setting boundaries while the lazy setting is off
@@ -171,6 +174,8 @@ combine_rooms = proc { |this_room, that_room|
 	second_room.title.each { |title| first_room.title.push(title) unless first_room.title.include?(title) }
 	second_room.description.each { |desc| first_room.description.push(desc) unless first_room.description.include?(desc) }
 	second_room.paths.each { |paths| first_room.paths.push(paths) unless first_room.paths.include?(paths) }
+	first_room.image = second_room.image if first_room.image.nil?
+	first_room.image_coords = second_room.image_coords if first_room.image_coords.nil?
 	if first_room.location.nil?
 		first_room.location = second_room.location
 	end
@@ -783,7 +788,7 @@ elsif cmd[0] == 'fix'
 				real_adj_room = Room.current_or_new
 				unless adj_room == real_adj_room.id.to_s
 					adj_room_obj = Room[adj_room]
-					if adj_room_obj.location and real_adj_room.location and (adj_room_obj.location != real_adj_room.location)
+					if adj_room_obj.location and real_adj_room.location and (adj_room_obj.location != real_adj_room.location) and not (adj_room_obj.location =~ /^(?:the town of )?Wehnimer's Landing$/ and real_adj_room.location =~ /^(?:the town of )?Wehnimer's Landing$/)
 						line = 'no'
 					elsif adj_room_obj.title.first =~ /^\[([A-z]+)'s? (?:Magic Shoppe|Outfitting|Weaponry|General Store|Combat Gear|Armory|Lockpicks)\]$/
 						player_shop_owner = $1

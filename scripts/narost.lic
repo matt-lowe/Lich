@@ -6,14 +6,12 @@
 	shift-click on a room to show its description
 	right-click for some options
 
-	 author: Tillmen (tillmen@lichproject.org)
-	   game: any
-	   tags: core, movement
-	version: 0.1
+	author: Tillmen (tillmen@lichproject.org)
+	game: any
+	tags: core, movement
+	version: 0.2
 
 =end
-
-# fixme: click arrow to next map to show map
 
 i_stand_alone
 clear
@@ -37,12 +35,15 @@ if $SAFE > 0
 	exit
 end
 
-require 'set'
 trouble = script.vars.any? { |var| var =~ /trouble/i }
 
 Settings.load
 setting_keep_above = Settings['keep_above']
 setting_keep_above = true if setting_keep_above.nil?
+setting_borderless = Settings['borderless']
+setting_borderless = false if setting_borderless.nil?
+setting_hide_scrollbars = Settings['hide_scrollbars']
+setting_hide_scrollbars = false if setting_hide_scrollbars.nil?
 setting_follow     = nil
 menu_follow        = nil
 window_width       = Settings['window_width'] || 400
@@ -236,7 +237,11 @@ no_room = proc {
 	}
 }
 
-gs_map_links = [
+find_clicked_link = proc { |click_x, click_y|
+	clicked_link = nil
+	map_name = current_map.slice(/([^\/\\]+)$/)
+	# fixme: use tags in map database for this
+	map_links = [
 		[ 'TI-teras.gif',                  1962, 2238,   68,  192, 'TI-wilds.gif',                   840, 1252 ],
 		[ 'TI-teras.gif',                   710,  972, 2130, 2260, 'WL-wehnimers.gif',              2338, 1070 ],
 		[ 'TI-wilds.gif',                  1124, 1412,  604,  682, 'TI-vtull.gif',                  2276, 1638 ],
@@ -293,36 +298,6 @@ gs_map_links = [
 		[ 'RR-citadel.gif',                1868, 2138, 1010, 1082, 'RR-riversrest.gif',             1598,  336 ],
 		[ 'VO-caravansary.gif',            1556, 1824, 1742, 1816, 'RR-riversrest.gif',              576, 1642 ],
 	]
-
-get_map_links = proc { |map_name|
-	if XMLData.game =~ /^(?:DRF|DR|DRPlat)$/
-		current_map_rooms = Map.list.find_all { |room| room.map_name == map_name }
-
-		links = []
-		current_map_rooms.each do |room|
-			room.links.each do |link|
-				linked_room = Map[link.destination_room_id]
-				item = [map_name,
-						link.clickable_area[0], link.clickable_area[2], #min/max X
-						link.clickable_area[1], link.clickable_area[3], #min/max Y
-						link.destination_map_name,
-						linked_room.map_x, linked_room.map_y # location to center in destination view
-					]
-				links.push(item)
-			end
-		end
-
-		links
-	else
-		gs_map_links
-	end
-}
-
-find_clicked_link = proc { |click_x, click_y|
-	clicked_link = nil
-	map_name = current_map.slice(/([^\/\\]+)$/)
-	# fixme: use tags in map database for this
-	map_links = get_map_links.call(map_name)
 	for link in map_links
 		if (link[0] =~ /#{map_name}/i) and (click_x > link[1]) and (click_x < link[2]) and (click_y > link[3]) and (click_y < link[4])
 			clicked_link = [ "#{map_dir}#{link[5]}", link[6], link[7] ]
@@ -337,15 +312,33 @@ find_clicked_room = proc { |click_x, click_y|
 		not room.nil? and not room.map_name.nil? and not room.map_x.nil? and not room.map_y.nil? and not room.map_roomsize.nil? and (current_map =~ /#{room.map_name}$/) and (room.map_x > click_x - (room.map_roomsize/2)) and (room.map_x < click_x + (room.map_roomsize/2)) and (room.map_y > click_y - (room.map_roomsize/2)) and (room.map_y < click_y + (room.map_roomsize/2)) }
 }
 
+set_scrolling_policy = proc { |scroller| 
+	if setting_hide_scrollbars then
+		scroller.set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_NEVER)
+	else
+		scroller.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
+	end
+}
+
 Gtk.queue {
 	window = Gtk::Window.new
 	window.title = "Narost: #{Char.name}"
 	window.signal_connect('delete_event') { narost_exit = true }
 	window.signal_connect('size_allocate') { window_resized = true }
-
+	window.signal_connect('key-press-event') do |w, e|
+		if e.keyval == Gdk::Keyval::GDK_Control_L and setting_borderless then
+			window.set_decorated(true)
+		end
+	end
+	window.signal_connect('key-release-event') do |w, e|
+		if e.keyval == Gdk::Keyval::GDK_Control_L and setting_borderless then
+			window.set_decorated(false)
+		end
+	end
+	
 	scroller = Gtk::ScrolledWindow.new
 	scroller.border_width = 0
-	scroller.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_ALWAYS)
+	set_scrolling_policy.call(scroller)
 	window.add(scroller)
 
 	layout = Gtk::Layout.new
@@ -371,6 +364,17 @@ Gtk.queue {
 	menu_keep_above.active = setting_keep_above
 	menu_keep_above.signal_connect('toggled') { |owner| setting_keep_above = window.keep_above = owner.active? }
 
+	menu_borderless = Gtk::CheckMenuItem.new('borderless')
+	menu_borderless.active = setting_borderless
+	menu_borderless.signal_connect('toggled') { |owner| window.set_decorated(!setting_borderless = owner.active?) }
+	
+	menu_hide_scrollbars = Gtk::CheckMenuItem.new('hide scrollbars')
+	menu_hide_scrollbars.active = setting_hide_scrollbars
+	menu_hide_scrollbars.signal_connect('toggled') { |owner| 
+		setting_hide_scrollbars = owner.active?
+		set_scrolling_policy.call(scroller)
+	}
+	
 	menu_find = Gtk::MenuItem.new('find room')
 	menu_find.signal_connect('activate') {
 		Gtk.queue {
@@ -420,10 +424,26 @@ Gtk.queue {
 	}
 
 	menu_map_list = Gtk::Menu.new
+	map_submenus = Hash.new
 	used_maps.each { |map_name|
-		item = Gtk::MenuItem.new(map_name.sub(/(?:\-[0-9]+)?\.[A-z]{1,3}$/,''), false)
-		item.signal_connect('activate') { change_map.call("#{map_dir}#{map_name}"); no_room.call }
-		menu_map_list.append(item)
+		mod_map_name = map_name.sub(/(?:\-[0-9]+)?\.[A-z]{1,3}$/,'')
+		if mod_map_name =~ /^(.+?)\-(.+)$/
+			submenu_name = $1.strip
+			part_map_name = $2.strip
+			unless submenu = map_submenus[submenu_name]
+				foo = Gtk::MenuItem.new(submenu_name)
+				menu_map_list.append(foo)
+				map_submenus[submenu_name] = Gtk::Menu.new
+				foo.submenu = map_submenus[submenu_name]
+			end
+			item = Gtk::MenuItem.new(part_map_name, false)
+			item.signal_connect('activate') { change_map.call("#{map_dir}#{map_name}"); no_room.call }
+			submenu.append(item)
+		else
+			item = Gtk::MenuItem.new(mod_map_name, false)
+			item.signal_connect('activate') { change_map.call("#{map_dir}#{map_name}"); no_room.call }
+			menu_map_list.append(item)
+		end
 	}
 
 	menu_view_map = Gtk::MenuItem.new('view map')
@@ -477,6 +497,8 @@ Gtk.queue {
 	menu = Gtk::Menu.new
 	menu.append(menu_follow)
 	menu.append(menu_keep_above)
+	menu.append(menu_borderless)
+	menu.append(menu_hide_scrollbars)
 	menu.append(menu_find)
 	menu.append(menu_view_map)
 	menu.append(menu_scale_map)
@@ -602,6 +624,8 @@ Gtk.queue {
 		}
 	}
 
+	window.show_all
+
 	window_width = [window_width,100].max
 	window_height = [window_height,100].max
 	window.resize(window_width, window_height)
@@ -609,8 +633,6 @@ Gtk.queue {
 	window_position[0] = [[0, window_position[0].to_i].max, (Gdk.screen_width-window_width)].min
 	window_position[1] = [[0, window_position[1].to_i].max, (Gdk.screen_height-window_height)].min
 	window.move(window_position[0], window_position[1])
-
-	window.show_all
 
 	if trouble
 		respond
@@ -623,6 +645,7 @@ Gtk.queue {
 	end
 
 	window.keep_above = true if setting_keep_above
+	window.set_decorated(false) if setting_borderless
 
 	start = true
 }
@@ -630,21 +653,19 @@ Gtk.queue {
 before_dying {
 	window_position = window_width = window_height = nil
 	Gtk.queue {
+		window.set_decorated(true) # otherwise window.position returns bad data (at least on windows 8)
 		window_position = window.position
 		window_width = window.allocation.width
 		window_height = window.allocation.height
 	}
-	300.times {
-		sleep 0.01
-		break unless window_height.nil?
-	}
+	sleep 0.01 while window_height.nil?
 	Gtk.queue { window.destroy }
-	unless window_height.nil?
-		Settings['window_position'] = window_position if (window_position.class == Array) and (window_position[0].to_i > 0) and (window_position[1].to_i > 0)
-		Settings['window_width'] = window_width if (window_width.class == Fixnum) and (window_width > 100)
-		Settings['window_height'] = window_height if (window_height.class == Fixnum) and (window_height > 100)
-	end
+	Settings['window_position'] = window_position if (window_position.class == Array) and (window_position[0].to_i > 0) and (window_position[1].to_i > 0)
+	Settings['window_width'] = window_width if (window_width.class == Fixnum) and (window_width > 100)
+	Settings['window_height'] = window_height if (window_height.class == Fixnum) and (window_height > 100)
 	Settings['keep_above'] = setting_keep_above
+	Settings['borderless'] = setting_borderless
+	Settings['hide_scrollbars'] = setting_hide_scrollbars
 	Settings['global_scale'] = global_scale
 	Settings['map_scale'] = map_scale
 	Settings.save

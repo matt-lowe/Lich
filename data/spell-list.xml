@@ -79,7 +79,7 @@
    <spell availability='all' name='Unpoison' number='114' type='utility'>
       <cost type='mana'>14</cost>
    </spell>
-   <spell availability='self-cast' name='Fasthr&apos;s Reward' number='115' type='defense'>
+   <spell availability='all' name='Fasthr&apos;s Reward' number='115' type='defense'>
       <duration cast-type='self' span='stackable' multicastable='yes'>20 + Spells.minorspiritual</duration>
       <duration cast-type='target'>2</duration>
       <cost type='mana'>15</cost>
@@ -103,7 +103,7 @@
    <spell availability='all' name='Spirit Dispel' number='119' type='attack/utility'>
       <cost type='mana'>19</cost>
    </spell>
-   <spell availability='self-cast' name='Lesser Shroud' number='120' type='defense'>
+   <spell availability='all' name='Lesser Shroud' number='120' type='defense'>
       <duration cast-type='self' span='stackable' multicastable='yes'>20 + Spells.minorspiritual</duration>
       <duration cast-type='target' span='refreshable'>2</duration>
       <cost type='mana'>20 + (([[Spells.minorspiritual,Stats.level].min - 20,0].max) / 6.0).round</cost>
@@ -273,7 +273,7 @@
    <spell availability='all' name='Prayer of Protection' number='303' type='defense'>
       <duration cast-type='self' span='stackable' multicastable='yes'>20 + Spells.cleric</duration>
       <duration cast-type='target' span='refreshable'>2</duration>
-      <cost type='mana'>3 + (([Spells.cleric,Stats.level].min - 3) / 6)</cost>
+      <cost type='mana'>3 + [(([Spells.cleric,Stats.level].min - 3) / 6),0].max</cost>
       <bonus type='bolt-ds'>[10+(([Spells.cleric,Stats.level].min - 3)/2),10].max</bonus>
       <bonus type='physical-ds'>[10+(([Spells.cleric,Stats.level].min - 3)/2),10].max</bonus>
       <message type='start'>A pure white aura sparkles around you\.</message>
@@ -387,9 +387,9 @@
       <message type='end'>The silvery luminescence fades from around you\.</message>
    </spell>
    <spell availability='self-cast' name='Presence' number='402' type='utility'>
-      <duration span='stackable'>Stats.level / 30.0</duration>
+      <duration span='refreshable' max='5'>5</duration>
       <cost type='mana'>2</cost>
-      <message type='start'>You become aware of everyone near you\.\.\.</message>
+      <message type='start'>You continue to feel much more aware of your surroundings\.</message>
       <message type='end'>Your senses are no longer as sharp\.</message>
    </spell>
    <spell availability='all' name='Lock Pick Enhancement' number='403' type='utility'>
@@ -493,14 +493,13 @@
    <spell availability='all' name='Major Elemental Wave' number='435' type='attack/area' incant='no'>
       <cost type='mana'>35</cost>
    </spell>
+   <spell availability='all' name='Mana Focus Water Bonus' number='499' type='utility'>
+   </spell>
    <spell availability='all' name='Sleep' number='501' type='attack'>
       <cost type='mana'>1</cost>
    </spell>
-   <spell availability='all' name='Spell Store' number='502' type='utility'>
-      <duration span='stackable'>1</duration>
+   <spell availability='all' name='Chromatic Circle' number='502' type='attack'>
       <cost type='mana'>2</cost>
-      <message type='start'>\(If you prepare a spell in the next 30 seconds, it will be stored\.\)</message>
-      <message type='end'>You feel the extended magical retention flee from you\.</message>
    </spell>
    <spell availability='all' name='Thurfel&apos;s Ward' number='503' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.majorelemental</duration>
@@ -517,11 +516,11 @@
    <spell availability='all' name='Hand of Tonis' number='505' stance='yes' type='attack'>
       <cost type='mana'>5</cost>
    </spell>
-   <spell availability='all' name='Haste' number='506' type='utility'>
-      <duration>((((2*(Skills.elair+6)+0.25)**0.5 - 3.5).floor*2)+60)/60.0</duration>
+   <spell availability='all' name='Celerity' number='506' type='utility'>
+      <duration span='refreshable'>1</duration>
       <cost type='mana'>6</cost>
-      <message type='start'>You begin to notice the world slow down around you\.  Strange\.</message>
-      <message type='end'>You notice that things have returned to their normal speed\.</message>
+      <message type='start'>You (?:and your group )?suddenly start moving light\-footedly\.</message>
+      <message type='end'>You suddenly feel less light\-footed\.</message>
    </spell>
    <spell availability='self-cast' name='Elemental Deflection' number='507' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.majorelemental</duration>
@@ -570,9 +569,9 @@
       <cost type='mana'>14</cost>
    </spell>
    <spell availability='all' name='Rapid Fire' number='515' type='utility'>
-      <duration span='stackable'>1</duration>
+      <duration>1</duration>
       <cost type='mana'>15</cost>
-      <message type='start'>\(Your next spell will be re-prepared upon its casting\.\)</message>
+      <message type='start'>You feel the magic surge through you\.</message>
       <message type='end'>You feel the surge of magic depart\.</message>
    </spell>
    <spell availability='all' name='Mana Leech' number='516' type='attack/utility'>
@@ -587,11 +586,12 @@
    <spell availability='all' name='Immolation' number='519' type='attack'>
       <cost type='mana'>19</cost>
    </spell>
-   <spell availability='self-cast' name='Stone Skin' number='520' type='defense'>
-      <duration span='stackable' multicastable='yes'>20 + Spells.majorelemental</duration>
+   <spell availability='self-cast' name='Mage Armor' number='520' type='defense'>
+      <duration span='stackable' multicastable='yes'>20 + [Spells.majorelemental,Stats.level].min</duration>
       <cost type='mana'>20</cost>
-      <message type='start'>A layer of .*?, shifting stone forms around you\.</message>
-      <message type='end'>The layer of stone surrounding you crumbles away\.</message>
+      <cast-proc>if defined?(target) and not target.nil?; cmd = &quot;incant 520 #{target}&quot;; else; cmd=&quot;incant 520 #{UserVars.element}&quot;; end; dothistimeout(&apos;release&apos;, 5, /^You feel the magic of your spell rush away from you\.$|^You don&apos;t have a prepared spell to release!$/) if (checkprep != &apos;Mage Armor&apos;) and (checkprep != &apos;None&apos;); dothistimeout(cmd, 5, /^A layer of raw elemental energy forms around you|^You already have a different spell readied|^Cast Roundtime [0-9]+ Seconds?\.|^But you don&apos;t have any mana!|^\[Spell Hindrance for|keeps? the spell from working\.|^As you focus on your magic, your vision swims with a swirling haze of crimson\.|^Your magic fizzles ineffectually\.|^All you manage to do is cough up some blood\.|^And give yourself away!  Never!|^You are unable to do that right now\.|^You don&apos;t seem to be able to move to do that\.|^You can&apos;t think clearly enough to prepare a spell!/)</cast-proc>
+      <message type='start'>A layer of raw elemental energy forms around you\.</message>
+      <message type='end'>The layer of raw elemental energy surrounding you dissipates\.</message>
    </spell>
    <spell availability='all' name='Meteor Swarm' number='525' type='attack' incant='no'>
       <cost type='mana'>25</cost>
@@ -599,11 +599,31 @@
    <spell availability='all' name='Elemental Disjunction' number='530' type='attack'>
       <cost type='mana'>30</cost>
    </spell>
+    <spell availability='self-cast' name='Haste' number='535' type='utility'>
+      <duration span='stackable'>20 + [Spells.majorelemental, Stats.level].min</duration>
+      <cost type='mana'>35</cost>
+      <message type='start'>You begin to notice the world slow down around you\.  Strange\.</message>
+      <message type='start'>The world stutters around you for a moment, then resumes its slower speed\.</message>
+      <message type='end'>You notice that things have returned to their normal speed\.</message>
+   </spell>
    <spell availability='self-cast' name='Temporal Reversion' number='540' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.majorelemental</duration>
       <cost type='mana'>40</cost>
       <message type='start'>For a moment, everything you hear and see echoes weirdly around you, but then everything seems normal again\.  Your personal temporal reality has been slightly offset from the true flow of time\.</message>
       <message type='end'>Abruptly, everything you see and hear comes into better focus\.  Your personal temporal reality has rejoined the true flow of time\.</message>
+   </spell>
+  <spell availability='self-cast' name='Rapid Fire Penalty' number='597' type='timer'>
+      <duration>1</duration>
+      <message type='start'>You feel the magic surge through you, but the feeling of fatigue lingers\.</message>
+   </spell>
+  <spell availability='self-cast' name='Celerity Recovery' number='598'>
+      <duration>3</duration>
+      <message type='start'>You suddenly feel less light\-footed and your feet take on a leaden quality\.</message>
+      <message type='end'>The leaden quality leaves your feet\.</message>
+  </spell>
+  <spell availability='self-cast' name='Rapid Fire Recovery' number='599'>
+      <duration>if Skills.emc >= 199; 0; else; 1 + (((90 - (Skills.emc/2.2)).ceil + 1) / 60.0); end</duration>
+      <message type='end'>You notice the feeling of elemental fatigue fade away\.</message>
    </spell>
    <spell availability='self-cast' name='Natural Colors' number='601' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.ranger</duration>
@@ -746,7 +766,10 @@
       <message type='end'>The blood red haze dissipates from around you\.</message>
    </spell>
    <spell availability='all' name='Phase' number='704' type='utility'>
+      <duration span='stackable' multicastable='yes'>20 + Spells.sorcerer</duration>
       <cost type='mana'>4</cost>
+      <message type='start'>A wave of tingling passes across your body, momentarily casting it into semi-transparency\.</message>
+      <message type='end'>Your body pulses momentarily into semi transparency and then returns to normal\.</message>
    </spell>
    <spell availability='all' channel='yes' name='Disintegrate' number='705' type='attack'>
       <cost type='mana'>5</cost>
@@ -755,7 +778,7 @@
       <cost type='mana'>6</cost>
    </spell>
    <spell availability='all' name='Eye Spy' number='707' type='utility'>
-      <duration span='refreshable'>10 + (Spells.sorcerer/2.0)</duration>
+      <duration span='refreshable'>19 + Spells.sorcerer</duration>
       <cost type='mana'>7</cost>
       <message type='start'>Casually you push your finger into your eye socket and cup it around the throbbing eyeball\.  With a little leverage you pop the eye from your skull and watch as it sprouts little batlike wings and begins to hover before you\.</message>
       <message type='end'>You hear a soft hiss as your wandering eye rushes towards you\.  You reach out and catch the squishy globe and quickly press it back into your eye socket\.  After a few blinks it seems to seat itself properly\.  You wipe off some gooey red residue with your sleeve, and feel yourself once again presentable\.</message>
@@ -774,7 +797,7 @@
    </spell>
    <spell availability='self-cast' name='Cloak of Shadows' number='712' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.sorcerer</duration>
-      <cost type='mana'>12 + (([Spells.sorcerer,Stats.level].min - 12) / 3)</cost>
+      <cost type='mana'>12 + [(([Spells.sorcerer,Stats.level].min - 12) / 3),0].max</cost>
       <bonus type='bolt-ds'>[25+([Spells.sorcerer,Stats.level].min-12),25].max</bonus>
       <bonus type='physical-ds'>[25+([Spells.sorcerer,Stats.level].min-12),25].max</bonus>
       <bonus type='elemental-td'>([20+(([Spells.sorcerer,Stats.level].min-12)/10),20].max*0.75).to_i</bonus>
@@ -792,8 +815,11 @@
    <spell availability='all' name='Curse' number='715' type='attack'>
       <cost type='mana'>15</cost>
    </spell>
-   <spell availability='all' name='Disease' number='716' type='attack'>
+   <spell availability='self-cast' name='Pestilence' number='716' type='defense'>
+      <duration span='stackable' multicastable='yes'>20 + Spells.sorcerer</duration>
       <cost type='mana'>16</cost>
+      <message type='start'>A cankerous ripple of vesicles temporarily disfigures your face and travels down your body, leaving a sickly green miasma as it disappears\.</message>
+      <message type='end'>You exhale the last of a virulent green mist\.</message>
    </spell>
    <spell availability='all' name='Evil Eye' number='717' type='attack' incant='no'>
       <cost type='mana'>17</cost>
@@ -820,7 +846,7 @@
       <message type='start'>You glide your hand over .+, leaving rippling motes of color in the wake of your hand as you attempt to strengthen the flows of essence around .+\.  You sense a pulse as the motes disappear within .+, revitalizing the .+ into an impeccable illusion\.</message>
       <message type='end'>Droplets of inky black ichor begin to drip down from .+ and pool underneath as the veil of an illusion peels back\.  The visage of .+ begins to distort and reveals behind it .+\.  As the last droplet \*plops\* into the pool, it dissolves into mist that .+\.</message>
    </spell>
-   <spell availability='all' name='Animate Dead' number='730' type='attack'>
+   <spell availability='all' name='Animate Dead' number='730' type='utility'>
       <cost type='mana'>30</cost>
    </spell>
    <spell availability='all' name='Ensorcell' number='735' type='utility'>
@@ -843,9 +869,9 @@
    </spell>
    <spell availability='self-cast' name='Prismatic Guard' number='905' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.wizard</duration>
-      <cost type='mana'>5 + (([Spells.wizard,Stats.level].min - 5) / 12.0).round</cost>
-      <bonus type='bolt-ds'>[20+((Spells.wizard-5)/4),20].max</bonus>
-      <bonus type='physical-ds'>[5+((Spells.wizard-5)/4),5].max</bonus>
+      <cost type='mana'>bonus=0;[5,11,18,26,35,45,56,68,81,95,110,126,143,161,180,200,221,243].each { |n| bonus += 1 if Skills.elearth &gt;= n };5 + (((([Spells.wizard,Stats.level].min - 5) / 4.0).floor + bonus)/3.0).floor</cost>
+      <bonus type='bolt-ds'>bonus=0;[5,11,18,26,35,45,56,68,81,95,110,126,143,161,180,200,221,243].each { |n| bonus += 1 if Skills.elearth &gt;= n };[20+((Spells.wizard-5)/4),20].max + bonus</bonus>
+      <bonus type='physical-ds'>bonus=0;bonus=0;[5,11,18,26,35,45,56,68,81,95,110,126,143,161,180,200,221,243].each { |n| bonus += 1 if Skills.elearth &gt;= n };[5+((Spells.wizard-5)/4),5].max + bonus</bonus>
       <message type='start'>Multicolored rays shoot out of your body and flow into (?:the|a) shimmering sphere around you\.</message>
       <message type='end'>The shimmering multicolored sphere fades from around you\.</message>
    </spell>
@@ -858,8 +884,11 @@
    <spell availability='all' name='Major Fire' number='908' stance='yes' type='attack'>
       <cost type='mana'>8</cost>
    </spell>
-   <spell availability='all' name='Tremors' number='909' type='attack/area' incant='no'>
+   <spell availability='all' name='Tremors' number='909' type='attack/area/utility' incant='no'>
+      <duration span='refreshable' multicastable='no'>20 + Spells.wizard</duration>
       <cost type='mana'>9</cost>
+      <message type='start'>Faint ripples in the (?:ground|dirt) form beneath you for a moment\.</message>
+      <message type='end'>Faint ripples in the (?:ground|dirt) beneath you become apparent before quickly dissipating\.</message>
    </spell>
    <spell availability='all' name='Major Shock' number='910' stance='yes' type='attack'>
       <cost type='mana'>10</cost>
@@ -897,6 +926,7 @@
       <cost type='mana'>16</cost>
       <message type='start'>You become invisible\.</message>
       <message type='start'>Your invisibility is extended\.</message>
+      <message type='start'>You refresh your invisibility\.</message>
       <message type='end'>You (become|are) visible again\.</message>
       <message type='end'>You fade into (?:view|sight|visibility)(\.| and strike!)</message>
       <message type='end'>Your invisibili?ty (falls\.|fails\.|has been dispelled!)</message>
@@ -935,6 +965,24 @@
    <spell availability='all' name='Familiar Gate' number='930' type='utility'>
       <cost type='mana'>30</cost>
    </spell>
+   <spell availability='all' name='Core Tap' number='950' type='attack'>
+      <cost type='mana'>50</cost>
+   </spell>
+   <spell availability='self-cast' name='Core Tap Recovery (1 Charge)' number='996'>
+      <duration>1</duration>
+   </spell>
+   <spell availability='self-cast' name='Core Tap Recovery (2 Charges)' number='997'>
+      <duration>s = Spell['Core Tap Recovery (1 Charge)'];s.timeleft &gt; 0.0 ? s.timeleft : 1</duration>
+   </spell>
+   <spell availability='self-cast' name='Core Tap Recovery (3 Charges)' number='998'>
+      <duration>s = Spell['Core Tap Recovery (2 Charges)'];s.timeleft &gt; 0.0 ? s.timeleft : 1</duration>
+   </spell>
+   <spell availability='self-cast' name='Core Tap Recovery' number='999'>
+      <duration>if which = ['3 Charges','2 Charges','1 Charge'].find { |w| Spell["Core Tap Recovery (#{w})"].timeleft > 0 }; Spell["Core Tap Recovery (#{which})"].timeleft; else; 1; end</duration>
+      <message type='start'>Tapping into the elemental core of Elanthia, you seize part of its energy\.  Swirling ribbons of fiery red, deep blue, earthen brown, and airy white energy rise up from the (?:floor|ground) and surround you\.  They linger for a brief moment, then explode into a shower of sparks!</message>
+      <message type='start'>You are too exhausted to cast Core Tap right now\.</message>
+      <message type='end'>Your exhaustion from tapping into the elemental core fades\.</message>
+   </spell> 
    <spell availability='all' name='Holding Song' number='1001' type='attack'>
       <cost type='mana'>1</cost>
    </spell>
@@ -982,7 +1030,7 @@
       <bonus type='bolt-ds'>[10+(Spells.bard/2.0).round,35].min</bonus>
       <bonus type='physical-ds'>[10+(Spells.bard/2.0).round,35].min</bonus>
       <message type='start'>You begin singing and focus your voice into a vortex of air centered on your left arm\.</message>
-      <message type='end'>Your(?: sonic)? (?:buckler|kidney|small|targe|heater|knight&apos;s|lantern|medium|parma|target|aegis|kite|large|pageant|round|scutum|greatshield|mantlet|pavis|tower|wall|shield)?(?:\sshield)? dissipates\.</message>
+      <message type='end'>Your(?: sonic)? (?:buckler|kidney|small|targe|heater|knight&apos;s|lantern|medium|parma|target|aegis|kite|large|pageant|round|scutum|greatshield|mantlet|pavis|tower|wall|shield|translucent)?(?:\sshield)? dissipates\.</message>
    </spell>
    <spell availability='self-cast' name='Song of Valor' number='1010' type='defense'>
       <duration>Spellsong.timeleft</duration>
@@ -1096,7 +1144,7 @@
    </spell>
    <spell availability='self-cast' name='Empathic Focus' number='1109' type='offense/defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.empath</duration>
-      <cost type='mana'>9 + (([Spells.empath,Stats.level].min - 9) / 6.0).round</cost>
+      <cost type='mana'>9 + [(([Spells.empath,Stats.level].min - 9) / 6.0).round,0].max</cost>
       <bonus type='physical-as'>15</bonus>
       <bonus type='bolt-ds'>[25+(([Stats.level,Spells.empath].min-9)/2),25].max</bonus>
       <bonus type='physical-ds'>[25+(([Stats.level,Spells.empath].min-9)/2),25].max</bonus>
@@ -1354,6 +1402,7 @@
       <cost type='mana'>18</cost>
       <bonus type='physical-ds'>15+(bonus = 0; [6,13,21,30,40].each { |n| bonus += 1 if Skills.slblessings &gt;= n }; bonus)</bonus>
       <message type='start'>Memories of thousands of past battles momentarily occupy your thoughts, depicting the execution of perfect formations with a single Paladin leading the way\.</message>
+      <message type='start'>You rise to the forefront with a bolstered sense of defense.</message>
       <message type='end'>Your bolstered defenses fade with the soft glow about you\.</message>
    </spell>
    <spell availability='all' name='Aura of the Arkati' number='1614' type='attack'>
@@ -1379,7 +1428,7 @@
       <message type='end'>You feel less resolved as the divine urging subsides, fading into obscurity\.</message>
    </spell>
    <spell availability='group' name='Crusade' number='1618' type='offense'>
-      <duration>3</duration>
+      <duration>1</duration>
       <cost type='mana'>18</cost>
       <message type='start'>You utter a pious chant and a divine force suddenly radiates around you\.  The intensity of your patron's aid billows out from you in a wave of righteous indignation\!</message>
       <message type='end'>You feel your spiritual strength return as you are ready to continue on your crusade\.</message>
@@ -1470,6 +1519,13 @@
       <message type='start'>The time left until you decay should never match any game line; it&apos;s specifically handled by infomonitor.lic in order to get the duration and effects right\.  So unless it\&apos;s malfunctioning, don\&apos;t change this\.</message>
       <message type='end'>The time left until you decay should never match any game line; it&apos;s specifically handled by infomonitor.lic in order to get the duration and effects right\.  So unless it\&apos;s malfunctioning, don\&apos;t change this\.</message>
    </spell>
+   <spell availability='self-cast' name='Tortoise Stance' number='9401' type='defense'>
+      <duration>240</duration>
+      <cost type='stamina'>20</cost>
+      <message type='start'>You (?:assume|re-settle into) the Stance of the Tortoise, holding back your offensive power in order to maximize your defense\.</message>
+      <message type='end'>You relax from your continuous efforts to maximize your defense\.</message>
+      <cast-proc>fput &quot;shield tortoise&quot;</cast-proc>
+   </spell>
    <spell availability='all' name='Slash Protection' number='9501' type='defense'>
       <duration>240</duration>
    </spell>
@@ -1522,7 +1578,7 @@
    <spell availability='self-cast' name='Shadow Mastery' number='9603' type='utility'>
       <duration>3.13</duration>
       <cost type='stamina'>if Spell[9604].active? then 60 else 20 end</cost>
-      <cast-proc>dothistimeout &apos;cman smastery&apos;, 3, /^You focus your mind on the shadows and gird your body for stealth\.$|^Your muscles ache much too badly to even think about attempting this maneuver\.$/</cast-proc>
+      <cast-proc>dothistimeout &apos;cman smastery&apos;, 3, /^You focus your mind on the shadows and gird your body for stealth\.(?:  You find maintaining this mindset to be exceptionally tiring\.)?$|^Your muscles ache much too badly to even think about attempting this maneuver\.$/</cast-proc>
       <message type='start'>You focus your mind on the shadows and gird your body for stealth\.(?:  You find maintaining this mindset to be exceptionally tiring\.)?</message>
       <message type='end'>Your body relaxes as your thoughts stray from the shadows\.</message>
    </spell>
@@ -1591,6 +1647,21 @@
       <message type='start'>You prepare yourself to move swiftly at a moment&apos;s notice.*</message>
       <message type='end'>You feel less prepared to move as swiftly as before\.</message>
    </spell>
+   <spell availability='self-cast' name='Ki Focus' number='9626' type='offense'>
+      <duration>1.0</duration>
+      <cost type='stamina'>20+5+5</cost> <!-- fixme: rank dependent cost but no CMan.kifocus in lich.rb -->
+      <cast-proc>dothistimeout &apos;cman kifocus&apos;, 3, /^You summon your inner ki|^You have already summoned your inner ki/</cast-proc>
+      <message type='start'>You summon your inner ki and focus it to enhance your next attack\.</message>
+      <message type='start'>You have already summoned your inner ki and are ready for a devastating attack\.</message>
+      <message type='end'>You lose the intense focus of your ki energy\.</message>
+   </spell>
+   <spell availability='self-cast' name='Duck and Weave' number='9627' type='utility'>
+      <duration span='refreshable'>0.5</duration>
+      <cost type='stamina'>(if Spell[9052].active?; 90; else; 30; end)*((Spell[1213].active? and defined?(Spell[1213].stamina_reduction)) ? (1-(Spell[1213].stamina_reduction/100.0)) : 1)</cost>
+      <cast-proc>dothistimeout &apos;cman weave&apos;, 3, /^You balance your posture and narrow your eyes, preparing to misdirect your foes' attacks\.$|^Your muscles ache much too badly to even think about attempting this maneuver\.$/</cast-proc>
+      <message type='start'>You balance your posture and narrow your eyes, preparing to misdirect your foes' attacks\.</message>
+      <message type='end'>You relax your posture and blink to clear your eyes\.</message>
+   </spell>
    <spell availability='self-cast' name='POPed muscles' number='9699'>
       <duration>10.5</duration>
       <message type='start'>You hear a loud \*POP\* come from your muscles!</message>
@@ -1614,7 +1685,7 @@
       <cost type='stamina'>5</cost>
       <cast-proc>dothistimeout &apos;sigil of resolve&apos;, 3, /^You experience a momentary flash of insight on how to best overcome nature&apos;s obstacles\.$|^Your muscles ache much too badly to even think about attempting this maneuver\.$|^The power from your sigil dissipates into the air\.$/</cast-proc>
       <message type='start'>You experience a momentary flash of insight on how to best overcome nature&apos;s obstacles\.</message>
-      <message type='end'>The dull golden nimbus fades from around you\.</message>
+      <message type='end'>You feel your added insight slip away\.</message>
    </spell>
    <spell availability='self-cast' name='Sigil of Minor Bane' number='9705' type='offense'>
       <duration>1</duration>
@@ -1863,7 +1934,7 @@
       <cast-proc>dothistimeout &apos;sign of striking&apos;, 3, /^You (?:flex your muscles|grip your .*?) with renewed vigor!$|^Repeating the sign has no effect!$|^Your punishment does not end for another [0-9]+ minutes?\.$|^The power from your sign dissipates into the air\.$|^You realize your powers would be useless here, and cease your action\.$|^I don&apos;t think so\.$/</cast-proc>
       <bonus type='bolt-as'>5</bonus>
       <bonus type='physical-as'>5</bonus>
-      <message type='start'>You (?:grip|flex) your [\w\s]+ with renewed vigor!</message>
+      <message type='start'>You (?:grip|flex) your [\w\s']+ with renewed vigor!</message>
       <message type='end'>Your SIGN OF STRIKING is no longer effective\.</message>
    </spell>
    <spell availability='self-cast' name='Sign of Clotting' number='9905' type='utility'>
@@ -1893,7 +1964,7 @@
       <cast-proc>dothistimeout &apos;sign of smiting&apos;, 3, /^You (?:flex your muscles|grip your .*?) with renewed vigor!$|^Repeating the sign has no effect!$|^Your punishment does not end for another [0-9]+ minutes?\.$|^The power from your sign dissipates into the air\.$|^You realize your powers would be useless here, and cease your action\.$|^I don&apos;t think so\.$/</cast-proc>
       <bonus type='bolt-as'>10</bonus>
       <bonus type='physical-as'>10</bonus>
-      <message type='start'>You (?:grip|flex) your [\w\s]+ with renewed vigor!</message>
+      <message type='start'>You (?:grip|flex) your [\w\s']+ with renewed vigor!</message>
       <message type='end'>Your SIGN OF SMITING is no longer effective\.</message>
    </spell>
    <spell availability='self-cast' name='Sign of Staunching' number='9909' type='utility'>
@@ -1921,7 +1992,7 @@
       <cast-proc>dothistimeout &apos;sign of swords&apos;, 3, /^You (?:flex your muscles|grip your .*?) with renewed vigor!$|^Repeating the sign has no effect!$|^Your punishment does not end for another [0-9]+ minutes?\.$|^The power from your sign dissipates into the air\.$|^You realize your powers would be useless here, and cease your action\.$|^I don&apos;t think so\.$/</cast-proc>
       <bonus type='bolt-as'>20</bonus>
       <bonus type='physical-as'>20</bonus>
-      <message type='start'>You (?:grip|flex) your [\w\s]+ with renewed vigor!</message>
+      <message type='start'>You (?:grip|flex) your [\w\s']+ with renewed vigor!</message>
       <message type='end'>Your SIGN OF SWORDS is no longer effective\.</message>
    </spell>
    <spell availability='self-cast' name='Sign of Shields' number='9913' type='defense'>
@@ -2008,7 +2079,7 @@
       <message type='end'>The feeling of weakness fades from you\. You feel ripe to transfer spirit once again\.</message>
    </spell>
    <spell availability='all' name='Sacrifice Cooldown' number='9008' type='timer'>
-      <duration>20</duration>
+      <duration>10.0 - ([Skills.slnecromancy, 120].min * 2)/60.0 - ([[(Skills.slnecromancy - 120), 0].max, 80].min * 0.75)/60.0 - ([(Skills.slnecromancy - 200), 0].max * 1.5)/60.0</duration>
       <message type='start'>Your senses tingle, then become awash in a flood of power as the life leaves your hapless foe!</message>
       <message type='end'>You feel refreshed enough to sacrifice another animus\.</message>
    </spell>
@@ -2194,6 +2265,14 @@
    <spell availability='self-cast' name='AA: Spider Cooldown' number='9041' type='timer'>
       <duration>4</duration>
    </spell>
+   <spell availability='all' name='Meditation' number='9075' type='timer'>
+      <duration>12</duration>
+      <message type='start'>You (?:kneel down and |kneel and )?begin to meditate on your lot in life\.</message>
+      <message type='end'>Your action interrupts your meditation\.</message>
+      <message type='end'>Your meditation is interrupted by .+\.</message>
+      <message type='end'>The lingering effects of your meditation fade away\.</message>
+   </spell>
+<!--
    <spell availability='all' name='Pre-Meditate' number='9042' type='timer'>
       <duration>2</duration>
       <message type='start'>You kneel (?:down )?and begin to meditate on your lot in life\.</message>
@@ -2205,6 +2284,7 @@
       <message type='start'>You wake from your meditation, yet a deep feeling of relaxation remains present\.</message>
       <message type='end'>The lingering effects of your meditation fade away\.</message>
    </spell>
+-->
    <spell availability='all' name='Miracle Cooldown' number='9044' type='timer'>
       <duration max='1440.0' persist-on-death='yes' real-time='yes'>dur = 1440; [ 4, 9, 15, 22, 30, 39, 49, 60, 72, 85, 99, 114, 130, 147, 165, 184 ].each { |num| dur -= 60 if Skills.slreligion &gt;= num }; dur</duration>
       <message type='start'>Spidery and incomprehensible words reach you, and are given life by an aged, bodiless voice that carries with it the scent of dusty tomes and candle tallow\.  A point of dark light appears high over your body and expands to form a yellowed eye with a slit pupil\.  With each uttered syllable the eye&apos;s iris contracts and the meaning of the words that wrap you become clear\.  &quot;You still have much more to learn,&quot; they say, and before you the eye explodes in a blinding, fiery light\.</message>
@@ -2283,14 +2363,110 @@
       <duration max='1440.0' persist-on-death='yes' real-time='yes'>1440</duration>
       <message type='start'>When the air around you settles and your mind calms, you realize that your very existence has been catapulted into the past\.  The sand in the hourglass is now in the upper bulb, trickling slowly into the lower chamber\.</message>
    </spell>
-   <spell availability='all' name='Crusade Recovery' number='9059' type='timer'>
-      <duration max='2.0' persist-on-death='yes' real-time='yes'>2</duration>
-      <message type='start'>The divine force surrounding you slowly fades away\.</message>
-      <message type='end'>You feel your spiritual strength return as you are ready to continue on your crusade\.</message>
+   <spell availability='self-cast' name='Meditative Resistance (acid)' number='9060' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (acidic) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
    </spell>
-   <spell availability='self-cast' name='Mana Leech Cooldown' number='9516' type='timer'>
+   <spell availability='self-cast' name='Meditative Resistance (cold)' number='9061' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (freezing) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (crush)' number='9062' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (crushing) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (disintegration)' number='9063' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (disintegrating) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (disruption)' number='9064' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (disruptive) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (electrical)' number='9065' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (electrical) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (grapple)' number='9066' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (grappling) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (fire)' number='9067' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (burning) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (impact)' number='9068' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (impacting) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (plasma)' number='9069' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (plasmatic) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (puncture)' number='9070' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (puncturing) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (slash)' number='9071' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (slashing) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (steam)' number='9072' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (scalding) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (unbalance)' number='9073' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (unbalancing) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Meditative Resistance (vacuum)' number='9074' type='defense'>
+      <duration persist-on-death='no' span='refreshable'>250</duration>
+      <message type='start'>You assume a meditative posture, .+ (decompressing) .+\.</message>
+      <message type='end'>Your concentration slips, and you no longer feel prepared to resist \w+ damage.</message>
+      <message type='end'>You cease concentrating on your preparations to resist \w+ damage.</message>
+   </spell>
+   <spell availability='self-cast' name='Major Loot Boost' number='9100' type='utility'>
+      <duration persist-on-death='yes'>15</duration>
+      <cast-proc>fput &apos;boost loot major&apos;</cast-proc>
+      <message type='start'>\[You have activated a Major Loot Boost\.  Your chances for better LOOT will be boosted for 15 minutes\.\]</message>
+      <message type='end'>\[Your Major Loot Boost has ended\.\]</message>
+   </spell>
+   <spell availability='self-cast' name='Mana Leech Recovery' number='9516' type='timer'>
       <duration persist-on-death='yes' span='stackable'>1</duration>
       <message type='start'>You feel a sudden rush of power as you absorb [0-9]+ mana!</message>
       <message type='end'>You no longer feel the effect of casting mana leech\.</message>
+   </spell>
+  <spell availability='self-cast' name='Duck and Weave Cooldown' number='9052' type='timer'>
+      <duration>5</duration>
+      <message type='start'>You balance your posture and narrow your eyes, preparing to misdirect your foes' attacks\.</message>
+      <message type='end'>Your recent exploits of weaving through your foes' attacks no longer strains your body and mind\.</message>
    </spell>
 </list>
