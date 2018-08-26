@@ -113,7 +113,12 @@ if (XMLData.game =~ /^GS/) and Settings['first-gs-run']
 	Settings['first-gs-run'] = false
 	Settings['updatable'][:scripts].push(:filename => 'infomon.lic', :game => 'gs', :author => 'Tillmen')
 	Settings['updatable'][:scripts].push(:filename => 'spell-list.xml', :game => 'gs', :author => 'Tillmen')
-	Settings['updatable'][:scripts].push(:filename => 'gameobj-data.xml', :game => 'gs', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'gameobj-data.xml', :game => 'gs', :author => 'elanthia-online')
+end
+
+if s = Settings['updatable'][:scripts].find { |s| s[:filename] == 'gameobj-data.xml' && s[:author] == 'Tillmen' }
+  echo "updating ownership of gameobj-data.xml from Tillmen to elanthia-online"
+  s[:author] = 'elanthia-online'
 end
 
 require 'openssl'
