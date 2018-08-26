@@ -113,7 +113,7 @@ if (XMLData.game =~ /^GS/) and Settings['first-gs-run']
 	Settings['first-gs-run'] = false
 	Settings['updatable'][:scripts].push(:filename => 'infomon.lic', :game => 'gs', :author => 'Tillmen')
 	Settings['updatable'][:scripts].push(:filename => 'spell-list.xml', :game => 'gs', :author => 'Tillmen')
-	Settings['updatable'][:scripts].push(:filename => 'gameobj-data.xml', :game => 'gs', :author => 'Tillmen')
+	Settings['updatable'][:scripts].push(:filename => 'gameobj-data.xml', :game => 'gs', :author => 'elanthia-online')
 end
 
 require 'openssl'
