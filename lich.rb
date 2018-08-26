@@ -10568,6 +10568,8 @@ main_thread = Thread.new {
                         launch_data = response.sub(/^L\tOK\t/, '').split("\t")
                         if data[:frontend] == 'wizard'
                            launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+                        elsif data[:frontend] == 'avalon'
+                           launch_data.collect! { |line| line.sub(/GAME=.+/, 'GAME=AVALON') }
                         end
                         if data[:custom_launch]
                            launch_data.push "CUSTOMLAUNCH=#{data[:custom_launch]}"
@@ -10608,7 +10610,7 @@ main_thread = Thread.new {
          $stdout.puts "error: failed to find login data for #{char_name}"
          Lich.log "error: failed to find login data for #{char_name}"
       end
-   elsif defined?(Gtk) and ARGV.empty?
+   elsif defined?(Gtk) and (ARGV.empty? or argv_options[:gui])
       if File.exists?("#{DATA_DIR}/entry.dat")
          entry_data = File.open("#{DATA_DIR}/entry.dat", 'r') { |file|
             begin
@@ -11175,11 +11177,15 @@ main_thread = Thread.new {
 
          wizard_option = Gtk::RadioButton.new('Wizard')
          stormfront_option = Gtk::RadioButton.new(wizard_option, 'Stormfront')
+         avalon_option = Gtk::RadioButton.new(wizard_option, 'Avalon')
          suks_option = Gtk::RadioButton.new(wizard_option, 'suks')
 
          frontend_box = Gtk::HBox.new(false, 10)
          frontend_box.pack_start(wizard_option, false, false, 0)
          frontend_box.pack_start(stormfront_option, false, false, 0)
+         if RUBY_PLATFORM =~ /darwin/i
+            frontend_box.pack_start(avalon_option, false, false, 0)
+         end
          #frontend_box.pack_start(suks_option, false, false, 0)
 
          custom_launch_option = Gtk::CheckButton.new('Custom launch command')
@@ -11215,6 +11221,15 @@ main_thread = Thread.new {
          custom_launch_option.signal_connect('toggled') {
             custom_launch_entry.visible = custom_launch_option.active?
             custom_launch_dir.visible = custom_launch_option.active?
+         }
+
+         avalon_option.signal_connect('toggled') {
+            if avalon_option.active?
+               custom_launch_option.active = false
+               custom_launch_option.sensitive = false
+            else
+               custom_launch_option.sensitive = true
+            end
          }
 
          connect_button.signal_connect('clicked') {
@@ -11342,6 +11357,8 @@ main_thread = Thread.new {
                   login_server.close unless login_server.closed?
                   if wizard_option.active?
                      launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=WIZ") }
+                  elsif avalon_option.active?
+                     launch_data.collect! { |line| line.sub(/GAME=.+/, "GAME=AVALON") }
                   elsif suks_option.active?
                      launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, "GAMEFILE=WIZARD.EXE").sub(/GAME=.+/, "GAME=SUKS") }
                   end
@@ -11354,8 +11371,12 @@ main_thread = Thread.new {
                   if make_quick_option.active?
                      if wizard_option.active?
                         frontend = 'wizard'
-                     else
+                     elsif stormfront_option.active?
                         frontend = 'stormfront'
+                     elsif avalon_option.active?
+                        frontend = 'avalon'
+                     else
+                        frontend = 'unkown'
                      end
                      if custom_launch_option.active?
                         custom_launch = custom_launch_entry.child.text
@@ -11821,6 +11842,8 @@ main_thread = Thread.new {
             Lich.log "error: launch_data contains no KEY info"
             exit(1)
          end
+      elsif game == 'AVALON'
+         launcher_cmd = "open -n -b Avalon \"%1\""
       elsif custom_launch
          unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
             $stdout.puts "error: launch_data contains no KEY info"
@@ -11856,6 +11879,8 @@ main_thread = Thread.new {
             $frontend = 'wizard'
          elsif game =~ /STORM/i
             $frontend = 'stormfront'
+         elsif game =~ /AVALON/i
+            $frontend = 'avalon'
          else
             $frontend = 'unknown'
          end
@@ -11941,7 +11966,7 @@ main_thread = Thread.new {
                   Lich.log "info: launcher_cmd: Win32.ShellExecute(:lpOperation => \"open\", :lpFile => #{file.inspect}, :lpDirectory => #{dir.inspect})"
                   Win32.ShellExecute(:lpOperation => 'open', :lpFile => file, :lpDirectory => dir)
                end
-            elsif defined?(Wine)
+            elsif defined?(Wine) and (game != 'AVALON')
                Lich.log "info: launcher_cmd: #{Wine::BIN} #{launcher_cmd}"
                spawn "#{Wine::BIN} #{launcher_cmd}"
             else
