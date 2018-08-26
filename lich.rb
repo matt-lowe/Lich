@@ -11842,7 +11842,7 @@ main_thread = Thread.new {
             Lich.log "error: launch_data contains no KEY info"
             exit(1)
          end
-      elsif game == 'AVALON'
+      elsif game =~ /AVALON/i
          launcher_cmd = "open -n -b Avalon \"%1\""
       elsif custom_launch
          unless (game_key = launch_data.find { |opt| opt =~ /KEY=/ }) && (game_key = game_key.split('=').last.chomp)
