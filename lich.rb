@@ -1229,7 +1229,7 @@ class StringProc
       Proc
    end
    def call(*a)
-      proc { begin; $SAFE = 3; rescue; nil; end eval(@string) }.call
+      proc { begin; $SAFE = 3; rescue; nil; end; eval(@string) }.call
    end
    def _dump(d=nil)
       @string
