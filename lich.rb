@@ -1229,11 +1229,7 @@ class StringProc
       Proc
    end
    def call(*a)
-      if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
-         proc { $SAFE = 3; eval(@string) }.call
-      else
-         eval(@string)
-      end
+      proc { begin; $SAFE = 3; rescue; nil; end eval(@string) }.call
    end
    def _dump(d=nil)
       @string
@@ -2470,16 +2466,13 @@ class Script
          next nil
       end
       begin
-         can_distrust = proc { begin; $SAFE = 3; true; rescue; false; end }.call
          if file_name =~ /\.(?:cmd|wiz)(?:\.gz)?$/i
-            if can_distrust
-               trusted = false
-            else
-               trusted = true
-            end
+            trusted = false
             script_obj = WizardScript.new("#{SCRIPT_DIR}/#{file_name}", script_args)
          else
-            if can_distrust
+            if script_obj.labels.length > 1
+               trusted = false
+            elsif proc { begin; $SAFE = 3; true; rescue; false; end }.call
                begin
                   trusted = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
                rescue SQLite3::BusyException
@@ -2491,10 +2484,10 @@ class Script
             end
             script_obj = Script.new(:file => "#{SCRIPT_DIR}/#{file_name}", :args => script_args, :quiet => options[:quiet])
          end
-         if not trusted or (script_obj.labels.length > 1 and can_distrust)
-            script_binding = Scripting.new.script
-         else
+         if trusted
             script_binding = TRUSTED_SCRIPT_BINDING.call
+         else
+            script_binding = Scripting.new.script
          end
       rescue
          respond "--- Lich: error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
@@ -2557,7 +2550,7 @@ class Script
             else
                begin
                   while (script = Script.current) and script.current_label
-                     proc { foo = script.labels[script.current_label]; foo.untaint; $SAFE = 3; eval(foo, script_binding, script.name, 1) }.call
+                     proc { foo = script.labels[script.current_label]; foo.untaint; begin; $SAFE = 3; rescue; nil; end; eval(foo, script_binding, script.name, 1) }.call
                      Script.current.get_next_label
                   end
                rescue SystemExit
@@ -8005,11 +7998,7 @@ module Games
             if options[:line]
                line = options[:line]
             end
-            if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
-               proc { $SAFE = 3; eval(formula) }.call.to_f
-            else
-               eval(formula).to_f
-            end
+            proc { begin; $SAFE = 3; rescue; nil; end; eval(formula) }.call.to_f
          end
          def timeleft=(val)
             @timeleft = val
@@ -8314,11 +8303,7 @@ module Games
                      return false
                   end
                   begin
-                     if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
-                        proc { $SAFE = 3; eval(@cast_proc) }.call
-                     else
-                        eval(@cast_proc)
-                     end
+                     proc { begin; $SAFE = 3; rescue; nil; end; eval(@cast_proc) }.call
                   rescue
                      echo "cast: error: #{$!}"
                      respond $!.backtrace[0..2]
@@ -8440,11 +8425,7 @@ module Games
          def method_missing(*args)
             if @@bonus_list.include?(args[0].to_s.gsub('_', '-'))
                if @bonus[args[0].to_s.gsub('_', '-')]
-                  if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
-                     proc { $SAFE = 3; eval(@bonus[args[0].to_s.gsub('_', '-')]) }.call.to_i
-                  else
-                     eval(@bonus[args[0].to_s.gsub('_', '-')]).to_i
-                  end
+                  proc { begin; $SAFE = 3; rescue; nil; end; eval(@bonus[args[0].to_s.gsub('_', '-')]) }.call.to_i
                else
                   0
                end
@@ -8478,11 +8459,7 @@ module Games
                else
                   if formula
                      formula.untaint if formula.tainted?
-                     if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
-                        proc { $SAFE = 3; eval(formula) }.call.to_i
-                     else
-                        eval(formula).to_i
-                     end
+                     proc { begin; $SAFE = 3; rescue; nil; end; eval(formula) }.call.to_i
                   else
                      0
                   end
