@@ -660,7 +660,9 @@ module Lich
          Lich.db.execute("CREATE TABLE IF NOT EXISTS script_auto_settings (script TEXT NOT NULL, scope TEXT, hash BLOB, PRIMARY KEY(script, scope));")
          Lich.db.execute("CREATE TABLE IF NOT EXISTS lich_settings (name TEXT NOT NULL, value TEXT, PRIMARY KEY(name));")
          Lich.db.execute("CREATE TABLE IF NOT EXISTS uservars (scope TEXT NOT NULL, hash BLOB, PRIMARY KEY(scope));")
-         Lich.db.execute("CREATE TABLE IF NOT EXISTS trusted_scripts (name TEXT NOT NULL);")
+         if (RUBY_VERSION =~ /^2\.[012]\./)
+            Lich.db.execute("CREATE TABLE IF NOT EXISTS trusted_scripts (name TEXT NOT NULL);")
+         end
          Lich.db.execute("CREATE TABLE IF NOT EXISTS simu_game_entry (character TEXT NOT NULL, game_code TEXT NOT NULL, data BLOB, PRIMARY KEY(character, game_code));")
          Lich.db.execute("CREATE TABLE IF NOT EXISTS enable_inventory_boxes (player_id INTEGER NOT NULL, PRIMARY KEY(player_id));")
       rescue SQLite3::BusyException
@@ -1227,7 +1229,7 @@ class StringProc
       Proc
    end
    def call(*a)
-      if $SAFE < 3
+      if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
          proc { $SAFE = 3; eval(@string) }.call
       else
          eval(@string)
@@ -2415,92 +2417,267 @@ end
 TRUSTED_SCRIPT_BINDING = proc { _script }
 
 class Script
-   @@elevated_script_start = proc { |args|
-      if args.empty?
-         # fixme: error
-         next nil
-      elsif args[0].class == String
-         script_name = args[0]
-         if args[1]
-            if args[1].class == String
-               script_args = args[1]
-               if args[2]
-                  if args[2].class == Hash
-                     options = args[2]
-                  else
-                     # fixme: error
-                     next nil
+   if (RUBY_VERSION =~ /^2\.[012]\./)
+      @@elevated_script_start = proc { |args|
+         if args.empty?
+            # fixme: error
+            next nil
+         elsif args[0].class == String
+            script_name = args[0]
+            if args[1]
+               if args[1].class == String
+                  script_args = args[1]
+                  if args[2]
+                     if args[2].class == Hash
+                        options = args[2]
+                     else
+                        # fixme: error
+                        next nil
+                     end
                   end
+               elsif args[1].class == Hash
+                  options = args[1]
+                  script_args = (options[:args] || String.new)
+               else
+                  # fixme: error
+                  next nil
                end
-            elsif args[1].class == Hash
-               options = args[1]
-               script_args = (options[:args] || String.new)
+            else
+               options = Hash.new
+            end
+         elsif args[0].class == Hash
+            options = args[0]
+            if options[:name]
+               script_name = options[:name]
             else
                # fixme: error
                next nil
             end
-         else
-            options = Hash.new
+            script_args = (options[:args] || String.new)
          end
-      elsif args[0].class == Hash
-         options = args[0]
-         if options[:name]
-            script_name = options[:name]
-         else
-            # fixme: error
+         # fixme: look in wizard script directory
+         # fixme: allow subdirectories?
+         file_list = Dir.entries(SCRIPT_DIR).delete_if { |fn| (fn == '.') or (fn == '..') }.sort
+         if file_name = (file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ || val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?i:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i })
+            script_name = file_name.sub(/\..{1,3}$/, '')
+         end
+         file_list = nil
+         if file_name.nil?
+            respond "--- Lich: could not find script '#{script_name}' in directory #{SCRIPT_DIR}"
             next nil
          end
-         script_args = (options[:args] || String.new)
-      end
-      # fixme: look in wizard script directory
-      # fixme: allow subdirectories?
-      file_list = Dir.entries(SCRIPT_DIR).delete_if { |fn| (fn == '.') or (fn == '..') }.sort
-      if file_name = (file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ || val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?i:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i })
-         script_name = file_name.sub(/\..{1,3}$/, '')
-      end
-      file_list = nil
-      if file_name.nil?
-         respond "--- Lich: could not find script '#{script_name}' in directory #{SCRIPT_DIR}"
-         next nil
-      end
-      if (options[:force] != true) and (Script.running + Script.hidden).find { |s| s.name =~ /^#{Regexp.escape(script_name)}$/i }
-         respond "--- Lich: #{script_name} is already running (use #{$clean_lich_char}force [scriptname] if desired)."
-         next nil
-      end
-      begin
-         if file_name =~ /\.(?:cmd|wiz)(?:\.gz)?$/i
-            trusted = false
-            script_obj = WizardScript.new("#{SCRIPT_DIR}/#{file_name}", script_args)
-         else
-            begin
-               trusted = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
-            rescue SQLite3::BusyException
-               sleep 0.1
-               retry
+         if (options[:force] != true) and (Script.running + Script.hidden).find { |s| s.name =~ /^#{Regexp.escape(script_name)}$/i }
+            respond "--- Lich: #{script_name} is already running (use #{$clean_lich_char}force [scriptname] if desired)."
+            next nil
+         end
+         begin
+            if file_name =~ /\.(?:cmd|wiz)(?:\.gz)?$/i
+               trusted = false
+               script_obj = WizardScript.new("#{SCRIPT_DIR}/#{file_name}", script_args)
+            else
+               begin
+                  trusted = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
+               rescue SQLite3::BusyException
+                  sleep 0.1
+                  retry
+               end
+               script_obj = Script.new(:file => "#{SCRIPT_DIR}/#{file_name}", :args => script_args, :quiet => options[:quiet])
             end
-            script_obj = Script.new(:file => "#{SCRIPT_DIR}/#{file_name}", :args => script_args, :quiet => options[:quiet])
+            if trusted and not script_obj.labels.length > 1
+               script_binding = TRUSTED_SCRIPT_BINDING.call
+            else
+               script_binding = Scripting.new.script
+            end
+         rescue
+            respond "--- Lich: error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+            next nil
          end
-         if trusted and not script_obj.labels.length > 1
+         unless script_obj
+            respond "--- Lich: error: failed to start script (#{script_name})"
+            next nil
+         end
+         script_obj.quiet = true if options[:quiet]
+         new_thread = Thread.new {
+            100.times { break if Script.current == script_obj; sleep 0.01 }
+            if script = Script.current
+               eval('script = Script.current', script_binding, script.name)
+               Thread.current.priority = 1
+               respond("--- Lich: #{script.name} active.") unless script.quiet
+               if trusted
+                  begin
+                     eval(script.labels[script.current_label].to_s, script_binding, script.name)
+                  rescue SystemExit
+                     nil
+                  rescue SyntaxError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue ScriptError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue NoMemoryError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue LoadError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue SecurityError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue ThreadError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue SystemStackError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue Exception
+                     if $! == JUMP
+                        retry if Script.current.get_next_label != JUMP_ERROR
+                        respond "--- label error: `#{Script.current.jump_label}' was not found, and no `LabelError' label was found!"
+                        respond $!.backtrace.first
+                        Lich.log "label error: `#{Script.current.jump_label}' was not found, and no `LabelError' label was found!\n\t#{$!.backtrace.join("\n\t")}"
+                        Script.current.kill
+                     else
+                        respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                        Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                     end
+                  rescue
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  ensure
+                     Script.current.kill
+                  end
+               else
+                  begin
+                     while (script = Script.current) and script.current_label
+                        proc { foo = script.labels[script.current_label]; foo.untaint; $SAFE = 3; eval(foo, script_binding, script.name, 1) }.call
+                        Script.current.get_next_label
+                     end
+                  rescue SystemExit
+                     nil
+                  rescue SyntaxError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue ScriptError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue NoMemoryError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue LoadError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue SecurityError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     if name = Script.current.name
+                        respond "--- Lich: review this script (#{name}) to make sure it isn't malicious, and type #{$clean_lich_char}trust #{name}"
+                     end
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue ThreadError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue SystemStackError
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  rescue Exception
+                     if $! == JUMP
+                        retry if Script.current.get_next_label != JUMP_ERROR
+                        respond "--- label error: `#{Script.current.jump_label}' was not found, and no `LabelError' label was found!"
+                        respond $!.backtrace.first
+                        Lich.log "label error: `#{Script.current.jump_label}' was not found, and no `LabelError' label was found!\n\t#{$!.backtrace.join("\n\t")}"
+                        Script.current.kill
+                     else
+                        respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                        Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                     end
+                  rescue
+                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+                  ensure
+                     Script.current.kill
+                  end
+               end
+            else
+               respond '--- error: out of cheese'
+            end
+         }
+         script_obj.thread_group.add(new_thread)
+         script_obj
+      }
+   else
+      @@elevated_script_start = proc { |args|
+         if args.empty?
+            # fixme: error
+            next nil
+         elsif args[0].class == String
+            script_name = args[0]
+            if args[1]
+               if args[1].class == String
+                  script_args = args[1]
+                  if args[2]
+                     if args[2].class == Hash
+                        options = args[2]
+                     else
+                        # fixme: error
+                        next nil
+                     end
+                  end
+               elsif args[1].class == Hash
+                  options = args[1]
+                  script_args = (options[:args] || String.new)
+               else
+                  # fixme: error
+                  next nil
+               end
+            else
+               options = Hash.new
+            end
+         elsif args[0].class == Hash
+            options = args[0]
+            if options[:name]
+               script_name = options[:name]
+            else
+               # fixme: error
+               next nil
+            end
+            script_args = (options[:args] || String.new)
+         end
+         # fixme: look in wizard script directory
+         # fixme: allow subdirectories?
+         file_list = Dir.entries(SCRIPT_DIR).delete_if { |fn| (fn == '.') or (fn == '..') }.sort
+         if file_name = (file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ || val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?i:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i })
+            script_name = file_name.sub(/\..{1,3}$/, '')
+         end
+         file_list = nil
+         if file_name.nil?
+            respond "--- Lich: could not find script '#{script_name}' in directory #{SCRIPT_DIR}"
+            next nil
+         end
+         if (options[:force] != true) and (Script.running + Script.hidden).find { |s| s.name =~ /^#{Regexp.escape(script_name)}$/i }
+            respond "--- Lich: #{script_name} is already running (use #{$clean_lich_char}force [scriptname] if desired)."
+            next nil
+         end
+         begin
+            if file_name =~ /\.(?:cmd|wiz)(?:\.gz)?$/i
+               script_obj = WizardScript.new("#{SCRIPT_DIR}/#{file_name}", script_args)
+            else
+               script_obj = Script.new(:file => "#{SCRIPT_DIR}/#{file_name}", :args => script_args, :quiet => options[:quiet])
+            end
             script_binding = TRUSTED_SCRIPT_BINDING.call
-         else
-            script_binding = Scripting.new.script
+         rescue
+            respond "--- Lich: error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+            next nil
          end
-      rescue
-         respond "--- Lich: error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-         next nil
-      end
-      unless script_obj
-         respond "--- Lich: error: failed to start script (#{script_name})"
-         next nil
-      end
-      script_obj.quiet = true if options[:quiet]
-      new_thread = Thread.new {
-         100.times { break if Script.current == script_obj; sleep 0.01 }
-         if script = Script.current
-            eval('script = Script.current', script_binding, script.name)
-            Thread.current.priority = 1
-            respond("--- Lich: #{script.name} active.") unless script.quiet
-            if trusted
+         unless script_obj
+            respond "--- Lich: error: failed to start script (#{script_name})"
+            next nil
+         end
+         script_obj.quiet = true if options[:quiet]
+         new_thread = Thread.new {
+            100.times { break if Script.current == script_obj; sleep 0.01 }
+            if script = Script.current
+               eval('script = Script.current', script_binding, script.name)
+               Thread.current.priority = 1
+               respond("--- Lich: #{script.name} active.") unless script.quiet
                begin
                   eval(script.labels[script.current_label].to_s, script_binding, script.name)
                rescue SystemExit
@@ -2544,62 +2721,13 @@ class Script
                   Script.current.kill
                end
             else
-               begin
-                  while (script = Script.current) and script.current_label
-                     proc { foo = script.labels[script.current_label]; foo.untaint; $SAFE = 3; eval(foo, script_binding, script.name, 1) }.call
-                     Script.current.get_next_label
-                  end
-               rescue SystemExit
-                  nil
-               rescue SyntaxError
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               rescue ScriptError
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               rescue NoMemoryError
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               rescue LoadError
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               rescue SecurityError
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  if name = Script.current.name
-                     respond "--- Lich: review this script (#{name}) to make sure it isn't malicious, and type #{$clean_lich_char}trust #{name}"
-                  end
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               rescue ThreadError
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               rescue SystemStackError
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               rescue Exception
-                  if $! == JUMP
-                     retry if Script.current.get_next_label != JUMP_ERROR
-                     respond "--- label error: `#{Script.current.jump_label}' was not found, and no `LabelError' label was found!"
-                     respond $!.backtrace.first
-                     Lich.log "label error: `#{Script.current.jump_label}' was not found, and no `LabelError' label was found!\n\t#{$!.backtrace.join("\n\t")}"
-                     Script.current.kill
-                  else
-                     respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                     Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-                  end
-               rescue
-                  respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
-                  Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
-               ensure
-                  Script.current.kill
-               end
+               respond '--- error: out of cheese'
             end
-         else
-            respond '--- error: out of cheese'
-         end
+         }
+         script_obj.thread_group.add(new_thread)
+         script_obj
       }
-      script_obj.thread_group.add(new_thread)
-      script_obj
-   }
+   end
    @@elevated_exists = proc { |script_name|
       if script_name =~ /\\|\//
          nil
@@ -2801,49 +2929,61 @@ class Script
          return false
       end
    end
-   def Script.trust(script_name)
-      # fixme: case sensitive blah blah
-      if ($SAFE == 0) and not caller.any? { |c| c =~ /eval|run/ }
+   if (RUBY_VERSION =~ /^2\.[012]\./)
+      def Script.trust(script_name)
+         # fixme: case sensitive blah blah
+         if ($SAFE == 0) and not caller.any? { |c| c =~ /eval|run/ }
+            begin
+               Lich.db.execute('INSERT OR REPLACE INTO trusted_scripts(name) values(?);', script_name.encode('UTF-8'))
+            rescue SQLite3::BusyException
+               sleep 0.1
+               retry
+            end
+            true
+         else
+            respond '--- error: scripts may not trust scripts'
+            false
+         end
+      end
+      def Script.distrust(script_name)
          begin
-            Lich.db.execute('INSERT OR REPLACE INTO trusted_scripts(name) values(?);', script_name.encode('UTF-8'))
+            there = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
          rescue SQLite3::BusyException
             sleep 0.1
             retry
          end
-         true
-      else
-         respond '--- error: scripts may not trust scripts'
-         false
+         if there
+            begin
+               Lich.db.execute('DELETE FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
+            rescue SQLite3::BusyException
+               sleep 0.1
+               retry
+            end
+            true
+         else
+            false
+         end
       end
-   end
-   def Script.distrust(script_name)
-      begin
-         there = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
-      rescue SQLite3::BusyException
-         sleep 0.1
-         retry
-      end
-      if there
+      def Script.list_trusted
+         list = Array.new
          begin
-            Lich.db.execute('DELETE FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
+            Lich.db.execute('SELECT name FROM trusted_scripts;').each { |name| list.push(name[0]) }
          rescue SQLite3::BusyException
             sleep 0.1
             retry
          end
+         list
+      end
+   else
+      def Script.trust(script_name)
          true
-      else
+      end
+      def Script.distrust(script_name)
          false
       end
-   end
-   def Script.list_trusted
-      list = Array.new
-      begin
-         Lich.db.execute('SELECT name FROM trusted_scripts;').each { |name| list.push(name[0]) }
-      rescue SQLite3::BusyException
-         sleep 0.1
-         retry
+      def Script.list_trusted
+         []
       end
-      list
    end
    def initialize(args)
       @file_name = args[:file]
@@ -3154,7 +3294,7 @@ class ExecScript<Script
    def ExecScript.start(cmd_data, options={})
       options = { :quiet => true } if options == true
       if $SAFE > 0
-         @@elevated_start.call(cmd_data, options)
+         @@elevated_start.call(cmd_data, options) or not options[:trusted]
       else
          unless new_script = ExecScript.new(cmd_data, options)
             respond '--- Lich: failed to start exec script'
@@ -3166,7 +3306,7 @@ class ExecScript<Script
                Thread.current.priority = 1
                respond("--- Lich: #{script.name} active.") unless script.quiet
                begin
-                  if options[:trusted]
+                  if options[:trusted] or (RUBY_VERSION !~ /^2\.[012]\./)
                      script_binding = TRUSTED_SCRIPT_BINDING.call
                      eval('script = Script.current', script_binding, script.name.to_s)
                      eval(cmd_data, script_binding, script.name.to_s)
@@ -6610,29 +6750,41 @@ def do_client(client_string)
             ExecScript.start(cmd_data, flags={ :quiet => true, :trusted => true })
          end
       elsif cmd =~ /^trust\s+(.*)/i
-         script_name = $1
-         if File.exists?("#{SCRIPT_DIR}/#{script_name}.lic")
-            if Script.trust(script_name)
-               respond "--- Lich: '#{script_name}' is now a trusted script."
+         if RUBY_VERSION =~ /^2\.[012]\./
+            script_name = $1
+            if File.exists?("#{SCRIPT_DIR}/#{script_name}.lic")
+               if Script.trust(script_name)
+                  respond "--- Lich: '#{script_name}' is now a trusted script."
+               end
+            else
+               respond "--- Lich: could not find script: #{script_name}"
             end
          else
-            respond "--- Lich: could not find script: #{script_name}"
+            respond "--- Lich: this feature isn't available in this version of Ruby "
          end
       elsif cmd =~ /^(?:dis|un)trust\s+(.*)/i
-         script_name = $1
-         if Script.distrust(script_name)
-            respond "--- Lich: '#{script_name}' is no longer a trusted script."
+         if RUBY_VERSION =~ /^2\.[012]\./
+            script_name = $1
+            if Script.distrust(script_name)
+               respond "--- Lich: '#{script_name}' is no longer a trusted script."
+            else
+               respond "--- Lich: '#{script_name}' was not found in the trusted script list."
+            end
          else
-            respond "--- Lich: '#{script_name}' was not found in the trusted script list."
+            respond "--- Lich: this feature isn't available in this version of Ruby "
          end
       elsif cmd =~ /^list\s?(?:un)?trust(?:ed)?$|^lt$/i
-         list = Script.list_trusted
-         if list.empty?
-            respond "--- Lich: no scripts are trusted"
+         if RUBY_VERSION =~ /^2\.[012]\./
+            list = Script.list_trusted
+            if list.empty?
+               respond "--- Lich: no scripts are trusted"
+            else
+               respond "--- Lich: trusted scripts: #{list.join(', ')}"
+            end
+            list = nil
          else
-            respond "--- Lich: trusted scripts: #{list.join(', ')}"
+            respond "--- Lich: this feature isn't available in this version of Ruby "
          end
-         list = nil
       elsif cmd =~ /^help$/i
          respond
          respond "Lich v#{LICH_VERSION}"
@@ -6668,11 +6820,13 @@ def do_client(client_string)
          respond "   #{$clean_lich_char}execq <code>              same as #{$clean_lich_char}exec but without the script active and exited messages"
          respond "   #{$clean_lich_char}eq <code>                 ''"
          respond
-         respond "   #{$clean_lich_char}trust <script name>       let the script do whatever it wants"
-         respond "   #{$clean_lich_char}distrust <script name>    restrict the script from doing things that might harm your computer"
-         respond "   #{$clean_lich_char}list trusted              show what scripts are trusted"
-         respond "   #{$clean_lich_char}lt                        ''"
-         respond
+         if (RUBY_VERSION =~ /^2\.[012]\./)
+            respond "   #{$clean_lich_char}trust <script name>       let the script do whatever it wants"
+            respond "   #{$clean_lich_char}distrust <script name>    restrict the script from doing things that might harm your computer"
+            respond "   #{$clean_lich_char}list trusted              show what scripts are trusted"
+            respond "   #{$clean_lich_char}lt                        ''"
+            respond
+         end
          respond "   #{$clean_lich_char}send <line>               send a line to all scripts as if it came from the game"
          respond "   #{$clean_lich_char}send to <script> <line>   send a line to a specific script"
          respond
@@ -7974,7 +8128,7 @@ module Games
             if options[:line]
                line = options[:line]
             end
-            if $SAFE < 3
+            if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
                proc { $SAFE = 3; eval(formula) }.call.to_f
             else
                eval(formula).to_f
@@ -8283,7 +8437,7 @@ module Games
                      return false
                   end
                   begin
-                     if $SAFE < 3
+                     if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
                         proc { $SAFE = 3; eval(@cast_proc) }.call
                      else
                         eval(@cast_proc)
@@ -8409,7 +8563,7 @@ module Games
          def method_missing(*args)
             if @@bonus_list.include?(args[0].to_s.gsub('_', '-'))
                if @bonus[args[0].to_s.gsub('_', '-')]
-                  if $SAFE < 3
+                  if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
                      proc { $SAFE = 3; eval(@bonus[args[0].to_s.gsub('_', '-')]) }.call.to_i
                   else
                      eval(@bonus[args[0].to_s.gsub('_', '-')]).to_i
@@ -8447,7 +8601,7 @@ module Games
                else
                   if formula
                      formula.untaint if formula.tainted?
-                     if $SAFE < 3
+                     if ($SAFE < 3) and (RUBY_VERSION =~ /^2\.[012]\./)
                         proc { $SAFE = 3; eval(formula) }.call.to_i
                      else
                         eval(formula).to_i
@@ -10086,22 +10240,23 @@ Dir.entries(TEMP_DIR).find_all { |fn| fn =~ /^debug-\d+-\d+-\d+-\d+-\d+-\d+\.log
 
 
 
-
-begin
-   did_trusted_defaults = Lich.db.get_first_value("SELECT value FROM lich_settings WHERE name='did_trusted_defaults';")
-rescue SQLite3::BusyException
-   sleep 0.1
-   retry
-end
-if did_trusted_defaults.nil?
-   Script.trust('repository')
-   Script.trust('lnet')
-   Script.trust('narost')
+if (RUBY_VERSION =~ /^2\.[012]\./)
    begin
-      Lich.db.execute("INSERT INTO lich_settings(name,value) VALUES('did_trusted_defaults', 'yes');")
+      did_trusted_defaults = Lich.db.get_first_value("SELECT value FROM lich_settings WHERE name='did_trusted_defaults';")
    rescue SQLite3::BusyException
       sleep 0.1
       retry
+   end
+   if did_trusted_defaults.nil?
+      Script.trust('repository')
+      Script.trust('lnet')
+      Script.trust('narost')
+      begin
+         Lich.db.execute("INSERT INTO lich_settings(name,value) VALUES('did_trusted_defaults', 'yes');")
+      rescue SQLite3::BusyException
+         sleep 0.1
+         retry
+      end
    end
 end
 
@@ -10513,7 +10668,7 @@ else
 end
 
 if defined?(Gtk)
-   Gtk.queue { Gtk::Window.default_icon = Gdk::Pixbuf.new(Zlib::Inflate.inflate("eJyVl8tSE1EQhieTggULX8utr2CVOzc+gpXMhUDIBYhIAuQCAQEDKDEiF9eWZVneUDc+gk+gMtKN+doTJ1pSEP45/Z/uPn07k+u3bt/wvGsLfsbzPfn1vLvyl9y843n68Vw+cpdryYWLMoIS0H9JFf0QlAelSQNB3wVFgr6B/r6WJv2K5jnWXrDWFBQLmnWl6kFd0IygYop0SVARaSjoJagqqIxmXXuFlpKgiqAZ1l6juSCoBlLpG6IWC1p0fX7rSqvued9x3ozv+0kkj/P6ePmTBGxT8ntUKa8uKE+YRqQN1YL0gxkSzUrpyON5igdqLSdoWdAzKA3XRoAHyluhuDQ92V/WEvm/io5pdNjOOlZrSNdABfTqjlVBC4LmBFXwpMkOTXubdFbdZLddXpcoLwkK8WUdnu4dIC0SR9XXdXl9kPq3iVQL6pAS1Lw8cKWq9JADasC2OaBSmrihhXIqqEeYqiSsxwF1bSBoD+NqSP3ry6M/zNWugEWc11mjhdGisXSrhuBMHlWwTFiOCb2Ww6ygI9aa9O2AtTYBV80ajEPqc4MdBxjvEPWCoH0yqzW7ImgL6UO3olcI6bSgXfYG9JTa2CExOXnMjSVPTExc2ci5R9jGbgi558TaaCElWMflEHVbaNLeKSGYxSkrxk3IM+jTs2QmJyevJormc4MQzDIuzJd1wldEqm5khw3NAdokqER8uzjRogjKGFRnFzETUhhFynONvRGzYA6plVfEbCGqEVmJ2NChRmM2xAyUkH7rssOSGeNASDJtx4EgP5vNJjRUk361IakddcahTBoiPRHUGSc9cgdN7GrWgDipUU/84crOOLUt2nis9DRFWsPoyThpndYJ4ZnraVpGDnbPtLCmCTkep0qltiNkFAYpmhukP2BEBa7SNN6Aqhvh1SkO5fUpMbO7lMJ7DK+Q4p8Vm824OZenzWwXUhGTEZMkj7Tk+nLVKlK8EXMhT+dP45pdUlXXeEywI0ogYqbY5ZijpPKu8cANZ8ABQ7ohQ37N8dC1toz0qevfSKIaSJ/gi/EKKby+yws5W8AcUfTI7UfVZ++e9iqjd1h2amqKF6MafEusvcjsU9c5V7llsgV5D7QAr8xaB9QDzcOrsKYzWYvC7jy71RRV2FZlm+V5F9fK8Obdc2xC3nHrOsL7HIVnL0F2rcXw7BLNoM/SHhNi5Z2zprU+Q2JV+tFtFr217uOBrn2SR+2xq1fc30fuZzpHryaG7xfUrqHswmGMfBfzxbd/s4Z2U1jI7PteQgZGkVhL/txl3zV/AnftNz0=".unpack('m')[0]).unpack('c*'), false) }
+# fixme   Gtk.queue { Gtk::Window.default_icon = Gdk::Pixbuf.new(Zlib::Inflate.inflate("eJyVl8tSE1EQhieTggULX8utr2CVOzc+gpXMhUDIBYhIAuQCAQEDKDEiF9eWZVneUDc+gk+gMtKN+doTJ1pSEP45/Z/uPn07k+u3bt/wvGsLfsbzPfn1vLvyl9y843n68Vw+cpdryYWLMoIS0H9JFf0QlAelSQNB3wVFgr6B/r6WJv2K5jnWXrDWFBQLmnWl6kFd0IygYop0SVARaSjoJagqqIxmXXuFlpKgiqAZ1l6juSCoBlLpG6IWC1p0fX7rSqvued9x3ozv+0kkj/P6ePmTBGxT8ntUKa8uKE+YRqQN1YL0gxkSzUrpyON5igdqLSdoWdAzKA3XRoAHyluhuDQ92V/WEvm/io5pdNjOOlZrSNdABfTqjlVBC4LmBFXwpMkOTXubdFbdZLddXpcoLwkK8WUdnu4dIC0SR9XXdXl9kPq3iVQL6pAS1Lw8cKWq9JADasC2OaBSmrihhXIqqEeYqiSsxwF1bSBoD+NqSP3ry6M/zNWugEWc11mjhdGisXSrhuBMHlWwTFiOCb2Ww6ygI9aa9O2AtTYBV80ajEPqc4MdBxjvEPWCoH0yqzW7ImgL6UO3olcI6bSgXfYG9JTa2CExOXnMjSVPTExc2ci5R9jGbgi558TaaCElWMflEHVbaNLeKSGYxSkrxk3IM+jTs2QmJyevJormc4MQzDIuzJd1wldEqm5khw3NAdokqER8uzjRogjKGFRnFzETUhhFynONvRGzYA6plVfEbCGqEVmJ2NChRmM2xAyUkH7rssOSGeNASDJtx4EgP5vNJjRUk361IakddcahTBoiPRHUGSc9cgdN7GrWgDipUU/84crOOLUt2nis9DRFWsPoyThpndYJ4ZnraVpGDnbPtLCmCTkep0qltiNkFAYpmhukP2BEBa7SNN6Aqhvh1SkO5fUpMbO7lMJ7DK+Q4p8Vm824OZenzWwXUhGTEZMkj7Tk+nLVKlK8EXMhT+dP45pdUlXXeEywI0ogYqbY5ZijpPKu8cANZ8ABQ7ohQ37N8dC1toz0qevfSKIaSJ/gi/EKKby+yws5W8AcUfTI7UfVZ++e9iqjd1h2amqKF6MafEusvcjsU9c5V7llsgV5D7QAr8xaB9QDzcOrsKYzWYvC7jy71RRV2FZlm+V5F9fK8Obdc2xC3nHrOsL7HIVnL0F2rcXw7BLNoM/SHhNi5Z2zprU+Q2JV+tFtFr217uOBrn2SR+2xq1fc30fuZzpHryaG7xfUrqHswmGMfBfzxbd/s4Z2U1jI7PteQgZGkVhL/txl3zV/AnftNz0=".unpack('m')[0]).unpack('c*'), false) }
 end
 
 main_thread = Thread.new {
