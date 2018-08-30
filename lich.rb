@@ -3176,9 +3176,7 @@ class ExecScript<Script
    attr_reader :cmd_data
    def ExecScript.start(cmd_data, options={})
       options = { :quiet => true } if options == true
-      if $SAFE > 0
-         @@elevated_start.call(cmd_data, options) or not options[:trusted]
-      else
+      if ($SAFE < 2) and (options[:trusted] or (RUBY_VERSION !~ /^2\.[012]\./))
          unless new_script = ExecScript.new(cmd_data, options)
             respond '--- Lich: failed to start exec script'
             return false
@@ -3189,15 +3187,9 @@ class ExecScript<Script
                Thread.current.priority = 1
                respond("--- Lich: #{script.name} active.") unless script.quiet
                begin
-                  if options[:trusted] or (RUBY_VERSION !~ /^2\.[012]\./)
-                     script_binding = TRUSTED_SCRIPT_BINDING.call
-                     eval('script = Script.current', script_binding, script.name.to_s)
-                     eval(cmd_data, script_binding, script.name.to_s)
-                  else
-                     script_binding = Scripting.new.script
-                     eval('script = Script.current', script_binding, script.name.to_s)
-                     proc { cmd_data.untaint; $SAFE = 3; eval(cmd_data, script_binding, script.name.to_s) }.call
-                  end
+                  script_binding = TRUSTED_SCRIPT_BINDING.call
+                  eval('script = Script.current', script_binding, script.name.to_s)
+                  eval(cmd_data, script_binding, script.name.to_s)
                   Script.current.kill
                rescue SystemExit
                   Script.current.kill
@@ -3254,6 +3246,8 @@ class ExecScript<Script
          }
          new_script.thread_group.add(new_thread)
          new_script
+      else
+         @@elevated_start.call(cmd_data, options)
       end
    end
    def initialize(cmd_data, flags=Hash.new)
