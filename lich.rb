@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.47'
+LICH_VERSION = '4.6.48'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -660,7 +660,9 @@ module Lich
          Lich.db.execute("CREATE TABLE IF NOT EXISTS script_auto_settings (script TEXT NOT NULL, scope TEXT, hash BLOB, PRIMARY KEY(script, scope));")
          Lich.db.execute("CREATE TABLE IF NOT EXISTS lich_settings (name TEXT NOT NULL, value TEXT, PRIMARY KEY(name));")
          Lich.db.execute("CREATE TABLE IF NOT EXISTS uservars (scope TEXT NOT NULL, hash BLOB, PRIMARY KEY(scope));")
-         Lich.db.execute("CREATE TABLE IF NOT EXISTS trusted_scripts (name TEXT NOT NULL);")
+         if (RUBY_VERSION =~ /^2\.[012]\./)
+            Lich.db.execute("CREATE TABLE IF NOT EXISTS trusted_scripts (name TEXT NOT NULL);")
+         end
          Lich.db.execute("CREATE TABLE IF NOT EXISTS simu_game_entry (character TEXT NOT NULL, game_code TEXT NOT NULL, data BLOB, PRIMARY KEY(character, game_code));")
          Lich.db.execute("CREATE TABLE IF NOT EXISTS enable_inventory_boxes (player_id INTEGER NOT NULL, PRIMARY KEY(player_id));")
       rescue SQLite3::BusyException
@@ -1227,11 +1229,7 @@ class StringProc
       Proc
    end
    def call(*a)
-      if $SAFE < 3
-         proc { $SAFE = 3; eval(@string) }.call
-      else
-         eval(@string)
-      end
+      proc { begin; $SAFE = 3; rescue; nil; end; eval(@string) }.call
    end
    def _dump(d=nil)
       @string
@@ -2472,15 +2470,21 @@ class Script
             trusted = false
             script_obj = WizardScript.new("#{SCRIPT_DIR}/#{file_name}", script_args)
          else
-            begin
-               trusted = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
-            rescue SQLite3::BusyException
-               sleep 0.1
-               retry
+            if script_obj.labels.length > 1
+               trusted = false
+            elsif proc { begin; $SAFE = 3; true; rescue; false; end }.call
+               begin
+                  trusted = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
+               rescue SQLite3::BusyException
+                  sleep 0.1
+                  retry
+               end
+            else
+               trusted = true
             end
             script_obj = Script.new(:file => "#{SCRIPT_DIR}/#{file_name}", :args => script_args, :quiet => options[:quiet])
          end
-         if trusted and not script_obj.labels.length > 1
+         if trusted
             script_binding = TRUSTED_SCRIPT_BINDING.call
          else
             script_binding = Scripting.new.script
@@ -2546,7 +2550,7 @@ class Script
             else
                begin
                   while (script = Script.current) and script.current_label
-                     proc { foo = script.labels[script.current_label]; foo.untaint; $SAFE = 3; eval(foo, script_binding, script.name, 1) }.call
+                     proc { foo = script.labels[script.current_label]; foo.untaint; begin; $SAFE = 3; rescue; nil; end; eval(foo, script_binding, script.name, 1) }.call
                      Script.current.get_next_label
                   end
                rescue SystemExit
@@ -2801,49 +2805,61 @@ class Script
          return false
       end
    end
-   def Script.trust(script_name)
-      # fixme: case sensitive blah blah
-      if ($SAFE == 0) and not caller.any? { |c| c =~ /eval|run/ }
+   if (RUBY_VERSION =~ /^2\.[012]\./)
+      def Script.trust(script_name)
+         # fixme: case sensitive blah blah
+         if ($SAFE == 0) and not caller.any? { |c| c =~ /eval|run/ }
+            begin
+               Lich.db.execute('INSERT OR REPLACE INTO trusted_scripts(name) values(?);', script_name.encode('UTF-8'))
+            rescue SQLite3::BusyException
+               sleep 0.1
+               retry
+            end
+            true
+         else
+            respond '--- error: scripts may not trust scripts'
+            false
+         end
+      end
+      def Script.distrust(script_name)
          begin
-            Lich.db.execute('INSERT OR REPLACE INTO trusted_scripts(name) values(?);', script_name.encode('UTF-8'))
+            there = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
          rescue SQLite3::BusyException
             sleep 0.1
             retry
          end
-         true
-      else
-         respond '--- error: scripts may not trust scripts'
-         false
+         if there
+            begin
+               Lich.db.execute('DELETE FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
+            rescue SQLite3::BusyException
+               sleep 0.1
+               retry
+            end
+            true
+         else
+            false
+         end
       end
-   end
-   def Script.distrust(script_name)
-      begin
-         there = Lich.db.get_first_value('SELECT name FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
-      rescue SQLite3::BusyException
-         sleep 0.1
-         retry
-      end
-      if there
+      def Script.list_trusted
+         list = Array.new
          begin
-            Lich.db.execute('DELETE FROM trusted_scripts WHERE name=?;', script_name.encode('UTF-8'))
+            Lich.db.execute('SELECT name FROM trusted_scripts;').each { |name| list.push(name[0]) }
          rescue SQLite3::BusyException
             sleep 0.1
             retry
          end
+         list
+      end
+   else
+      def Script.trust(script_name)
          true
-      else
+      end
+      def Script.distrust(script_name)
          false
       end
-   end
-   def Script.list_trusted
-      list = Array.new
-      begin
-         Lich.db.execute('SELECT name FROM trusted_scripts;').each { |name| list.push(name[0]) }
-      rescue SQLite3::BusyException
-         sleep 0.1
-         retry
+      def Script.list_trusted
+         []
       end
-      list
    end
    def initialize(args)
       @file_name = args[:file]
@@ -3153,9 +3169,7 @@ class ExecScript<Script
    attr_reader :cmd_data
    def ExecScript.start(cmd_data, options={})
       options = { :quiet => true } if options == true
-      if $SAFE > 0
-         @@elevated_start.call(cmd_data, options)
-      else
+      if ($SAFE < 2) and (options[:trusted] or (RUBY_VERSION !~ /^2\.[012]\./))
          unless new_script = ExecScript.new(cmd_data, options)
             respond '--- Lich: failed to start exec script'
             return false
@@ -3166,15 +3180,9 @@ class ExecScript<Script
                Thread.current.priority = 1
                respond("--- Lich: #{script.name} active.") unless script.quiet
                begin
-                  if options[:trusted]
-                     script_binding = TRUSTED_SCRIPT_BINDING.call
-                     eval('script = Script.current', script_binding, script.name.to_s)
-                     eval(cmd_data, script_binding, script.name.to_s)
-                  else
-                     script_binding = Scripting.new.script
-                     eval('script = Script.current', script_binding, script.name.to_s)
-                     proc { cmd_data.untaint; $SAFE = 3; eval(cmd_data, script_binding, script.name.to_s) }.call
-                  end
+                  script_binding = TRUSTED_SCRIPT_BINDING.call
+                  eval('script = Script.current', script_binding, script.name.to_s)
+                  eval(cmd_data, script_binding, script.name.to_s)
                   Script.current.kill
                rescue SystemExit
                   Script.current.kill
@@ -3231,6 +3239,8 @@ class ExecScript<Script
          }
          new_script.thread_group.add(new_thread)
          new_script
+      else
+         @@elevated_start.call(cmd_data, options)
       end
    end
    def initialize(cmd_data, flags=Hash.new)
@@ -6610,29 +6620,41 @@ def do_client(client_string)
             ExecScript.start(cmd_data, flags={ :quiet => true, :trusted => true })
          end
       elsif cmd =~ /^trust\s+(.*)/i
-         script_name = $1
-         if File.exists?("#{SCRIPT_DIR}/#{script_name}.lic")
-            if Script.trust(script_name)
-               respond "--- Lich: '#{script_name}' is now a trusted script."
+         if RUBY_VERSION =~ /^2\.[012]\./
+            script_name = $1
+            if File.exists?("#{SCRIPT_DIR}/#{script_name}.lic")
+               if Script.trust(script_name)
+                  respond "--- Lich: '#{script_name}' is now a trusted script."
+               end
+            else
+               respond "--- Lich: could not find script: #{script_name}"
             end
          else
-            respond "--- Lich: could not find script: #{script_name}"
+            respond "--- Lich: this feature isn't available in this version of Ruby "
          end
       elsif cmd =~ /^(?:dis|un)trust\s+(.*)/i
-         script_name = $1
-         if Script.distrust(script_name)
-            respond "--- Lich: '#{script_name}' is no longer a trusted script."
+         if RUBY_VERSION =~ /^2\.[012]\./
+            script_name = $1
+            if Script.distrust(script_name)
+               respond "--- Lich: '#{script_name}' is no longer a trusted script."
+            else
+               respond "--- Lich: '#{script_name}' was not found in the trusted script list."
+            end
          else
-            respond "--- Lich: '#{script_name}' was not found in the trusted script list."
+            respond "--- Lich: this feature isn't available in this version of Ruby "
          end
       elsif cmd =~ /^list\s?(?:un)?trust(?:ed)?$|^lt$/i
-         list = Script.list_trusted
-         if list.empty?
-            respond "--- Lich: no scripts are trusted"
+         if RUBY_VERSION =~ /^2\.[012]\./
+            list = Script.list_trusted
+            if list.empty?
+               respond "--- Lich: no scripts are trusted"
+            else
+               respond "--- Lich: trusted scripts: #{list.join(', ')}"
+            end
+            list = nil
          else
-            respond "--- Lich: trusted scripts: #{list.join(', ')}"
+            respond "--- Lich: this feature isn't available in this version of Ruby "
          end
-         list = nil
       elsif cmd =~ /^help$/i
          respond
          respond "Lich v#{LICH_VERSION}"
@@ -6668,11 +6690,13 @@ def do_client(client_string)
          respond "   #{$clean_lich_char}execq <code>              same as #{$clean_lich_char}exec but without the script active and exited messages"
          respond "   #{$clean_lich_char}eq <code>                 ''"
          respond
-         respond "   #{$clean_lich_char}trust <script name>       let the script do whatever it wants"
-         respond "   #{$clean_lich_char}distrust <script name>    restrict the script from doing things that might harm your computer"
-         respond "   #{$clean_lich_char}list trusted              show what scripts are trusted"
-         respond "   #{$clean_lich_char}lt                        ''"
-         respond
+         if (RUBY_VERSION =~ /^2\.[012]\./)
+            respond "   #{$clean_lich_char}trust <script name>       let the script do whatever it wants"
+            respond "   #{$clean_lich_char}distrust <script name>    restrict the script from doing things that might harm your computer"
+            respond "   #{$clean_lich_char}list trusted              show what scripts are trusted"
+            respond "   #{$clean_lich_char}lt                        ''"
+            respond
+         end
          respond "   #{$clean_lich_char}send <line>               send a line to all scripts as if it came from the game"
          respond "   #{$clean_lich_char}send to <script> <line>   send a line to a specific script"
          respond
@@ -7974,11 +7998,7 @@ module Games
             if options[:line]
                line = options[:line]
             end
-            if $SAFE < 3
-               proc { $SAFE = 3; eval(formula) }.call.to_f
-            else
-               eval(formula).to_f
-            end
+            proc { begin; $SAFE = 3; rescue; nil; end; eval(formula) }.call.to_f
          end
          def timeleft=(val)
             @timeleft = val
@@ -8283,11 +8303,7 @@ module Games
                      return false
                   end
                   begin
-                     if $SAFE < 3
-                        proc { $SAFE = 3; eval(@cast_proc) }.call
-                     else
-                        eval(@cast_proc)
-                     end
+                     proc { begin; $SAFE = 3; rescue; nil; end; eval(@cast_proc) }.call
                   rescue
                      echo "cast: error: #{$!}"
                      respond $!.backtrace[0..2]
@@ -8409,11 +8425,7 @@ module Games
          def method_missing(*args)
             if @@bonus_list.include?(args[0].to_s.gsub('_', '-'))
                if @bonus[args[0].to_s.gsub('_', '-')]
-                  if $SAFE < 3
-                     proc { $SAFE = 3; eval(@bonus[args[0].to_s.gsub('_', '-')]) }.call.to_i
-                  else
-                     eval(@bonus[args[0].to_s.gsub('_', '-')]).to_i
-                  end
+                  proc { begin; $SAFE = 3; rescue; nil; end; eval(@bonus[args[0].to_s.gsub('_', '-')]) }.call.to_i
                else
                   0
                end
@@ -8447,11 +8459,7 @@ module Games
                else
                   if formula
                      formula.untaint if formula.tainted?
-                     if $SAFE < 3
-                        proc { $SAFE = 3; eval(formula) }.call.to_i
-                     else
-                        eval(formula).to_i
-                     end
+                     proc { begin; $SAFE = 3; rescue; nil; end; eval(formula) }.call.to_i
                   else
                      0
                   end
@@ -10086,22 +10094,23 @@ Dir.entries(TEMP_DIR).find_all { |fn| fn =~ /^debug-\d+-\d+-\d+-\d+-\d+-\d+\.log
 
 
 
-
-begin
-   did_trusted_defaults = Lich.db.get_first_value("SELECT value FROM lich_settings WHERE name='did_trusted_defaults';")
-rescue SQLite3::BusyException
-   sleep 0.1
-   retry
-end
-if did_trusted_defaults.nil?
-   Script.trust('repository')
-   Script.trust('lnet')
-   Script.trust('narost')
+if (RUBY_VERSION =~ /^2\.[012]\./)
    begin
-      Lich.db.execute("INSERT INTO lich_settings(name,value) VALUES('did_trusted_defaults', 'yes');")
+      did_trusted_defaults = Lich.db.get_first_value("SELECT value FROM lich_settings WHERE name='did_trusted_defaults';")
    rescue SQLite3::BusyException
       sleep 0.1
       retry
+   end
+   if did_trusted_defaults.nil?
+      Script.trust('repository')
+      Script.trust('lnet')
+      Script.trust('narost')
+      begin
+         Lich.db.execute("INSERT INTO lich_settings(name,value) VALUES('did_trusted_defaults', 'yes');")
+      rescue SQLite3::BusyException
+         sleep 0.1
+         retry
+      end
    end
 end
 
@@ -10513,7 +10522,57 @@ else
 end
 
 if defined?(Gtk)
-   Gtk.queue { Gtk::Window.default_icon = Gdk::Pixbuf.new(Zlib::Inflate.inflate("eJyVl8tSE1EQhieTggULX8utr2CVOzc+gpXMhUDIBYhIAuQCAQEDKDEiF9eWZVneUDc+gk+gMtKN+doTJ1pSEP45/Z/uPn07k+u3bt/wvGsLfsbzPfn1vLvyl9y843n68Vw+cpdryYWLMoIS0H9JFf0QlAelSQNB3wVFgr6B/r6WJv2K5jnWXrDWFBQLmnWl6kFd0IygYop0SVARaSjoJagqqIxmXXuFlpKgiqAZ1l6juSCoBlLpG6IWC1p0fX7rSqvued9x3ozv+0kkj/P6ePmTBGxT8ntUKa8uKE+YRqQN1YL0gxkSzUrpyON5igdqLSdoWdAzKA3XRoAHyluhuDQ92V/WEvm/io5pdNjOOlZrSNdABfTqjlVBC4LmBFXwpMkOTXubdFbdZLddXpcoLwkK8WUdnu4dIC0SR9XXdXl9kPq3iVQL6pAS1Lw8cKWq9JADasC2OaBSmrihhXIqqEeYqiSsxwF1bSBoD+NqSP3ry6M/zNWugEWc11mjhdGisXSrhuBMHlWwTFiOCb2Ww6ygI9aa9O2AtTYBV80ajEPqc4MdBxjvEPWCoH0yqzW7ImgL6UO3olcI6bSgXfYG9JTa2CExOXnMjSVPTExc2ci5R9jGbgi558TaaCElWMflEHVbaNLeKSGYxSkrxk3IM+jTs2QmJyevJormc4MQzDIuzJd1wldEqm5khw3NAdokqER8uzjRogjKGFRnFzETUhhFynONvRGzYA6plVfEbCGqEVmJ2NChRmM2xAyUkH7rssOSGeNASDJtx4EgP5vNJjRUk361IakddcahTBoiPRHUGSc9cgdN7GrWgDipUU/84crOOLUt2nis9DRFWsPoyThpndYJ4ZnraVpGDnbPtLCmCTkep0qltiNkFAYpmhukP2BEBa7SNN6Aqhvh1SkO5fUpMbO7lMJ7DK+Q4p8Vm824OZenzWwXUhGTEZMkj7Tk+nLVKlK8EXMhT+dP45pdUlXXeEywI0ogYqbY5ZijpPKu8cANZ8ABQ7ohQ37N8dC1toz0qevfSKIaSJ/gi/EKKby+yws5W8AcUfTI7UfVZ++e9iqjd1h2amqKF6MafEusvcjsU9c5V7llsgV5D7QAr8xaB9QDzcOrsKYzWYvC7jy71RRV2FZlm+V5F9fK8Obdc2xC3nHrOsL7HIVnL0F2rcXw7BLNoM/SHhNi5Z2zprU+Q2JV+tFtFr217uOBrn2SR+2xq1fc30fuZzpHryaG7xfUrqHswmGMfBfzxbd/s4Z2U1jI7PteQgZGkVhL/txl3zV/AnftNz0=".unpack('m')[0]).unpack('c*'), false) }
+   unless File.exists?('fly64.png')
+      File.open('fly64.png', 'w') { |f| f.write '
+         iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAChVBMVEUAAAAA
+         AAABAQECAgIDAwMEBAQFBQUGBgYHBwcICAgKCgoLCwsMDAwNDQ0ODg4QEBAR
+         ERESEhITExMUFBQWFhYXFxcYGBgZGRkaGhobGxscHBwdHR0eHh4fHx8hISEi
+         IiIjIyMkJCQmJiYnJycoKCgpKSksLCwtLS0uLi4vLy8wMDAyMjIzMzM1NTU2
+         NjY4ODg6Ojo7Ozs8PDw9PT0+Pj5AQEBBQUFCQkJDQ0NERERFRUVGRkZHR0dJ
+         SUlKSkpLS0tMTExNTU1OTk5PT09QUFBRUVFSUlJTU1NUVFRVVVVWVlZXV1dY
+         WFhZWVlaWlpcXFxdXV1eXl5gYGBiYmJjY2NkZGRnZ2dpaWlqampra2tsbGxt
+         bW1ubm5vb29xcXFycnJ0dHR1dXV2dnZ4eHh5eXl6enp7e3t8fHx9fX1/f3+A
+         gICBgYGCgoKDg4OEhISFhYWGhoaHh4eJiYmKioqLi4uMjIyNjY2Ojo6Pj4+Q
+         kJCRkZGSkpKTk5OVlZWXl5eYmJiZmZmcnJydnZ2goKChoaGioqKjo6OlpaWm
+         pqanp6eoqKipqamqqqqrq6utra2urq6vr6+wsLCxsbGysrKzs7O0tLS1tbW2
+         tra3t7e4uLi5ubm6urq7u7u9vb2+vr6/v7/AwMDBwcHCwsLDw8PExMTFxcXH
+         x8fIyMjJycnLy8vMzMzPz8/Q0NDR0dHS0tLT09PV1dXW1tbX19fZ2dnc3Nzd
+         3d3e3t7f39/g4ODh4eHi4uLj4+Pk5OTl5eXm5ubn5+fo6Ojp6enq6urr6+vs
+         7Ozt7e3v7+/w8PDx8fHy8vLz8/P09PT19fX29vb39/f4+Pj5+fn6+vr7+/v8
+         /Pz9/f3+/v7////aGP7gAAAAAXRSTlMAQObYZgAABDZJREFUWMOll4tfVEUU
+         x+/vxgJlYmUKKZT4KIOgQi3toWA+e1CGEthDEJMwA/KR0UM0X/kow420QMns
+         pdVCaka0ApUh0YJF7u/vae7u3d175z4+W3c+n4WZs+d858ycM3NmFcWtcYiK
+         p8ZbPAL+KPXoQGOrR8DNHldwPtOjA6sf9+YBU7HRG+GbiZj+kycEt6Tiuf9L
+         IIUlh+/D9WeSQ3xIk15o9aTSoIY4dh0WDSczYb2velQJ64MrZ6G149qYd6hI
+         xgeG5mLqCW1ODr2KaLtfG+4F1ie3CLahjApf063VnAVbxbAdmJfsPvKaKnK3
+         bo+nDx0YZfgMkJl0HIiXybkwtOI+8SfoYiEDdit8DFixMAZQxafTHFzT6Ohn
+         JkAQp4VM5G+awYk6GqzbCisCMQa5M2+/2YV2hIT8fZbA1FZ2hCPB+TzqmNrQ
+         ow1PrsJmeQW7ovHugqWV7GivSRELemTToz4xvGHrxgxUWvaWz6dGZIvh0HJ7
+         tamDb60R/WW/WmPDWT5xAPq6Msxm9e9Vj4320msGoxvA81/ahZYTkGYz71Mi
+         my4dnKNGBnk7XJKC0yan2wBU6ofTX5qijZd3Mux8ghnq+vReidCVUPi67Foh
+         GLuHbsnJFAlQbdTm4TIhGveSC6FDXsN8Sn7uyhXS8gEnRiWwxgS40xrwwDyR
+         FGvtCfThbj5sBNxqo8iLGSoqbGO5H2jgoBFgX5+YpWLATj4FIqHZYiRU2hLe
+         BDZZF9czCViidfxGQn6fDeJ7oFYWs1lT/znSPSeF0oIQd+U7UnwGszXdHF3a
+         aQ5m1d9m7au3Q7qs+bZQmwjsjN3tN0n5sPhH6neYyNiv8lXJATYCr/D1BJby
+         sVYx5tnaZv/Rln2NS7Rxs+RAAT4hs7AqDiiGS8vYIu/Kb5hGpRv4OE6cI9vE
+         OtkrNwcsm8omvKuwwbAxnCEBQhzt7fmhe4C0O4y8cYzYojS8mADIXvtdi0o/
+         6qn0AmcNEmMTFeoN16I0X0vgbZiecO6wCcDlDhkdNQ8W4Unxf7I4R3HZOqP9
+         Q/wI9zgBwlwrquDFyKoNZegBI6BZe3L10978CO5qiXx1CosS8n+0e1x8DhRq
+         gCGFH4xD8S82xaC1aL0eFZbDUCv3AbO0SB7hXxXpiNS2tjzr+VMun4gHlbnp
+         hhXMBP5UmKP6NNtLurPHszLP0bHEExWKcQtbrirK6ATUmC7l7eIN4RSLYwjE
+         9eqAZyKKv0uHlpdnlDgQWIWRWD8APKirZU+Ri3h5gcN1XIALeq8/BTNjzwhU
+         WRa9odD+ml2hFkXLoLhRZ8dUuvGdVfPbhbaEC8AT4qAFxUWS2KhWXLGZ6+SI
+         rQtNImPG3yYeIKcTCb3N9pXqtI1fjBeIqX4aX8Cz/9sTfbijxxy1uqUef7XU
+         bvAIqG/yCNjuEaB0rvMIGHnBm73CfK8/4E+5A/4FccSsAIr2lfUAAAAASUVO
+         RK5CYII='.unpack('m')[0] }
+   end
+   begin
+      Gtk.queue {
+         Gtk::Window.default_icon = GdkPixbuf::Pixbuf.new(:file => 'fly64.png')
+      }
+   rescue
+      nil # fixme
+   end
 end
 
 main_thread = Thread.new {
