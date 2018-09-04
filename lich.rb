@@ -10567,7 +10567,9 @@ if defined?(Gtk)
          RK5CYII='.unpack('m')[0] }
    end
    begin
-      Gtk::Window.default_icon = GdkPixbuf::Pixbuf.new(:file => 'fly64.png')
+      Gtk.queue {
+         Gtk::Window.default_icon = GdkPixbuf::Pixbuf.new(:file => 'fly64.png')
+      }
    rescue
       nil # fixme
    end
