@@ -1265,7 +1265,7 @@
       <cost type='mana'>11</cost>
    </spell>
    <spell availability='all' name='Shroud of Deception' number='1212'/>
-   <spell availability='all' name='Mind over Body' number='1213' type='utility'>
+   <spell availability='self-cast' name='Mind over Body' number='1213' type='utility'>
       <duration max="599">599</duration>
       <cost type='mana'>13</cost>
       <bonus type='stamina-reduction'>20+(bonus=0;[6,15,30,80,150,230].each { |n| bonus += 5 if Skills.mltelepathy &gt;= n };bonus)</bonus>
