@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.48'
+LICH_VERSION = '4.6.49'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -6620,11 +6620,13 @@ def do_client(client_string)
             ExecScript.start(cmd_data, flags={ :quiet => true, :trusted => true })
          end
       elsif cmd =~ /^trust\s+(.*)/i
+         script_name = $1
          if RUBY_VERSION =~ /^2\.[012]\./
-            script_name = $1
             if File.exists?("#{SCRIPT_DIR}/#{script_name}.lic")
                if Script.trust(script_name)
                   respond "--- Lich: '#{script_name}' is now a trusted script."
+               else
+                  respond "--- Lich: '#{script_name}' is already trusted."
                end
             else
                respond "--- Lich: could not find script: #{script_name}"
@@ -6633,8 +6635,8 @@ def do_client(client_string)
             respond "--- Lich: this feature isn't available in this version of Ruby "
          end
       elsif cmd =~ /^(?:dis|un)trust\s+(.*)/i
+         script_name = $1
          if RUBY_VERSION =~ /^2\.[012]\./
-            script_name = $1
             if Script.distrust(script_name)
                respond "--- Lich: '#{script_name}' is no longer a trusted script."
             else
