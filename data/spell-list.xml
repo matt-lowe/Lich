@@ -2459,6 +2459,12 @@
       <message type='start'>\[You have activated a Major Loot Boost\.  Your chances for better LOOT will be boosted for 15 minutes\.\]</message>
       <message type='end'>\[Your Major Loot Boost has ended\.\]</message>
    </spell>
+   <spell availability='self-cast' name='Minor Loot Boost' number='9101' type='utility'>
+      <duration persist-on-death='yes'>15</duration>
+      <cast-proc>fput &apos;boost loot minor&apos;</cast-proc>
+      <message type='start'>\[You have activated a Minor Loot Boost\.  Your chances for better LOOT will be boosted for 15 minutes\.\]</message>
+      <message type='end'>\[Your Minor Loot Boost has ended\.\]</message>
+   </spell>
    <spell availability='self-cast' name='Mana Leech Recovery' number='9516' type='timer'>
       <duration persist-on-death='yes' span='stackable'>1</duration>
       <message type='start'>You feel a sudden rush of power as you absorb [0-9]+ mana!</message>
