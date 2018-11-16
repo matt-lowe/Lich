@@ -359,6 +359,13 @@
       <message type='start'>Drawing deep from the well of your soul, you summon forth a thread of your essence and weave it into an evanescent shield to shroud your form\.</message>
       <message type='end'>The air about you shimmers momentarily before the evanescent shield surrounding you collapses\.</message>
    </spell>
+   <spell availability='self-cast' name='Ethereal Censer' number='320' type='offensive/utility'>
+      <cost type='mana'>20</cost>
+	  <duration>0.5</duration>
+      <message type='start'>Mana swirls into the visible spectrum and manifests as an ethereal, pure golden censer swinging pendulously through the air beside you\.  A black haze of incense smoke trails in its wake, quickly spreading in sinuous tendrils through the area\.</message>
+	  <message type='start'>As the fragrant haze settles over you, you feel revitalized\.</message>
+      <message type='end'>You sense the flows of mana around you are once again strong enough to support the manifestation of an ethereal censer\.</message>
+   </spell>
    <spell availability='all' name='Divine Wrath' number='335' type='attack' incant='no'>
       <cost type='mana'>35</cost>
    </spell>
