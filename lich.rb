@@ -541,61 +541,66 @@ rescue LoadError
    exit
 end
 
-begin
-   require 'gtk2'
-   HAVE_GTK = true
-rescue LoadError
-   if (ENV['RUN_BY_CRON'].nil? or ENV['RUN_BY_CRON'] == 'false') and ARGV.empty? or ARGV.any? { |arg| arg =~ /^--gui$/ } or not $stdout.isatty
-      if defined?(Win32)
-         r = Win32.MessageBox(:lpText => "Lich uses gtk2 to create windows, but it is not installed.  You can use Lich from the command line (ruby lich.rbw --help) or you can install gtk2 for a point and click interface.\n\nWould you like to install gtk2 now?", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_YESNO | Win32::MB_ICONQUESTION))
-         if r == Win32::IDIYES
-            r = Win32.GetModuleFileName
-            if r[:return] > 0
-               ruby_bin_dir = File.dirname(r[:lpFilename])
-               if File.exists?("#{ruby_bin_dir}\\gem.bat")
-                  verb = (Win32.isXP? ? 'open' : 'runas')
-                  r = Win32.ShellExecuteEx(:fMask => Win32::SEE_MASK_NOCLOSEPROCESS, :lpVerb => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install cairo:1.14.3 gtk2:2.2.5 --source http://rubygems.org --no-ri --no-rdoc')
-                  if r[:return] > 0
-                     pid = r[:hProcess]
-                     sleep 1 while Win32.GetExitCodeProcess(:hProcess => pid)[:lpExitCode] == Win32::STILL_ACTIVE
-                     r = Win32.MessageBox(:lpText => "Install finished.  Lich will restart now.", :lpCaption => "Lich v#{LICH_VERSION}", :uType => Win32::MB_OKCANCEL)
-                  else
-                     # ShellExecuteEx failed: this seems to happen with an access denied error even while elevated on some random systems
-                     r = Win32.ShellExecute(:lpOperation => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install cairo:1.14.3 gtk2:2.2.5 --source http://rubygems.org --no-ri --no-rdoc')
-                     if r <= 32
-                        Win32.MessageBox(:lpText => "error: failed to start the gtk2 installer\n\nfailed command: Win32.ShellExecute(:lpOperation => #{verb.inspect}, :lpFile => \"#{ruby_bin_dir}\\gem.bat\", :lpParameters => \"install cairo:1.14.3 gtk2:2.2.5 --source http://rubygems.org --no-ri --no-rdoc\")\n\nerror code: #{Win32.GetLastError}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
-                        exit
-                     end
-                     r = Win32.MessageBox(:lpText => "When the installer is finished, click OK to restart Lich.", :lpCaption => "Lich v#{LICH_VERSION}", :uType => Win32::MB_OKCANCEL)
-                  end
-                  if r == Win32::IDIOK
-                     if File.exists?("#{ruby_bin_dir}\\rubyw.exe")
-                        Win32.ShellExecute(:lpOperation => 'open', :lpFile => "#{ruby_bin_dir}\\rubyw.exe", :lpParameters => "\"#{File.expand_path($PROGRAM_NAME)}\"")
+if ((RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)) or ENV['DISPLAY']
+   begin
+      require 'gtk2'
+      HAVE_GTK = true
+   rescue LoadError
+      if (ENV['RUN_BY_CRON'].nil? or ENV['RUN_BY_CRON'] == 'false') and ARGV.empty? or ARGV.any? { |arg| arg =~ /^--gui$/ } or not $stdout.isatty
+         if defined?(Win32)
+            r = Win32.MessageBox(:lpText => "Lich uses gtk2 to create windows, but it is not installed.  You can use Lich from the command line (ruby lich.rbw --help) or you can install gtk2 for a point and click interface.\n\nWould you like to install gtk2 now?", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_YESNO | Win32::MB_ICONQUESTION))
+            if r == Win32::IDIYES
+               r = Win32.GetModuleFileName
+               if r[:return] > 0
+                  ruby_bin_dir = File.dirname(r[:lpFilename])
+                  if File.exists?("#{ruby_bin_dir}\\gem.bat")
+                     verb = (Win32.isXP? ? 'open' : 'runas')
+                     r = Win32.ShellExecuteEx(:fMask => Win32::SEE_MASK_NOCLOSEPROCESS, :lpVerb => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install cairo:1.14.3 gtk2:2.2.5 --source http://rubygems.org --no-ri --no-rdoc')
+                     if r[:return] > 0
+                        pid = r[:hProcess]
+                        sleep 1 while Win32.GetExitCodeProcess(:hProcess => pid)[:lpExitCode] == Win32::STILL_ACTIVE
+                        r = Win32.MessageBox(:lpText => "Install finished.  Lich will restart now.", :lpCaption => "Lich v#{LICH_VERSION}", :uType => Win32::MB_OKCANCEL)
                      else
-                        Win32.MessageBox(:lpText => "error: failed to find rubyw.exe; can't restart Lich for you", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
+                        # ShellExecuteEx failed: this seems to happen with an access denied error even while elevated on some random systems
+                        r = Win32.ShellExecute(:lpOperation => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install cairo:1.14.3 gtk2:2.2.5 --source http://rubygems.org --no-ri --no-rdoc')
+                        if r <= 32
+                           Win32.MessageBox(:lpText => "error: failed to start the gtk2 installer\n\nfailed command: Win32.ShellExecute(:lpOperation => #{verb.inspect}, :lpFile => \"#{ruby_bin_dir}\\gem.bat\", :lpParameters => \"install cairo:1.14.3 gtk2:2.2.5 --source http://rubygems.org --no-ri --no-rdoc\")\n\nerror code: #{Win32.GetLastError}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
+                           exit
+                        end
+                        r = Win32.MessageBox(:lpText => "When the installer is finished, click OK to restart Lich.", :lpCaption => "Lich v#{LICH_VERSION}", :uType => Win32::MB_OKCANCEL)
+                     end
+                     if r == Win32::IDIOK
+                        if File.exists?("#{ruby_bin_dir}\\rubyw.exe")
+                           Win32.ShellExecute(:lpOperation => 'open', :lpFile => "#{ruby_bin_dir}\\rubyw.exe", :lpParameters => "\"#{File.expand_path($PROGRAM_NAME)}\"")
+                        else
+                           Win32.MessageBox(:lpText => "error: failed to find rubyw.exe; can't restart Lich for you", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
+                        end
+                     else
+                        # user doesn't want to restart Lich
                      end
                   else
-                     # user doesn't want to restart Lich
+                     Win32.MessageBox(:lpText => "error: Could not find gem.bat in directory #{ruby_bin_dir}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
                   end
                else
-                  Win32.MessageBox(:lpText => "error: Could not find gem.bat in directory #{ruby_bin_dir}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
+                  Win32.MessageBox(:lpText => "error: GetModuleFileName failed", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
                end
             else
-               Win32.MessageBox(:lpText => "error: GetModuleFileName failed", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
+               # user doesn't want to install gtk2 gem
             end
          else
-            # user doesn't want to install gtk2 gem
+            # fixme: no gtk2 on Linux/Mac
+            puts "The gtk2 gem is not installed (or failed to load), you may need to: sudo gem install gtk2"
          end
+         exit
       else
-         # fixme: no gtk2 on Linux/Mac
-         puts "The gtk2 gem is not installed (or failed to load), you may need to: sudo gem install gtk2"
+         # gtk is optional if command line arguments are given or started in a terminal
+         HAVE_GTK = false
+         early_gtk_error = "warning: failed to load GTK\n\t#{$!}\n\t#{$!.backtrace.join("\n\t")}"
       end
-      exit
-   else
-      # gtk is optional if command line arguments are given or started in a terminal
-      HAVE_GTK = false
-      early_gtk_error = "warning: failed to load GTK\n\t#{$!}\n\t#{$!.backtrace.join("\n\t")}"
    end
+else
+   HAVE_GTK = false
+   early_gtk_error = "info: DISPLAY environment variable is not set; not trying gtk"
 end
 
 if defined?(Gtk)
