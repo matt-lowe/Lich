@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.49'
+LICH_VERSION = '4.6.50'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -12023,7 +12023,12 @@ main_thread = Thread.new {
             scrubbed_launcher_cmd = custom_launch.sub(/\%port\%/, localport.to_s).sub(/\%key\%/, '[scrubbed key]')
             Lich.log "info: launcher_cmd: #{scrubbed_launcher_cmd}"
          else
-            launch_data.collect! { |line| line.sub(/GAMEPORT=.+/, "GAMEPORT=#{localport}").sub(/GAMEHOST=.+/, "GAMEHOST=localhost") }
+            if RUBY_PLATFORM =~ /darwin/i
+               localhost = "127.0.0.1"
+            else
+               localhost = "localhost"
+            end
+            launch_data.collect! { |line| line.sub(/GAMEPORT=.+/, "GAMEPORT=#{localport}").sub(/GAMEHOST=.+/, "GAMEHOST=#{localhost}") }
             sal_filename = "#{TEMP_DIR}/lich#{rand(10000)}.sal"
             while File.exists?(sal_filename)
                sal_filename = "#{TEMP_DIR}/lich#{rand(10000)}.sal"
