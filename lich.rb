@@ -10530,7 +10530,7 @@ end
 
 if defined?(Gtk)
    unless File.exists?('fly64.png')
-      File.open('fly64.png', 'w') { |f| f.write '
+      File.open('fly64.png', 'wb') { |f| f.write '
          iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAChVBMVEUAAAAA
          AAABAQECAgIDAwMEBAQFBQUGBgYHBwcICAgKCgoLCwsMDAwNDQ0ODg4QEBAR
          ERESEhITExMUFBQWFhYXFxcYGBgZGRkaGhobGxscHBwdHR0eHh4fHx8hISEi
