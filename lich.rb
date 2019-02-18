@@ -502,16 +502,16 @@ rescue LoadError
             if File.exists?("#{ruby_bin_dir}\\gem.bat")
                verb = (Win32.isXP? ? 'open' : 'runas')
                # fixme: using --source http://rubygems.org to avoid https because it has been failing to validate the certificate on Windows
-               r = Win32.ShellExecuteEx(:fMask => Win32::SEE_MASK_NOCLOSEPROCESS, :lpVerb => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install sqlite3 --source http://rubygems.org --no-ri --no-rdoc')
+               r = Win32.ShellExecuteEx(:fMask => Win32::SEE_MASK_NOCLOSEPROCESS, :lpVerb => verb, :lpFile => "#{ruby_bin_dir}\\#{gem_file}", :lpParameters => 'install sqlite3 --source http://rubygems.org --no-ri --no-rdoc')
                if r[:return] > 0
                   pid = r[:hProcess]
                   sleep 1 while Win32.GetExitCodeProcess(:hProcess => pid)[:lpExitCode] == Win32::STILL_ACTIVE
                   r = Win32.MessageBox(:lpText => "Install finished.  Lich will restart now.", :lpCaption => "Lich v#{LICH_VERSION}", :uType => Win32::MB_OKCANCEL)
                else
                   # ShellExecuteEx failed: this seems to happen with an access denied error even while elevated on some random systems
-                  r = Win32.ShellExecute(:lpOperation => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install sqlite3 --source http://rubygems.org --no-ri --no-rdoc')
+                  r = Win32.ShellExecute(:lpOperation => verb, :lpFile => "#{ruby_bin_dir}\\#{gem_file}", :lpParameters => 'install sqlite3 --source http://rubygems.org --no-ri --no-rdoc')
                   if r <= 32
-                     Win32.MessageBox(:lpText => "error: failed to start the sqlite3 installer\n\nfailed command: Win32.ShellExecute(:lpOperation => #{verb.inspect}, :lpFile => \"#{ruby_bin_dir}\\gem.bat\", :lpParameters => \"install sqlite3 --source http://rubygems.org --no-ri --no-rdoc\")\n\nerror code: #{Win32.GetLastError}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
+                     Win32.MessageBox(:lpText => "error: failed to start the sqlite3 installer\n\nfailed command: Win32.ShellExecute(:lpOperation => #{verb.inspect}, :lpFile => \"#{ruby_bin_dir}\\#{gem_file}\", :lpParameters => \"install sqlite3 --source http://rubygems.org --no-ri --no-rdoc\")\n\nerror code: #{Win32.GetLastError}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
                      exit
                   end
                   r = Win32.MessageBox(:lpText => "When the installer is finished, click OK to restart Lich.", :lpCaption => "Lich v#{LICH_VERSION}", :uType => Win32::MB_OKCANCEL)
@@ -526,7 +526,7 @@ rescue LoadError
                   # user doesn't want to restart Lich
                end
             else
-               Win32.MessageBox(:lpText => "error: Could not find gem.bat in directory #{ruby_bin_dir}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
+               Win32.MessageBox(:lpText => "error: Could not find gem.cmd or gem.bat in directory #{ruby_bin_dir}", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
             end
          else
             Win32.MessageBox(:lpText => "error: GetModuleFileName failed", :lpCaption => "Lich v#{LICH_VERSION}", :uType => (Win32::MB_OK | Win32::MB_ICONERROR))
@@ -553,7 +553,14 @@ if ((RUBY_PLATFORM =~ /mingw|win/i) and (RUBY_PLATFORM !~ /darwin/i)) or ENV['DI
                r = Win32.GetModuleFileName
                if r[:return] > 0
                   ruby_bin_dir = File.dirname(r[:lpFilename])
-                  if File.exists?("#{ruby_bin_dir}\\gem.bat")
+                  if File.exists?("#{ruby_bin_dir}\\gem.cmd")
+                  gem_file = 'gem.cmd'
+                  elsif File.exists?("#{ruby_bin_dir}\\gem.bat")
+                     gem_file = 'gem.bat'
+                  else
+                     gem_file = nil
+                  end
+                  if gem_file
                      verb = (Win32.isXP? ? 'open' : 'runas')
                      r = Win32.ShellExecuteEx(:fMask => Win32::SEE_MASK_NOCLOSEPROCESS, :lpVerb => verb, :lpFile => "#{ruby_bin_dir}\\gem.bat", :lpParameters => 'install cairo:1.14.3 gtk2:2.2.5 --source http://rubygems.org --no-ri --no-rdoc')
                      if r[:return] > 0
@@ -5939,7 +5946,7 @@ def empty_hands
          }
       else
          actions.unshift proc {
-            dothistimeout "get ##{left_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
+            dothistimeout "get ##{left_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|get|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
             20.times { break if (GameObj.left_hand.id == left_hand.id) or (GameObj.right_hand.id == left_hand.id); sleep 0.1 }
             if GameObj.right_hand.id == left_hand.id
                dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
@@ -5971,7 +5978,7 @@ def empty_hands
    if right_hand.id
       waitrt?
       actions.unshift proc {
-         dothistimeout "get ##{right_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
+         dothistimeout "get ##{right_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|get|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
          20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
          if GameObj.left_hand.id == right_hand.id
             dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
@@ -6046,7 +6053,7 @@ def empty_hand
       if right_hand.id and ([ Wounds.rightArm, Wounds.rightHand, Scars.rightArm, Scars.rightHand ].max < 3 or [ Wounds.leftArm, Wounds.leftHand, Scars.leftArm, Scars.leftHand ].max = 3)
          waitrt?
          actions.unshift proc {
-            dothistimeout "get ##{right_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
+            dothistimeout "get ##{right_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|get|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
             20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
             if GameObj.left_hand.id == right_hand.id
                dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
@@ -6095,7 +6102,7 @@ def empty_hand
             }
          else
             actions.unshift proc {
-               dothistimeout "get ##{left_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
+               dothistimeout "get ##{left_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|get|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
                20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
                if GameObj.right_hand.id == left_hand.id
                   dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
@@ -6160,7 +6167,7 @@ def empty_right_hand
    if right_hand.id
       waitrt?
       actions.unshift proc {
-         dothistimeout "get ##{right_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
+         dothistimeout "get ##{right_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|get|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
          20.times { break if GameObj.left_hand.id == right_hand.id or GameObj.right_hand.id == right_hand.id; sleep 0.1 }
          if GameObj.left_hand.id == right_hand.id
             dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
@@ -6242,7 +6249,7 @@ def empty_left_hand
          }
       else
          actions.unshift proc {
-            dothistimeout "get ##{left_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
+            dothistimeout "get ##{left_hand.id}", 3, /^You (?:shield the opening of .*? from view as you |discreetly |carefully |deftly )?(?:remove|draw|grab|get|reach|slip|tuck|retrieve|already have)|^Get what\?$|^Why don't you leave some for others\?$|^You need a free hand/
             20.times { break if GameObj.left_hand.id == left_hand.id or GameObj.right_hand.id == left_hand.id; sleep 0.1 }
             if GameObj.right_hand.id == left_hand.id
                dothistimeout 'swap', 3, /^You don't have anything to swap!|^You swap/
