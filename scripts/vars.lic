@@ -9,13 +9,19 @@
 	game: any
 	tags: core
 	required: Lich >= 4.6.14
-	version: 0.7
+	version: 0.8
 
 	changelog:
+      0.8 (2019-02-23):
+         fixes for compatibility with Ruby >= 2.3
 		0.7 (2015-04-26):
 			prompt to save in GUI when new vars are added
 		0.6 (2015-02-01):
 			add default text to new var textboxes
+
+=end
+=begin
+
 		0.5 (2015-02-01):
 			sort vars alphabetically in gui
 		0.4 (2015-02-01):
@@ -61,7 +67,6 @@ elsif defined?(Gtk) and (script.vars[1] == 'setup')
 	window = nil
 	done = false
 	Gtk.queue {
-		delete_pixbuf = Gdk::Pixbuf.new("R2RrUAAAAqMCAQACAAAAQAAAABAAAAAQkgAAAAAE1B8gCts8L+rbPC/mxQAAB4UAAAAAA9s8L7DbOSz/3EI1MoMAAAAABsoqJgrVPC/szSIa/s4iGv7WPC/ptwAABoMAAAAABdU8LrbPJx7/ziMb/9MyJ//YRTcxggAAAAAOzDInXMYiG//GIxz/xyMc/8YhGv7QOy/prAAABwAAAADROy62yCYe/8cjHP/GIxz/xiIb/skqIqSDAAAAAAK/Ixy2vyMb/4K/Ixz/BL4hGv7LOi3jyzsusMAmHv+CvyMc/wO/Ixz+vyMc6cElHgmEAAAAAAG4Ihu2g7giG/8CtyEa/7olHf+CuCIb/wO4Ihv+uCIb6bokHwaGAAAAAAKwIhu2sCEb/4SwIhv/A7AiG/6wIhvpsSYfBogAAAAAAaghG/GFqCEa/wKqJB8UqSIcAYcAAAAAAqEgG7aiIRr/hKIgGv8DoSEa/qEhGumnIyEGhgAAAAABmSAbtoeaIBr/A5ogGv6aIBrpmSUhBoQAAAAAApIfGraTIBr/gpIgGv8EkyAa/pMgGuOTIBqwkh8a/4KSIBr/A5IgGv6SHxrpkiEeCYIAAAAAAYshG1yDix8Z/wWLHxn+ix8Z6ZAmHwcAAAAAjB8atoOLHxn/AosfGf6LHxmkggAAAAACjzAqCoQgGuyChB8Z/gKEHxnolCojBoMAAAAAAoQfGrWDHhn/goQfGf8JiCUgMQAAAAAAAAADBAEBDyoQDx96HhnweR0Z7RcHBiYBAAAhggAAACENAAAAIAAAABVzHBjBfB4Z/1sbF0cAAAAOAAAAAwAAAAQAAAARAgEAGAAAABMAAAAXAQAAIoQAAAAjBgAAACIAAAAaAAAAEAAAABgAAAARAAAABJAAAAAA".unpack('m')[0].unpack('c*'), false)
 		vars = Vars.list.to_a.sort { |a,b| a[0].to_s <=> b[0].to_s }
 		textboxes = Array.new
 		table = Gtk::Table.new((vars.length + 1), 3)
@@ -79,9 +84,7 @@ elsif defined?(Gtk) and (script.vars[1] == 'setup')
 			end
 			table.attach(textbox, 1, 2, i, (i + 1), (Gtk::EXPAND|Gtk::FILL), Gtk::FILL, 3, 3)
 			textboxes[i] = textbox
-			delete_image = Gtk::Image.new(delete_pixbuf)
-			delete_button = Gtk::Button.new
-			delete_button.image = delete_image
+         delete_button = Gtk::Button.new(Gtk::Stock::DELETE)
 			table.attach(delete_button, 2, 3, i, (i + 1), Gtk::SHRINK, Gtk::FILL, 3, 3)
 			delete_button.signal_connect('clicked') {
 				report_errors {
@@ -105,9 +108,7 @@ elsif defined?(Gtk) and (script.vars[1] == 'setup')
 			textbox.sensitive = false
 			table.attach(textbox, 1, 2, (table.n_rows - 1), table.n_rows, (Gtk::EXPAND|Gtk::FILL), Gtk::FILL, 3, 3)
 			new_vars[i] = [ label, textbox ]
-			delete_image = Gtk::Image.new(delete_pixbuf)
-			delete_button = Gtk::Button.new
-			delete_button.image = delete_image
+			delete_button = Gtk::Button.new(Gtk::Stock::DELETE)
 			delete_button.sensitive = false
 			table.attach(delete_button, 2, 3, (table.n_rows - 1), table.n_rows, Gtk::SHRINK, Gtk::FILL, 3, 3)
 			label.show
