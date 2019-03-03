@@ -257,13 +257,13 @@ elsif script.vars[0] =~ /^list$/i
       output.concat "          FWI trinket: #{UserVars.mapdb_fwi_trinket ? UserVars.mapdb_fwi_trinket : '(not set)'}\n"
    end
    if XMLData.game =~ /^GSPlat|^GSF/
-      output.concat "          use portals: #{(UserVars.mapdb_use_portals == 'yes') ? 'yes' : 'no'}"
+      output.concat "          use portals: #{(UserVars.mapdb_use_portals == 'yes') ? 'yes' : 'no'}\n"
    end
    if XMLData.game =~ /^GSPlat/
-      output.concat "      use old portals: #{(UserVars.mapdb_use_old_portals == 'yes') ? 'yes' : 'no'}"
+      output.concat "      use old portals: #{(UserVars.mapdb_use_old_portals == 'yes') ? 'yes' : 'no'}\n"
    end
    if XMLData.game =~ /^GSPlat|^GSF/
-      output.concat "     have portal pass: #{(UserVars.mapdb_have_portal_pass == 'yes') ? 'yes' : 'no'}"
+      output.concat "     have portal pass: #{(UserVars.mapdb_have_portal_pass == 'yes') ? 'yes' : 'no'}\n"
    end
    output.concat "\n"
    output.concat "custom targets:\n"
