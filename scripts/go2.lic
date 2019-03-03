@@ -9,19 +9,20 @@
    original author: Shaelun
               game: any
               tags: core, movement
-           version: 1.23
+           version: 1.24
           required: Lich >= 4.6.14
 
    changelog:
+      1.24 (2019-03-03):
+         Updated formatting for ";go2 list" in GSPlat and GSF
       1.23 (2019-03-03):
          add setting for using GSPlat old portal system
       1.22 (2019-02-10):
          add settings for using Chronomage day passes
-      1.21 (2017-10-07):
-         don't try to stand before swimming movements
 =end
 =begin
-
+      1.21 (2017-10-07):
+         don't try to stand before swimming movements
       1.20 (2017-09-17):
          add confluence-hot and confluence-cold targets
       1.19 (2016-09-24):
@@ -257,13 +258,13 @@ elsif script.vars[0] =~ /^list$/i
       output.concat "          FWI trinket: #{UserVars.mapdb_fwi_trinket ? UserVars.mapdb_fwi_trinket : '(not set)'}\n"
    end
    if XMLData.game =~ /^GSPlat|^GSF/
-      output.concat "          use portals: #{(UserVars.mapdb_use_portals == 'yes') ? 'yes' : 'no'}"
+      output.concat "          use portals: #{(UserVars.mapdb_use_portals == 'yes') ? 'yes' : 'no'}\n"
    end
    if XMLData.game =~ /^GSPlat/
-      output.concat "      use old portals: #{(UserVars.mapdb_use_old_portals == 'yes') ? 'yes' : 'no'}"
+      output.concat "      use old portals: #{(UserVars.mapdb_use_old_portals == 'yes') ? 'yes' : 'no'}\n"
    end
    if XMLData.game =~ /^GSPlat|^GSF/
-      output.concat "     have portal pass: #{(UserVars.mapdb_have_portal_pass == 'yes') ? 'yes' : 'no'}"
+      output.concat "     have portal pass: #{(UserVars.mapdb_have_portal_pass == 'yes') ? 'yes' : 'no'}\n"
    end
    output.concat "\n"
    output.concat "custom targets:\n"
