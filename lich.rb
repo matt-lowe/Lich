@@ -4820,7 +4820,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
       elsif line == 'You are too injured to be doing any climbing!'
          if (resolve = Spell[9704]) and resolve.known?
             wait_until { resolve.affordable? }
-            resove.cast
+            resolve.cast
             put_dir.call
          else
             return nil
