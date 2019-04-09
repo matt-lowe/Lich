@@ -1227,7 +1227,7 @@
     <spell availability='all' name='Rapid Healing Recovery' number='1199'>
       <duration>30</duration>
       <message type='start'>You release your pinpoint focus on your healing energies and allow their stimulated flow to settle to normal rates\.</message>
-   </spell?
+	</spell>
    <spell availability='all' name='Force Orb' number='1201' type='attack'>
       <cost type='mana'>1</cost>
    </spell>
