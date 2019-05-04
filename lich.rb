@@ -8190,6 +8190,12 @@ module Games
                false
             end
          end
+         def incant?
+           !@no_incant
+         end
+         def incant=(val)
+           @no_incant = !val
+         end
          def to_s
             @name.to_s
          end
