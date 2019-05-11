@@ -1183,8 +1183,11 @@
    <spell availability='all' name='Wither' number='1115' type='attack'>
       <cost type='mana'>15</cost>
    </spell>
-   <spell availability='all' name='Cry For Help' number='1116' type='utility'>
+       <spell availability='all' name='Rapid Healing' number='1116' type='utility'>
+      <duration>1</duration>
       <cost type='mana'>16</cost>
+      <message type='start'>You narrow your focus on your healing energies, stimulating their flow\.</message>
+      <message type='end'>You release your pinpoint focus on your healing energies and allow their stimulated flow to settle to normal rates\.</message>
    </spell>
    <spell availability='all' name='Empathic Link' number='1117' type='attack'>
       <cost type='mana'>8 + (Stats.level/10)</cost>
@@ -1225,6 +1228,10 @@
    <spell availability='all' name='Regeneration' number='1150' type='utility'>
       <cost type='mana'>50</cost>
    </spell>
+    <spell availability='all' name='Rapid Healing Recovery' number='1199'>
+      <duration>30</duration>
+      <message type='start'>You release your pinpoint focus on your healing energies and allow their stimulated flow to settle to normal rates\.</message>
+	</spell>
    <spell availability='all' name='Force Orb' number='1201' type='attack'>
       <cost type='mana'>1</cost>
    </spell>
@@ -1467,6 +1474,10 @@
    </spell>
    <spell availability='all' name='Divine Word' number='1640' type='utility'>
       <cost type='mana'>40</cost>
+   </spell>
+   <spell availability='all' name='Divine Incarnation' number='1650' type='utility'>
+      <duration>10</duration>
+      <cost type='mana'>50</cost>
    </spell>
    <spell availability='all' name='Arcane Blast' number='1700' type='attack'>
    </spell>
