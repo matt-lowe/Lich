@@ -1187,7 +1187,6 @@
       <duration>1</duration>
       <cost type='mana'>16</cost>
       <message type='start'>You narrow your focus on your healing energies, stimulating their flow\.</message>
-      <message type='end'>You release your pinpoint focus on your healing energies and allow their stimulated flow to settle to normal rates\.</message>
    </spell>
    <spell availability='all' name='Empathic Link' number='1117' type='attack'>
       <cost type='mana'>8 + (Stats.level/10)</cost>
