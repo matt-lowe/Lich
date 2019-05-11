@@ -9215,7 +9215,13 @@ module Games
             @@contents.delete(container_id)
          end
          def GameObj.targets
-            @@npcs.select { |n| XMLData.current_target_ids.include?(n.id) }
+            a = Array.new
+            XMLData.current_target_ids.each { |id|
+              if (npc = @@npcs.find { |n| n.id == id }) and (npc.status !~ /dead|gone/)
+                a.push(npc)
+              end
+            }
+            a
          end
          def GameObj.dead
             dead_list = Array.new
