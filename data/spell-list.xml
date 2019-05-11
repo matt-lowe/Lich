@@ -560,7 +560,7 @@
    <spell availability='all' name='Floating Disk' number='511' type='utility'>
       <cost type='mana'>11</cost>
    </spell>
-   <spell availability='all' name='Ice Patch' number='512' type='attack'>
+   <spell availability='all' name='Cold Snap' number='512' type='attack'>
       <cost type='mana'>12</cost>
    </spell>
    <spell availability='self-cast' name='Elemental Focus' number='513' type='offense'>
