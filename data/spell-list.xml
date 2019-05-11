@@ -1109,8 +1109,12 @@
       <cost type='mana'>20</cost>
    </spell>
    <spell availability='all' name='Singing Sword Song' number='1025' type='attack/utility'>
+      <duration>Spellsong.timeleft</duration>
       <cost type='mana'>25</cost>
       <cost type='renew'>15</cost>
+      <message type='start'>An animated .+ appears and hovers near you\.</message>
+      <message type='end'>Your animated .+ dissipates in a shower of sparkling motes of light\.</message>
+      <message type='end'>You feel the magic of your animated .+ unravel and end\.</message>
    </spell>
    <spell availability='all' name='Song of Sonic Disruption' number='1030' type='attack'>
       <cost type='mana'>30</cost>
