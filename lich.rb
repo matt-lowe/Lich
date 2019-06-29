@@ -7332,8 +7332,9 @@ module Games
             ary.push sprintf("%017.17s Normal (Bonus)  ...  Enhanced (Bonus)", "")
             %w[ Strength Constitution Dexterity Agility Discipline Aura Logic Intuition Wisdom Influence ].each { |stat|
                val, bon = Stats.send(stat[0..2].downcase)
+               enh_val, enh_bon = Stats.send("enhanced_#{stat[0..2].downcase}")
                spc = " " * (4 - bon.to_s.length)
-               ary.push sprintf("%012s (%s): %05s (%d) %s ... %05s (%d)", stat, stat[0..2].upcase, val, bon, spc, val, bon)
+               ary.push sprintf("%012s (%s): %05s (%d) %s ... %05s (%d)", stat, stat[0..2].upcase, val, bon, spc, enh_val, enh_bon)
             }
             ary.push sprintf("Mana: %04s", mana)
             ary
@@ -8818,6 +8819,26 @@ module Games
          def Stats.wis=(val);    @@wis=val;    end
          def Stats.inf;          @@inf;        end
          def Stats.inf=(val);    @@inf=val;    end
+         def Stats.enhanced_str;          @@enhanced_str;        end
+         def Stats.enhanced_str=(val);    @@enhanced_str=val;    end
+         def Stats.enhanced_con;          @@enhanced_con;        end
+         def Stats.enhanced_con=(val);    @@enhanced_con=val;    end
+         def Stats.enhanced_dex;          @@enhanced_dex;        end
+         def Stats.enhanced_dex=(val);    @@enhanced_dex=val;    end
+         def Stats.enhanced_agi;          @@enhanced_agi;        end
+         def Stats.enhanced_agi=(val);    @@enhanced_agi=val;    end
+         def Stats.enhanced_dis;          @@enhanced_dis;        end
+         def Stats.enhanced_dis=(val);    @@enhanced_dis=val;    end
+         def Stats.enhanced_aur;          @@enhanced_aur;        end
+         def Stats.enhanced_aur=(val);    @@enhanced_aur=val;    end
+         def Stats.enhanced_log;          @@enhanced_log;        end
+         def Stats.enhanced_log=(val);    @@enhanced_log=val;    end
+         def Stats.enhanced_int;          @@enhanced_int;        end
+         def Stats.enhanced_int=(val);    @@enhanced_int=val;    end
+         def Stats.enhanced_wis;          @@enhanced_wis;        end
+         def Stats.enhanced_wis=(val);    @@enhanced_wis=val;    end
+         def Stats.enhanced_inf;          @@enhanced_inf;        end
+         def Stats.enhanced_inf=(val);    @@enhanced_inf=val;    end
          def Stats.exp
             if XMLData.next_level_text =~ /until next level/
                exp_threshold = [ 2500, 5000, 10000, 17500, 27500, 40000, 55000, 72500, 92500, 115000, 140000, 167000, 197500, 230000, 265000, 302000, 341000, 382000, 425000, 470000, 517000, 566000, 617000, 670000, 725000, 781500, 839500, 899000, 960000, 1022500, 1086500, 1152000, 1219000, 1287500, 1357500, 1429000, 1502000, 1576500, 1652500, 1730000, 1808500, 1888000, 1968500, 2050000, 2132500, 2216000, 2300500, 2386000, 2472500, 2560000, 2648000, 2736500, 2825500, 2915000, 3005000, 3095500, 3186500, 3278000, 3370000, 3462500, 3555500, 3649000, 3743000, 3837500, 3932500, 4028000, 4124000, 4220500, 4317500, 4415000, 4513000, 4611500, 4710500, 4810000, 4910000, 5010500, 5111500, 5213000, 5315000, 5417500, 5520500, 5624000, 5728000, 5832500, 5937500, 6043000, 6149000, 6255500, 6362500, 6470000, 6578000, 6686500, 6795500, 6905000, 7015000, 7125500, 7236500, 7348000, 7460000, 7572500 ]

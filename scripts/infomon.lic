@@ -1136,8 +1136,9 @@ while line = get
 				Stats.exp = $3.to_i
 				Stats.level = $4.to_i
 				get
-				while get =~ /^\s*[A-Z][a-z]+\s\((STR|CON|DEX|AGI|DIS|AUR|LOG|INT|WIS|INF)\):\s+([0-9]+)\s\((\-?[0-9]+)\)/
+				while get =~ /^\s*[A-Z][a-z]+\s\((STR|CON|DEX|AGI|DIS|AUR|LOG|INT|WIS|INF)\):\s+([0-9]+)\s\((\-?[0-9]+)\)\s+[.]{3}\s+(\d+)\s+\((\d+)\)/
 					Stats.send("#{$1.downcase}=", [ $2.to_i, $3.to_i])
+					Stats.send("enhanced_#{$1.downcase}=", [ $4.to_i, $5.to_i])
 				end
 			end
 			CharSettings['Stats'] = Stats.serialize
