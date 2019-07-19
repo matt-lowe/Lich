@@ -1061,7 +1061,7 @@
       <cost type='renew'>4</cost>
       <bonus type='physical-as'>[10+(Spells.bard/2.0).round,35].min</bonus>
       <message type='start'>You begin singing and focus your voice into a (?:vortex of air shaped like a )?sonic (?:[\w\-]+\s?){1,3}(?:,| shaped vortex of air) centered on your (?:right|left) hand\.</message>
-      <message type='end'>Your (?:sonic|twohanded|main) (?!barrier|buckler|kidney|small|targe|heater|knight&apos;s|lantern|medium|parma|target|aegis|kite|large|pageant|round|scutum|greatshield|mantlet|pavis|tower|wall|shield|barrier)[\w\s\-]+ dissipates\.</message>
+      <message type='end'>Your (?:sonic|twohanded|main) (?!barrier|buckler|kidney|small|targe|heater|knight&apos;s|lantern|medium|parma|target|aegis|kite|large|pageant|round|scutum|greatshield|mantlet|pavis|tower|wall|shield|barrier)[\w\s\-]+ dissipates\.|Your sonic weapon is not in your hands\.</message>
    </spell>
    <spell availability='all' name='Song of Unravelling' number='1013' type='attack/utility'>
       <cost type='mana'>13</cost>
@@ -1835,17 +1835,17 @@
       <cast-proc>dothistimeout &quot;symbol of recognition&quot;, 5, /^There are no undead creatures present\.|^You recognize no fellow members|is and undead creature\.|is a member of the Order of Voln\./</cast-proc>
    </spell>
    <spell availability='self-cast' name='Symbol of Blessing' number='9802' type='utility'>
-      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of blessing#{target}&quot;, 5, /^You must specify something\.|^A wave of power flows outward from you/</cast-proc>
+      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of blessing#{target}&quot;, 5, /^You must specify something\.|^A wave of power flows outward from you|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='self-cast' name='Symbol of Thought' number='9803' type='utility'>
       <cast-proc>fput &quot;&quot;</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Diminishment' number='9804' type='attack'>
-      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of diminishment#{target}&quot;, 5, /^What were you referring to\?|^You draw a glowing pattern in the air/</cast-proc>
+      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of diminishment#{target}&quot;, 5, /^What were you referring to\?|^You draw a glowing pattern in the air|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='self-cast' name='Symbol of Courage' number='9805' type='offense'>
       <duration span='stackable'>Society.rank / 6.0</duration>
-      <cast-proc>dothistimeout &quot;symbol of courage&quot;, 5, /^You feel more courageous\./</cast-proc>
+      <cast-proc>dothistimeout &quot;symbol of courage&quot;, 5, /^You feel more courageous\.|^You strain to perform the symbol/</cast-proc>
       <bonus type='bolt-as'>Society.rank</bonus>
       <bonus type='physical-as'>Society.rank</bonus>
       <message type='start'>You feel more courageous\.</message>
@@ -1853,7 +1853,7 @@
    </spell>
    <spell availability='self-cast' name='Symbol of Protection' number='9806' type='defense'>
       <duration span='stackable'>Society.rank / 3.0</duration>
-      <cast-proc>dothistimeout &quot;symbol of protection&quot;, 5, /^You feel a layer of protection surround you\./</cast-proc>
+      <cast-proc>dothistimeout &quot;symbol of protection&quot;, 5, /^You feel a layer of protection surround you\.|^You strain to perform the symbol/</cast-proc>
       <bonus type='bolt-ds'>Society.rank</bonus>
       <bonus type='physical-ds'>Society.rank</bonus>
       <bonus type='elemental-td'>Society.rank/2</bonus>
@@ -1864,30 +1864,30 @@
       <message type='end'>The layer of protection fades away\.</message>
    </spell>
    <spell availability='all' name='Symbol of Submission' number='9807' type='attack'>
-      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of submission#{target}&quot;, 5, /^What were you referring to\?|^You feel the power of the symbol project/</cast-proc>
+      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of submission#{target}&quot;, 5, /^What were you referring to\?|^You feel the power of the symbol project|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Kai&apos;s Strike' number='9808'>
       <cast-proc>fput &quot;&quot;</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Holiness' number='9809' type='attack'>
-      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of holiness#{target}&quot;, 5, /^What were you referring to\?|^A wave of power flows out of you/</cast-proc>
+      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of holiness#{target}&quot;, 5, /^What were you referring to\?|^A wave of power flows out of you|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Recall' number='9810' type='utility'>
       <cast-proc>fput &quot;symbol of recall&quot;</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Sleep' number='9811' type='attack'>
-      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of sleep#{target}&quot;, 5, /^You draw a glowing pattern in the air/</cast-proc>
+      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of sleep#{target}&quot;, 5, /^You draw a glowing pattern in the air|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Transcendence' number='9812' type='defense'>
       <duration>0.5</duration>
-      <cast-proc>dothistimeout &quot;symbol of transcendence#{target}&quot;, 5, /^You step into the space between the corporeal and ethereal realms\.|^You have already stepped into the space between the corporeal and ethereal realms\.|^The bonds of the corporeal realm hold fast and you remain fully within its grasp\./</cast-proc>
+      <cast-proc>dothistimeout &quot;symbol of transcendence#{target}&quot;, 5, /^You step into the space between the corporeal and ethereal realms\.|^You have already stepped into the space between the corporeal and ethereal realms\.|^The bonds of the corporeal realm hold fast and you remain fully within its grasp\.|^You strain to perform the symbol/</cast-proc>
       <message type='start'>(?:With difficulty, you manage to will yourself|You step) into the space between the corporeal and ethereal realms\.</message>
    </spell>
    <spell availability='all' name='Symbol of Mana' number='9813' type='utility'>
-      <cast-proc>dothistimeout &apos;symbol of mana&apos;, 5, /^You call upon a special blessing from Koar.|^You are already at your maximum mana level\.|^You must CONFIRM that you wish to use this symbol during its recovery period\./</cast-proc>
+      <cast-proc>dothistimeout &apos;symbol of mana&apos;, 5, /^You call upon a special blessing from Koar.|^You are already at your maximum mana level\.|^You must CONFIRM that you wish to use this symbol during its recovery period\.|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Sight' number='9814' type='utility'>
-      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of sight#{target}&quot;, 5, /^You concentrate/</cast-proc>
+      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of sight#{target}&quot;, 5, /^You concentrate|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Retribution' number='9815' type='attack/utility'>
       <duration span='stackable'>Society.rank / 6.0</duration>
@@ -1897,21 +1897,21 @@
    </spell>
    <spell availability='self-cast' name='Symbol of Supremacy' number='9816' type='offensive'>
       <duration span='stackable'>Society.rank / 6.0</duration>
-      <cast-proc>dothistimeout &apos;symbol of supremacy&apos;, 5, /^You feel infused with a collective knowledge on the undead and their weaknesses\./</cast-proc>
+      <cast-proc>dothistimeout &apos;symbol of supremacy&apos;, 5, /^You feel infused with a collective knowledge on the undead and their weaknesses\.|^You strain to perform the symbol/</cast-proc>
       <message type='start'>You feel infused with a collective knowledge on the undead and their weaknesses\.</message>
       <message type='end'>The rush of collective knowledge of the undead fades from your mind\.</message>
    </spell>
    <spell availability='all' name='Symbol of Restoration' number='9817' type='utility'>
-      <cast-proc>dothistimeout &apos;symbol of restoration&apos;, 5, /^The power of the symbol begins to rise in you, but then fades\.|^You feel the power of the symbol course through your body\./</cast-proc>
+      <cast-proc>dothistimeout &apos;symbol of restoration&apos;, 5, /^The power of the symbol begins to rise in you, but then fades\.|^You feel the power of the symbol course through your body\.|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Need' number='9818' type='utility'>
       <cast-proc>fput &quot;symbol of need&quot;</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Renewal' number='9819' type='utility'>
-      <cast-proc>dothistimeout &apos;symbol of renewal&apos;, 5, /^You are already at your maximum spirit level\.|^You call upon the vitality of nature to renew your soul\./</cast-proc>
+      <cast-proc>dothistimeout &apos;symbol of renewal&apos;, 5, /^You are already at your maximum spirit level\.|^You call upon the vitality of nature to renew your soul\.|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Disruption' number='9820' type='offensive'>
-      <cast-proc>dothistimeout &apos;symbol of disruption&apos;, 5, /^A churning spectral aura surrounds you/</cast-proc>
+      <cast-proc>dothistimeout &apos;symbol of disruption&apos;, 5, /^A churning spectral aura surrounds you|^You strain to perform the symbol/</cast-proc>
       <duration span='stackable'>Society.rank / 6.0</duration>
       <message type='start'>A churning spectral aura surrounds you(?: and your group)?\.</message>
       <message type='end'>The churning spectral aura suddenly vanishes from around you\.</message>
@@ -1920,7 +1920,7 @@
       <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;smite#{target}&quot;, 5, /^You currently have no valid target\.  You will need to specify one\.|doesn&apos;t appear to be suffering from the curse of undeath\.|^You .*?smite/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Turning' number='9822' type='attack'>
-      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of turning#{target}&quot;, 5, /^You draw a glowing pattern in the air/</cast-proc>
+      <cast-proc>if defined?(target); if target.class == GameObj; target = &quot; ##{target.id}&quot;; elsif target.class == Fixnum; target = &quot; ##{target}&quot;; else; target = &quot; #{target}&quot;; end; else; target = &quot;&quot;; end; dothistimeout &quot;symbol of turning#{target}&quot;, 5, /^You draw a glowing pattern in the air|^You strain to perform the symbol/</cast-proc>
    </spell>
    <spell availability='all' name='Symbol of Preservation' number='9823' type='utility'>
       <cast-proc>fput &quot;symbol of preservation&quot;</cast-proc>
