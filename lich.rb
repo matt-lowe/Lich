@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.52'
+LICH_VERSION = '4.6.53'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -4820,7 +4820,7 @@ def move(dir='none', giveup_seconds=30, giveup_lines=30)
       elsif line == 'You are too injured to be doing any climbing!'
          if (resolve = Spell[9704]) and resolve.known?
             wait_until { resolve.affordable? }
-            resove.cast
+            resolve.cast
             put_dir.call
          else
             return nil
@@ -8190,6 +8190,12 @@ module Games
                false
             end
          end
+         def incant?
+           !@no_incant
+         end
+         def incant=(val)
+           @no_incant = !val
+         end
          def to_s
             @name.to_s
          end
@@ -9209,7 +9215,13 @@ module Games
             @@contents.delete(container_id)
          end
          def GameObj.targets
-            @@npcs.select { |n| XMLData.current_target_ids.include?(n.id) }
+            a = Array.new
+            XMLData.current_target_ids.each { |id|
+              if (npc = @@npcs.find { |n| n.id == id }) and (npc.status !~ /dead|gone/)
+                a.push(npc)
+              end
+            }
+            a
          end
          def GameObj.dead
             dead_list = Array.new

@@ -560,7 +560,7 @@
    <spell availability='all' name='Floating Disk' number='511' type='utility'>
       <cost type='mana'>11</cost>
    </spell>
-   <spell availability='all' name='Ice Patch' number='512' type='attack'>
+   <spell availability='all' name='Cold Snap' number='512' type='attack'>
       <cost type='mana'>12</cost>
    </spell>
    <spell availability='self-cast' name='Elemental Focus' number='513' type='offense'>
@@ -1109,8 +1109,12 @@
       <cost type='mana'>20</cost>
    </spell>
    <spell availability='all' name='Singing Sword Song' number='1025' type='attack/utility'>
+      <duration>Spellsong.timeleft</duration>
       <cost type='mana'>25</cost>
       <cost type='renew'>15</cost>
+      <message type='start'>An animated .+ appears and hovers near you\.</message>
+      <message type='end'>Your animated .+ dissipates in a shower of sparkling motes of light\.</message>
+      <message type='end'>You feel the magic of your animated .+ unravel and end\.</message>
    </spell>
    <spell availability='all' name='Song of Sonic Disruption' number='1030' type='attack'>
       <cost type='mana'>30</cost>
@@ -1179,8 +1183,10 @@
    <spell availability='all' name='Wither' number='1115' type='attack'>
       <cost type='mana'>15</cost>
    </spell>
-   <spell availability='all' name='Cry For Help' number='1116' type='utility'>
+       <spell availability='all' name='Rapid Healing' number='1116' type='utility'>
+      <duration>1</duration>
       <cost type='mana'>16</cost>
+      <message type='start'>You narrow your focus on your healing energies, stimulating their flow\.</message>
    </spell>
    <spell availability='all' name='Empathic Link' number='1117' type='attack'>
       <cost type='mana'>8 + (Stats.level/10)</cost>
@@ -1221,6 +1227,10 @@
    <spell availability='all' name='Regeneration' number='1150' type='utility'>
       <cost type='mana'>50</cost>
    </spell>
+    <spell availability='all' name='Rapid Healing Recovery' number='1199'>
+      <duration>30</duration>
+      <message type='start'>You release your pinpoint focus on your healing energies and allow their stimulated flow to settle to normal rates\.</message>
+	</spell>
    <spell availability='all' name='Force Orb' number='1201' type='attack'>
       <cost type='mana'>1</cost>
    </spell>
@@ -1463,6 +1473,10 @@
    </spell>
    <spell availability='all' name='Divine Word' number='1640' type='utility'>
       <cost type='mana'>40</cost>
+   </spell>
+   <spell availability='all' name='Divine Incarnation' number='1650' type='utility'>
+      <duration>10</duration>
+      <cost type='mana'>50</cost>
    </spell>
    <spell availability='all' name='Arcane Blast' number='1700' type='attack'>
    </spell>

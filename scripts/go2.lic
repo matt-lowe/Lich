@@ -9,18 +9,20 @@
    original author: Shaelun
               game: any
               tags: core, movement
-           version: 1.24
+           version: 1.25
           required: Lich >= 4.6.14
 
    changelog:
+      1.25 (2019-05-11):
+        Fix DragonRealms auto drag feature (Sarvatt)
       1.24 (2019-03-03):
          Updated formatting for ";go2 list" in GSPlat and GSF
       1.23 (2019-03-03):
          add setting for using GSPlat old portal system
-      1.22 (2019-02-10):
-         add settings for using Chronomage day passes
 =end
 =begin
+      1.22 (2019-02-10):
+         add settings for using Chronomage day passes
       1.21 (2017-10-07):
          don't try to stand before swimming movements
       1.20 (2017-09-17):
@@ -1175,10 +1177,12 @@ loop {
             moves_sent += 1
             if setting_drag
                way = room.wayto[next_id]
-               if way =~ /^(north|northeast|east|southeast|south|southwest|west|northwest|n|ne|e|se|s|sw|w|nw|up|down|out)$/i
+               if way =~ /^(north|northeast|east|southeast|south|southwest|west|northwest|n|ne|e|se|s|sw|w|nw|up|u|down|d|out)$/i
                   way = "drag #{setting_drag} #{way}"
-               elsif way =~ /^go /i
+                  result = move way
+               elsif way =~ /^(?:go|climb) /i
                   way = way.sub(/^(?:go|climb) /i, "drag #{setting_drag} ")
+                  result = move way
                else
                   echo "error: drag feature doesn't know how to deal with this movement: #{way}"
                   exit
