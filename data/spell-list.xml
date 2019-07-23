@@ -1061,7 +1061,7 @@
       <cost type='renew'>4</cost>
       <bonus type='physical-as'>[10+(Spells.bard/2.0).round,35].min</bonus>
       <message type='start'>You begin singing and focus your voice into a (?:vortex of air shaped like a )?sonic (?:[\w\-]+\s?){1,3}(?:,| shaped vortex of air) centered on your (?:right|left) hand\.</message>
-      <message type='end'>Your (?:sonic|twohanded|main) (?!barrier|buckler|kidney|small|targe|heater|knight&apos;s|lantern|medium|parma|target|aegis|kite|large|pageant|round|scutum|greatshield|mantlet|pavis|tower|wall|shield|barrier)[\w\s\-]+ dissipates\.|Your sonic weapon is not in your hands\.(?:  You are unable to renew the song.)?</message>
+      <message type='end'>Your (?:sonic|twohanded|main) (?!barrier|buckler|kidney|small|targe|heater|knight&apos;s|lantern|medium|parma|target|aegis|kite|large|pageant|round|scutum|greatshield|mantlet|pavis|tower|wall|shield|barrier)[\w\s\-]+ dissipates\.|Your sonic weapon is not in your hands\.(?:  You are unable to renew the song\.)?</message>
    </spell>
    <spell availability='all' name='Song of Unravelling' number='1013' type='attack/utility'>
       <cost type='mana'>13</cost>
