@@ -8790,6 +8790,16 @@ module Games
          @@int ||= [0,0]
          @@wis ||= [0,0]
          @@inf ||= [0,0]
+         @@enhanced_str ||= [0,0]
+         @@enhanced_con ||= [0,0]
+         @@enhanced_dex ||= [0,0]
+         @@enhanced_agi ||= [0,0]
+         @@enhanced_dis ||= [0,0]
+         @@enhanced_aur ||= [0,0]
+         @@enhanced_log ||= [0,0]
+         @@enhanced_int ||= [0,0]
+         @@enhanced_wis ||= [0,0]
+         @@enhanced_inf ||= [0,0]
          def Stats.race;         @@race;       end
          def Stats.race=(val);   @@race=val;   end
          def Stats.prof;         @@prof;       end
