@@ -8860,11 +8860,14 @@ module Games
          end
          def Stats.exp=(val);    nil;    end
          def Stats.serialize
-            [@@race,@@prof,@@gender,@@age,Stats.exp,@@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf]
+            [@@race,@@prof,@@gender,@@age,Stats.exp,@@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf,@@enhanced_str,@@enhanced_con,@@enhanced_dex,@@enhanced_agi,@@enhanced_dis,@@enhanced_aur,@@enhanced_log,@@enhanced_int,@@enhanced_wis,@@enhanced_inf]
          end
          def Stats.load_serialized=(array)
+            for i in 16..25
+               array[i] ||= [0, 0]
+            end
             @@race,@@prof,@@gender,@@age = array[0..3]
-            @@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf = array[5..15]
+            @@level,@@str,@@con,@@dex,@@agi,@@dis,@@aur,@@log,@@int,@@wis,@@inf,@@enhanced_str,@@enhanced_con,@@enhanced_dex,@@enhanced_agi,@@enhanced_dis,@@enhanced_aur,@@enhanced_log,@@enhanced_int,@@enhanced_wis,@@enhanced_inf = array[5..25]
          end
       end
 
