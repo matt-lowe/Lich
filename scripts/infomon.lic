@@ -1453,9 +1453,9 @@ while line = get
 			$infomon_calmed = true
 		elsif line =~ /^You are enraged by .*? attack!|^The feeling of calm leaves you\./
 			$infomon_calmed = false
-		elsif line =~ /slices deep into your vocal chords\!$|^All you manage to do is cough up some blood\.$/
+		elsif line =~ /slices deep into your vocal cords\!$|^All you manage to do is cough up some blood\.$/
 			$infomon_cutthroat = true
-		elsif line =~ /^\s*The horrible pain in your vocal chords subsides as you spit out the last of the blood clogging your throat\.$/
+		elsif line =~ /^\s*The horrible pain in your vocal cords subsides as you spit out the last of the blood clogging your throat\.$/
 			$infomon_cutthroat = false
 		elsif line == "You currently have the following active spells:"
 			while (line = get)
