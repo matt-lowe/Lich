@@ -903,7 +903,7 @@
    <spell availability='group' name='Mass Blur' number='911' type='defense'>
       <duration span='stackable' multicastable='yes'>20 + Spells.wizard</duration>
       <cost type='mana'>11</cost>
-      <bonus type='dodging'>20</bonus>
+      <bonus type='dodging'>[1,3,6,10,15,21,28,36,45,55,66,78,91,105,120,136,153,171,190].inject(20) { |bonus, n| bonus += 1 if Skills.elair &gt;= n; bonus }</bonus>
       <message type='start'>Your form(?:, as well as your group,)? blurs\.</message>
       <message type='start'>If you were visible, your form would have blurred\.</message>
       <message type='end'>You become solid again\.</message>
