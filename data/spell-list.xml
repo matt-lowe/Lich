@@ -891,7 +891,7 @@
    <spell availability='all' name='Major Fire' number='908' stance='yes' type='attack'>
       <cost type='mana'>8</cost>
    </spell>
-   <spell availability='all' name='Tremors' number='909' type='attack/area/utility' incant='no'>
+   <spell availability='all' name='Tremors' number='909' type='attack/area/utility'>
       <duration span='refreshable' multicastable='no'>20 + Spells.wizard</duration>
       <cost type='mana'>9</cost>
       <message type='start'>Faint ripples in the (?:ground|dirt) form beneath you for a moment\.</message>
