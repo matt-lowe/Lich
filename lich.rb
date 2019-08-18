@@ -7960,7 +7960,7 @@ module Games
          def time_per_formula(options={})
             activator_modifier = { 'tap' => 0.5, 'rub' => 1, 'wave' => 1, 'raise' => 1.33, 'drink' => 0, 'bite' => 0, 'eat' => 0, 'gobble' => 0 }
             can_haz_spell_ranks = /Spells\.(?:minorelemental|majorelemental|minorspiritual|majorspiritual|wizard|sorcerer|ranger|paladin|empath|cleric|bard|minormental)/
-            skills = [ 'Spells.minorelemental', 'Spells.majorelemental', 'Spells.minorspiritual', 'Spells.majorspiritual', 'Spells.wizard', 'Spells.sorcerer', 'Spells.ranger', 'Spells.paladin', 'Spells.empath', 'Spells.cleric', 'Spells.bard', 'Spells.minormental', 'Skills.magicitemuse', 'Skills.arancesymbols' ]
+            skills = [ 'Spells.minorelemental', 'Spells.majorelemental', 'Spells.minorspiritual', 'Spells.majorspiritual', 'Spells.wizard', 'Spells.sorcerer', 'Spells.ranger', 'Spells.paladin', 'Spells.empath', 'Spells.cleric', 'Spells.bard', 'Spells.minormental', 'Skills.magicitemuse', 'Skills.arcanesymbols' ]
             if options[:caster] and (options[:caster] !~ /^(?:self|#{XMLData.name})$/i)
                if options[:target] and (options[:target].downcase == options[:caster].downcase)
                   formula = @duration['self'][:duration].to_s.dup
@@ -7971,14 +7971,14 @@ module Games
                   if formula =~ can_haz_spell_ranks
                      skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
                      formula = "(#{formula})/2.0"
-                  elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+                  elsif formula =~ /Skills\.(?:magicitemuse|arcanesymbols)/
                      skills.each { |skill_name| formula.gsub!(skill_name, "(SpellRanks['#{options[:caster]}'].magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
                   end
                elsif options[:activator] =~ /^(invoke|scroll)$/i
                   if formula =~ can_haz_spell_ranks
                      skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks['#{options[:caster]}'].arcanesymbols.to_i") }
                      formula = "(#{formula})/2.0"
-                  elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+                  elsif formula =~ /Skills\.(?:magicitemuse|arcanesymbols)/
                      skills.each { |skill_name| formula.gsub!(skill_name, "SpellRanks['#{options[:caster]}'].arcanesymbols.to_i") }
                   end
                else
@@ -7994,14 +7994,14 @@ module Games
                   if formula =~ can_haz_spell_ranks
                      skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
                      formula = "(#{formula})/2.0"
-                  elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+                  elsif formula =~ /Skills\.(?:magicitemuse|arcanesymbols)/
                      skills.each { |skill_name| formula.gsub!(skill_name, "(Skills.magicitemuse * #{activator_modifier[options[:activator]]}).to_i") }
                   end
                elsif options[:activator] =~ /^(invoke|scroll)$/i
                   if formula =~ can_haz_spell_ranks
                      skills.each { |skill_name| formula.gsub!(skill_name, "Skills.arcanesymbols.to_i") }
                      formula = "(#{formula})/2.0"
-                  elsif formula =~ /Skills\.(?:magicitemuse|arancesymbols)/
+                  elsif formula =~ /Skills\.(?:magicitemuse|arcanesymbols)/
                      skills.each { |skill_name| formula.gsub!(skill_name, "Skills.arcanesymbols.to_i") }
                   end
                end
