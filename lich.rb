@@ -2464,7 +2464,8 @@ class Script
       end
       # fixme: look in wizard script directory
       # fixme: allow subdirectories?
-      file_list = Dir.entries(SCRIPT_DIR).delete_if { |fn| (fn == '.') or (fn == '..') }.sort
+      file_list = Dir.entries(SCRIPT_DIR).delete_if { |fn| (fn == '.') or (fn == '..') }
+      file_list = file_list.sort_by { |fn| fn.sub(/[.](lic|rb|cmd|wiz)$/, '')  }
       if file_name = (file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ || val =~ /^#{Regexp.escape(script_name)}\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?i:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/ } || file_list.find { |val| val =~ /^#{Regexp.escape(script_name)}[^.]+\.(?:lic|rb|cmd|wiz)(?:\.gz|\.Z)?$/i })
          script_name = file_name.sub(/\..{1,3}$/, '')
       end
