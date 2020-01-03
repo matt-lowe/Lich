@@ -1136,8 +1136,9 @@ while line = get
 				Stats.exp = $3.to_i
 				Stats.level = $4.to_i
 				get
-				while get =~ /^\s*[A-Z][a-z]+\s\((STR|CON|DEX|AGI|DIS|AUR|LOG|INT|WIS|INF)\):\s+([0-9]+)\s\((\-?[0-9]+)\)/
+				while get =~ /^\s*[A-Z][a-z]+\s\((STR|CON|DEX|AGI|DIS|AUR|LOG|INT|WIS|INF)\):\s+([0-9]+)\s\((\-?[0-9]+)\)\s+[.]{3}\s+(\d+)\s+\((\d+)\)/
 					Stats.send("#{$1.downcase}=", [ $2.to_i, $3.to_i])
+					Stats.send("enhanced_#{$1.downcase}=", [ $4.to_i, $5.to_i]) rescue nil # available on Lich 4.6.54+
 				end
 			end
 			CharSettings['Stats'] = Stats.serialize
@@ -1452,9 +1453,9 @@ while line = get
 			$infomon_calmed = true
 		elsif line =~ /^You are enraged by .*? attack!|^The feeling of calm leaves you\./
 			$infomon_calmed = false
-		elsif line =~ /slices deep into your vocal chords\!$|^All you manage to do is cough up some blood\.$/
+		elsif line =~ /slices deep into your vocal cords\!$|^All you manage to do is cough up some blood\.$/
 			$infomon_cutthroat = true
-		elsif line =~ /^\s*The horrible pain in your vocal chords subsides as you spit out the last of the blood clogging your throat\.$/
+		elsif line =~ /^\s*The horrible pain in your vocal cords subsides as you spit out the last of the blood clogging your throat\.$/
 			$infomon_cutthroat = false
 		elsif line == "You currently have the following active spells:"
 			while (line = get)

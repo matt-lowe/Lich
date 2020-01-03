@@ -9,20 +9,24 @@
    original author: Shaelun
               game: any
               tags: core, movement
-           version: 1.22
+           version: 1.25
           required: Lich >= 4.6.14
 
    changelog:
+      1.25 (2019-05-11):
+        Fix DragonRealms auto drag feature (Sarvatt)
+      1.24 (2019-03-03):
+         Updated formatting for ";go2 list" in GSPlat and GSF
+      1.23 (2019-03-03):
+         add setting for using GSPlat old portal system
+=end
+=begin
       1.22 (2019-02-10):
          add settings for using Chronomage day passes
       1.21 (2017-10-07):
          don't try to stand before swimming movements
       1.20 (2017-09-17):
          add confluence-hot and confluence-cold targets
-
-=end
-=begin
-
       1.19 (2016-09-24):
          fix DragonRealms auto drag feature some more
       1.18 (2016-09-24):
@@ -128,6 +132,7 @@ show_help = proc {
       output.concat "     --portals=<on|off>                      Sets if portals should be used.\n"
    end
    if XMLData.game =~ /^GSPlat/
+      output.concat "     --old-portals=<on|off>                  Sets if old (dangerous) portals should be used.\n"
       output.concat "     --portal-pass=<on|off>                  Turn this on if you have a wearable portal pass and don't\n"
       output.concat "                                              need a portal ticket.\n"
    end
@@ -255,8 +260,13 @@ elsif script.vars[0] =~ /^list$/i
       output.concat "          FWI trinket: #{UserVars.mapdb_fwi_trinket ? UserVars.mapdb_fwi_trinket : '(not set)'}\n"
    end
    if XMLData.game =~ /^GSPlat|^GSF/
-      output.concat "          use portals: #{(UserVars.mapdb_use_portals == 'yes') ? 'yes' : 'no'}"
-      output.concat "     have portal pass: #{(UserVars.mapdb_have_portal_pass == 'yes') ? 'yes' : 'no'}"
+      output.concat "          use portals: #{(UserVars.mapdb_use_portals == 'yes') ? 'yes' : 'no'}\n"
+   end
+   if XMLData.game =~ /^GSPlat/
+      output.concat "      use old portals: #{(UserVars.mapdb_use_old_portals == 'yes') ? 'yes' : 'no'}\n"
+   end
+   if XMLData.game =~ /^GSPlat|^GSF/
+      output.concat "     have portal pass: #{(UserVars.mapdb_have_portal_pass == 'yes') ? 'yes' : 'no'}\n"
    end
    output.concat "\n"
    output.concat "custom targets:\n"
@@ -334,6 +344,7 @@ setting_stop_for_dead           = nil
 setting_get_return_trip_silvers = nil
 setting_have_portal_pass        = nil
 setting_use_portals             = nil
+setting_use_old_portals         = nil
 setting_instability             = nil
 setting_drag                    = nil
 
@@ -379,6 +390,8 @@ for var in script.vars[1..-1]
       setting_drag = $1
    elsif (XMLData.game =~ /^GSF|^GSPlat/) and (var =~ /^(?:\-\-)?portals?=(on|true|yes|off|false|no)$/i)
       setting_use_portals = setting_value[$1]
+   elsif (XMLData.game =~ /^GSPlat/) and (var =~ /^(?:\-\-)?old\-portals?=(on|true|yes|off|false|no)$/i)
+      setting_use_old_portals = setting_value[$1]
    elsif (XMLData.game =~ /^GSPlat/) and (var =~ /^(?:\-\-)?portal\-pass=(on|true|yes|off|false|no)$/i)
       setting_have_portal_pass = setting_value[$1]
    elsif (XMLData.game =~ /^GS/) and (var =~ /^(?:\-\-)?fwi\-?trinket=(.+)$/i)
@@ -411,6 +424,10 @@ if target_search_string.empty?
       end
    end
    if XMLData.game =~ /^GSPlat/
+      unless setting_use_old_portals.nil?
+         UserVars.mapdb_use_old_portals = (setting_use_old_portals ? 'yes' : 'no')
+         echo "old portals will #{'not ' unless setting_use_old_portals}be used"
+      end
       unless setting_have_portal_pass.nil?
          UserVars.mapdb_have_portal_pass = (setting_have_portal_pass ? 'yes' : 'no')
          echo "the script will #{'not ' if setting_have_portal_pass}try to pull out a portal ticket to use portals"
@@ -542,6 +559,12 @@ unless setting_use_portals.nil?
    previous_use_portals = UserVars.mapdb_use_portals
    before_dying { UserVars.mapdb_use_portals = previous_use_portals }
    UserVars.mapdb_use_portals = (setting_use_portals ? 'yes' : 'no')
+end
+
+unless setting_use_old_portals.nil?
+   previous_use_old_portals = UserVars.mapdb_use_old_portals
+   before_dying { UserVars.mapdb_use_old_portals = previous_use_old_portals }
+   UserVars.mapdb_use_old_portals = (setting_use_old_portals ? 'yes' : 'no')
 end
 
 unless setting_have_portal_pass.nil?
@@ -1154,10 +1177,12 @@ loop {
             moves_sent += 1
             if setting_drag
                way = room.wayto[next_id]
-               if way =~ /^(north|northeast|east|southeast|south|southwest|west|northwest|n|ne|e|se|s|sw|w|nw|up|down|out)$/i
+               if way =~ /^(north|northeast|east|southeast|south|southwest|west|northwest|n|ne|e|se|s|sw|w|nw|up|u|down|d|out)$/i
                   way = "drag #{setting_drag} #{way}"
-               elsif way =~ /^go /i
+                  result = move way
+               elsif way =~ /^(?:go|climb) /i
                   way = way.sub(/^(?:go|climb) /i, "drag #{setting_drag} ")
+                  result = move way
                else
                   echo "error: drag feature doesn't know how to deal with this movement: #{way}"
                   exit
