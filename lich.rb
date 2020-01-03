@@ -10895,6 +10895,8 @@ main_thread = Thread.new {
                                  launch_data = response.sub(/^L\tOK\t/, '').split("\t")
                                  if login_info[:frontend] == 'wizard'
                                     launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+                                 elsif login_info[:frontend] == 'avalon'
+                                    launch_data.collect! { |line| line.sub(/GAME=.+/, 'GAME=AVALON') }
                                  end
                                  if login_info[:custom_launch]
                                     launch_data.push "CUSTOMLAUNCH=#{login_info[:custom_launch]}"
