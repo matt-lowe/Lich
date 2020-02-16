@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.54'
+LICH_VERSION = '4.6.55'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -6405,6 +6405,26 @@ def dothistimeout (action, timeout, success_line)
                end
             }
             break
+         end
+         if Time.now.to_f >= end_time
+            return nil
+         end
+      }
+   }
+end
+      
+def put_timeout (action, timeout, success_line)
+   end_time = Time.now.to_f + timeout
+   line = nil
+   loop {
+      Script.current.clear
+      put action unless action.nil?
+      loop {
+         line = get?
+         if line.nil?
+            sleep 0.1
+         elsif line =~ success_line
+            return line
          end
          if Time.now.to_f >= end_time
             return nil
