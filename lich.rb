@@ -3564,11 +3564,7 @@ class Map
    end
    def Map.get_free_id
       Map.load unless @@loaded
-      free_id = 0
-      until @@list[free_id].nil?
-         free_id += 1
-      end
-      free_id
+      @@list.compact.max_by{ |r| r.id}.id + 1
    end
    def Map.list
       Map.load unless @@loaded
