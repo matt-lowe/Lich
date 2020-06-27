@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.54'
+LICH_VERSION = '4.6.55'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -64,6 +64,7 @@ require 'zlib'
 require 'drb'
 require 'resolv'
 require 'digest/md5'
+require 'json'
 
 begin
    # stupid workaround for Windows
@@ -1248,6 +1249,9 @@ class StringProc
    end
    def inspect
       "StringProc.new(#{@string.inspect})"
+   end
+   def to_json(*args)
+     ";e #{_dump}".to_json(args)
    end
 end
 
@@ -3541,6 +3545,7 @@ class Map
    @@current_location_count ||= -1
    @@elevated_load            = proc { Map.load }
    @@elevated_load_dat        = proc { Map.load_dat }
+   @@elevated_load_json       = proc { Map.load_json }
    @@elevated_load_xml        = proc { Map.load_xml }
    @@elevated_save            = proc { Map.save }
    @@elevated_save_xml        = proc { Map.save_xml }
@@ -3857,7 +3862,7 @@ class Map
    def Map.load(filename=nil)
       if $SAFE == 0
          if filename.nil?
-            file_list = Dir.entries("#{DATA_DIR}/#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.(?:dat|xml)$/ }.collect { |filename| "#{DATA_DIR}/#{XMLData.game}/#{filename}" }.sort.reverse
+            file_list = Dir.entries("#{DATA_DIR}/#{XMLData.game}").find_all { |filename| filename =~ /^map\-[0-9]+\.(?:dat|xml|json)$/i }.collect { |filename| "#{DATA_DIR}/#{XMLData.game}/#{filename}" }.sort.reverse
          else
             file_list = [ filename ]
          end
@@ -3866,7 +3871,11 @@ class Map
             return false
          end
          while filename = file_list.shift
-            if filename =~ /\.xml$/
+            if filename =~ /\.json$/i
+               if Map.load_json(filename)
+                  return true
+               end
+            elsif filename =~ /\.xml$/
                if Map.load_xml(filename)
                   return true
                end
@@ -3879,6 +3888,54 @@ class Map
          return false
       else
          @@elevated_load.call
+      end
+   end
+   def Map.load_json(filename=nil)
+      if $SAFE == 0
+         @@load_mutex.synchronize {
+            if @@loaded
+               return true
+            else
+               if filename
+                  file_list = [ filename ]
+               else
+                  file_list = Dir.entries("#{DATA_DIR}/#{XMLData.game}").find_all { |filename|
+                     filename =~ /^map\-[0-9]+\.json$/i
+                  }.collect { |filename|
+                     "#{DATA_DIR}/#{XMLData.game}/#{filename}"
+                  }.sort.reverse
+               end
+               if file_list.empty?
+                  respond "--- Lich: error: no map database found"
+                  return false
+               end
+               error = false
+               while filename = file_list.shift
+                  if File.exists?(filename)
+                     File.open(filename) { |f|
+                       JSON.parse(f.read).each { |room|
+                          room['wayto'].keys.each { |k|
+                             if room['wayto'][k][0..2] == ';e '
+                                room['wayto'][k] = StringProc.new(room['wayto'][k][3..-1])
+                             end
+                          }
+                          room['timeto'].keys.each { |k|
+                             if (room['timeto'][k].class == String) and (room['timeto'][k][0..2] == ';e ')
+                                room['timeto'][k] = StringProc.new(room['timeto'][k][3..-1])
+                             end
+                          }
+                          Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'])
+                       }
+                    }
+                    @@tags.clear
+                    @@loaded = true
+                    return true
+                 end
+              end
+           end
+        }
+      else
+         @@elevated_load_json.call
       end
    end
    def Map.load_dat(filename=nil)
@@ -4061,6 +4118,46 @@ class Map
       else
          @@elevated_save.call
       end
+   end
+   def Map.to_json(*args)
+      @@list.delete_if { |r| r.nil? }
+      @@list.to_json(args)
+   end
+   def to_json(*args)
+      ({
+         :id => @id,
+         :title => @title,
+         :description => @description,
+         :paths => @paths,
+         :location => @location,
+         :climate => @climate,
+         :terrain => @terrain,
+         :wayto => @wayto,
+         :timeto => @timeto,
+         :image => @image,
+         :image_coords => @image_coords,
+         :tags => @tags,
+         :check_location => @check_location,
+         :unique_loot => @unique_loot
+      }).delete_if { |a,b| b.nil? or (b.class == Array and b.empty?) }.to_json(args)
+   end
+   def Map.save_json(filename="#{DATA_DIR}/#{XMLData.game}/map-#{Time.now.to_i}.json")
+      if File.exists?(filename)
+         respond "File exists!  Backing it up before proceeding..."
+         begin
+            File.open(filename, 'rb') { |infile|
+               File.open("#{filename}.bak", "wb") { |outfile|
+                  outfile.write(infile.read)
+               }
+            }
+         rescue
+            respond "--- Lich: error: #{$!}\n\t#{$!.backtrace[0..1].join("\n\t")}"
+            Lich.log "error: #{$!}\n\t#{$!.backtrace.join("\n\t")}"
+         end
+      end
+      File.open(filename, 'wb') { |file|
+         file.write(Map.to_json)
+      }
    end
    def Map.save_xml(filename="#{DATA_DIR}/#{XMLData.game}/map-#{Time.now.to_i}.xml")
       if $SAFE == 0
