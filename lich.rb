@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.55'
+LICH_VERSION = '4.6.56'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -3924,6 +3924,7 @@ class Map
                                 room['timeto'][k] = StringProc.new(room['timeto'][k][3..-1])
                              end
                           }
+                          room['tags'] ||= []
                           Map.new(room['id'], room['title'], room['description'], room['paths'], room['location'], room['climate'], room['terrain'], room['wayto'], room['timeto'], room['image'], room['image_coords'], room['tags'], room['check_location'], room['unique_loot'])
                        }
                     }
