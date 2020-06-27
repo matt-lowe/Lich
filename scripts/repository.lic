@@ -13,7 +13,7 @@
 
   changelog:
     2.34 (2018-08-26):
-         change ownership of gameobj-data.xml to elanthia-online 
+         change ownership of gameobj-data.xml to elanthia-online
     2.33 (2017-03-04):
       don't ask for a password to upload playershops.xml
     2.32 (2017-03-04):
@@ -501,7 +501,7 @@ filter_list = proc { |list|
     end
   end
   list.unshift(headers)
-  list  
+  list
 }
 
 format_list = proc { |list|
@@ -1173,7 +1173,7 @@ elsif cmd[0] =~ /^list-?update[sd]$/i
     echo 'error: list is missing headers'
     exit
   end
-  list.delete_if { |row| 
+  list.delete_if { |row|
     if (row[fi] =~ /\.xml$/i) and (LICH_VERSION.split('.').collect { |n| n.rjust(5,'0') }.join('.') >= '00004.00006.00000')
       not File.exists?("#{$data_dir}#{row[fi]}") or ((File.mtime("#{$data_dir}#{row[fi]}").to_i + 15) > row[lui].to_i)
     else
@@ -2091,7 +2091,7 @@ elsif (cmd[0] =~ /^download-?map(?:db)?$/i)
     exit
   end
   download_mapdb.call
-  
+
 
 #
 # upload-lich
