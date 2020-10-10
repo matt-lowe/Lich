@@ -19,10 +19,10 @@
         Fix DragonRealms auto drag feature (Sarvatt)
       1.24 (2019-03-03):
          Updated formatting for ";go2 list" in GSPlat and GSF
-      1.23 (2019-03-03):
-         add setting for using GSPlat old portal system
 =end
 =begin
+      1.23 (2019-03-03):
+         add setting for using GSPlat old portal system
       1.22 (2019-02-10):
          add settings for using Chronomage day passes
       1.21 (2017-10-07):
@@ -180,7 +180,7 @@ check_silvers = proc {
    silence_me if undo_silence
    while (line = get)
       if line =~ /^\s*Mana\:\s+\-?[0-9]+\s+Silver\:\s+([0-9,]+)/
-         silvers = $1.gsub(/,/,"").to_i
+         silvers = $1.gsub(',','').to_i
          break
       end
    end
@@ -189,7 +189,7 @@ check_silvers = proc {
 
 get_silver_cost = proc { |path|
    cost = 0
-   path.each_index { |index| 
+   path.each_index { |index|
       Room[path[index]].tags.each { |tag|
          if tag =~ /^silver-cost:#{path[index+1]}:(.*)$/
             cost_string = $1
