@@ -9,18 +9,20 @@
    original author: Shaelun
               game: any
               tags: core, movement
-           version: 1.25
+           version: 1.26
           required: Lich >= 4.6.14
 
    changelog:
+      1.26 (2020-10-08):
+        Fix silver check broken by Commageddon
       1.25 (2019-05-11):
         Fix DragonRealms auto drag feature (Sarvatt)
       1.24 (2019-03-03):
          Updated formatting for ";go2 list" in GSPlat and GSF
-      1.23 (2019-03-03):
-         add setting for using GSPlat old portal system
 =end
 =begin
+      1.23 (2019-03-03):
+         add setting for using GSPlat old portal system
       1.22 (2019-02-10):
          add settings for using Chronomage day passes
       1.21 (2017-10-07):
@@ -164,7 +166,7 @@ check_silvers = proc {
    hook_proc = proc { |server_string|
       if server_string =~ /^\s*Name\:|^\s*Gender\:|^\s*Normal \(Bonus\)|^\s*Strength \(STR\)\:|^\s*Constitution \(CON\)\:|^\s*Dexterity \(DEX\)\:|^\s*Agility \(AGI\)\:|^\s*Discipline \(DIS\)\:|^\s*Aura \(AUR\)\:|^\s*Logic \(LOG\)\:|^\s*Intuition \(INT\)\:|^\s*Wisdom \(WIS\)\:|^\s*Influence \(INF\)\:/
          nil
-      elsif server_string =~ /^\s*Mana\:\s+\-?[0-9]+\s+Silver\:\s+([0-9]+)/
+      elsif server_string =~ /^\s*Mana\:\s+\-?[0-9]+\s+Silver\:\s+([0-9,]+)/
          DownstreamHook.remove('go2_check_silvers')
          nil
       else
@@ -177,8 +179,8 @@ check_silvers = proc {
    put 'info'
    silence_me if undo_silence
    while (line = get)
-      if line =~ /^\s*Mana\:\s+\-?[0-9]+\s+Silver\:\s+([0-9]+)/
-         silvers = $1.to_i
+      if line =~ /^\s*Mana\:\s+\-?[0-9]+\s+Silver\:\s+([0-9,]+)/
+         silvers = $1.gsub(',','').to_i
          break
       end
    end
@@ -187,7 +189,7 @@ check_silvers = proc {
 
 get_silver_cost = proc { |path|
    cost = 0
-   path.each_index { |index| 
+   path.each_index { |index|
       Room[path[index]].tags.each { |tag|
          if tag =~ /^silver-cost:#{path[index+1]}:(.*)$/
             cost_string = $1
