@@ -214,7 +214,7 @@ else
 				DownstreamHook.remove('infomon_cman')
 				done = true
 				nil
-			elsif server_string =~ /#{Char.name}<\/a>, your Combat Maneuver training is as follows:/
+			elsif server_string =~ /#{Char.name}<\/a>, your Combat Maneuvers are as follows:/
 				hide_lines = true
 				nil
 			else
@@ -1130,7 +1130,7 @@ while line = get
 		elsif line =~ /^Name:\s+[-A-z\s']+Race:\s+([-A-z\s]+)\s+Profession:\s+([-A-z\s]+)/
 			Stats.race = $1.strip
 			Stats.prof = $2.strip
-			if get =~ /Gender:\s+([A-z]+)\s+Age:\s+([0-9]+)\s+Expr:\s+([0-9]+)\s+Level:\s+([0-9]+)/
+			if get =~ /Gender:\s+([A-z]+)\s+Age:\s+([0-9]+)\s+Expr:\s+([0-9,]+)\s+Level:\s+([0-9]+)/
 				Stats.gender = $1
 				Stats.age = $2.to_i
 				Stats.exp = $3.to_i
@@ -1156,7 +1156,7 @@ while line = get
 				nil
 			end
 			CharSettings['cman'] = Hash.new
-		elsif (line =~ /#{Char.name}, your Combat Maneuver training is as follows:/) and defined?(CMan)
+		elsif (line =~ /#{Char.name}, your Combat Maneuvers are as follows:/) and defined?(CMan)
 			begin
 				CharSettings['cman'].keys.each { |cman| CMan[cman] = nil }
 			rescue
@@ -1164,7 +1164,7 @@ while line = get
 			end
 			CharSettings['cman'] = Hash.new
 			get
-			while get =~ /^([A-z\s']+)\s+([a-z0-9]+)\s+([0-9])\s*$/
+			while get =~ /^([A-z\s']+)\s+([a-z0-9]+)\s+([0-9])\s*$|Skill name|\-\-\-\-/
                 cman_rank = $3
 				cman_name = $1.strip.downcase.gsub(/[\s\-]/,'_').gsub("'", "")
 				
