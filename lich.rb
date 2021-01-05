@@ -4619,12 +4619,12 @@ def checkreallybleeding
 end
 
 def muckled?
-   muckled = checkwebbed or checkdead or checkstunned
+   muckled = checkwebbed || checkdead || checkstunned
    if defined?(checksleeping)
-      muckled = muckled or checksleeping
+      muckled = muckled || checksleeping
    end
    if defined?(checkbound)
-      muckled = muckled or checkbound
+      muckled = muckled || checkbound
    end
    return muckled
 end
