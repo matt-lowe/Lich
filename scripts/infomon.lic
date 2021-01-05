@@ -1441,7 +1441,7 @@ while line = get
 			$infomon_sleeping = true
 		elsif line =~ /^Your thoughts slowly come back to you as you find yourself lying on the ground\.  You must have been sleeping\.$|^You wake up from your slumber\.$|^You are awoken|^You awake/
 			$infomon_sleeping = false
-		elsif line == 'An unseen force envelopes you, restricting all movement.'
+		elsif line == 'An unseen force envelops you, restricting all movement.'
 			$infomon_bound = true
 		elsif line =~ /^The restricting force that envelops you dissolves away\.|^You shake off the immobilization that was restricting your movements!/
 			$infomon_bound = false
