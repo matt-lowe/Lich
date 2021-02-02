@@ -2352,7 +2352,7 @@
    <spell availability='all' name='Symbol of Renewal Cooldown' number='9050' type='timer'>
       <duration>2</duration>
       <message type='start'>You feel a surge of life flow through you\.</message>
-      <message type='end'>You feel your connection to vitality of nature renew itself once more\.</message>
+      <message type='end'>You feel your connection to the vitality of nature renew itself once more\.</message>
    </spell>
    <spell availability='self-cast' name='Burst of Swiftness Cooldown' number='9051' type='timer'>
       <duration>dur = { nil =&gt; 5, 1 =&gt; 5, 2 =&gt; 4, 3 =&gt; 3, 4 =&gt; 2.5, 5 =&gt; 2 }; if defined?(CMan); dur[CMan.burst_of_swiftness]; else; 5; end</duration>
