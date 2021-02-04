@@ -1681,6 +1681,13 @@
       <message type='start'>You balance your posture and narrow your eyes, preparing to misdirect your foes' attacks\.</message>
       <message type='end'>You relax your posture and blink to clear your eyes\.</message>
    </spell>
+   <spell availability='self-cast' name='Griffin&apos;'s Voice' number='9628' type='timer'>
+      <duration>240</duration>
+      <cost type='stamina'>20</cost>
+      <cast-proc>fput &quot;cman griffin&quot;</cast-proc>
+      <message type='start'>You assume the Griffin's Voice stance, altering your breathing patterns to maximize the efficiency of your warcries\.</message>
+      <message type='end'>You return to your normal breathing patterns\.</message>
+   </spell>
    <spell availability='self-cast' name='POPed muscles' number='9699'>
       <duration>10.5</duration>
       <message type='start'>You hear a loud \*POP\* come from your muscles!</message>
