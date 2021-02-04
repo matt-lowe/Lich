@@ -1539,7 +1539,7 @@
       <message type='end'>The dim celadon wisps about your hands flare up once more and fade completely away\.</message>
    </spell>
    <spell availability='self-cast' name='Tortoise Stance' number='9401' type='defense'>
-      <duration>240</duration>
+      <duration multicastable='no' span='refreshable'>240</duration>
       <cost type='stamina'>20</cost>
       <message type='start'>You (?:assume|re-settle into) the Stance of the Tortoise, holding back your offensive power in order to maximize your defense\.</message>
       <message type='end'>You relax from your continuous efforts to maximize your defense\.</message>
@@ -1625,35 +1625,35 @@
       <message type='end'>The redness fades from the world and you begin to breathe harder\.</message>
    </spell>
    <spell availability='self-cast' name='Rolling Krynch Stance' number='9620' type='timer'>
-      <duration>240</duration>
+      <duration multicastable='no' span='refreshable'>240</duration>
       <cost type='stamina'>20</cost>
       <cast-proc>fput &quot;cman krynch&quot;</cast-proc>
       <message type='start'>You (?:assume|re-settle into) the Rolling Krynch Stance\.</message>
       <message type='end'>You relax from the Rolling Krynch Stance\.</message>
    </spell>
    <spell availability='self-cast' name='Stance of the Mongoose' number='9621' type='timer'>
-      <duration>240</duration>
+      <duration multicastable='no' span='refreshable'>240</duration>
       <cost type='stamina'>20</cost>
       <cast-proc>fput &quot;cman mongoose&quot;</cast-proc>
       <message type='start'>You (?:assume|re-settle into) the Stance of the Mongoose, ready to retaliate instantly against your foes\.</message>
       <message type='end'>You relax from the Stance of the Mongoose, no longer ready to retaliate instantly against your foes\.</message>
    </spell>
    <spell availability='self-cast' name='Slippery Mind' number='9622' type='timer'>
-      <duration>240</duration>
+      <duration multicastable='no' span='refreshable'>240</duration>
       <cost type='stamina'>20</cost>
       <cast-proc>fput &quot;cman slipp&quot;</cast-proc>
       <message type='start'>You focus inward and prepare to blank your mind at a moment&apos;s notice\.</message>
       <message type='end'>You relax your mind and are no longer prepared to blank it at a moment&apos;s notice\.</message>
    </spell>
    <spell availability='self-cast' name='Flurry of Blows' number='9623' type='timer'>
-      <duration>240</duration>
+      <duration multicastable='no' span='refreshable'>240</duration>
       <cost type='stamina'>30</cost>
       <cast-proc>fput &quot;cman flurry&quot;</cast-proc>
       <message type='start'>You (?:assume|re-settle into) a stance suitable to unleash a flurry of blows\.</message>
       <message type='end'>You relax from a stance suitable to unleash a flurry of blows\.</message>
    </spell>
    <spell availability='self-cast' name='Inner Harmony' number='9624' type='timer'>
-      <duration>240</duration>
+      <duration multicastable='no' span='refreshable'>240</duration>
       <cost type='stamina'>40</cost>
       <cast-proc>fput &quot;cman iharm&quot;</cast-proc>
       <message type='start'>You (?:center your mind, body and soul and enter a|continue in your) state of inner harmony\.</message>
@@ -1681,8 +1681,8 @@
       <message type='start'>You balance your posture and narrow your eyes, preparing to misdirect your foes' attacks\.</message>
       <message type='end'>You relax your posture and blink to clear your eyes\.</message>
    </spell>
-   <spell availability='self-cast' name='Griffin&apos;'s Voice' number='9628' type='timer'>
-      <duration>240</duration>
+   <spell availability='self-cast' name='Griffin&apos;s Voice' number='9628' type='timer'>
+      <duration multicastable='no' span='refreshable'>240</duration>
       <cost type='stamina'>20</cost>
       <cast-proc>fput &quot;cman griffin&quot;</cast-proc>
       <message type='start'>You assume the Griffin's Voice stance, altering your breathing patterns to maximize the efficiency of your warcries\.</message>
