@@ -39,7 +39,7 @@
 # Lich version 5.0 and higher is intended for use only with GTK3-bindings in Ruby
 #
 
-LICH_VERSION = '5.0.1'
+LICH_VERSION = '5.0.2'
 TESTING = false
 
 if RUBY_VERSION !~ /^2|^3/
@@ -5413,16 +5413,16 @@ def checkdead
 end
 
 def checkreallybleeding
-  checkbleeding && !(Spell[9909].active? || Spell[9905].active?)
+  checkbleeding and !(Spell[9909].active? or Spell[9905].active?)
 end
 
 def muckled?
-  muckled = checkwebbed || checkdead || checkstunned
+  muckled = checkwebbed or checkdead or checkstunned
   if defined?(checksleeping)
-    muckled = muckled || checksleeping
+    muckled = muckled or checksleeping
   end
   if defined?(checkbound)
-    muckled = muckled || checkbound
+    muckled = muckled or checkbound
   end
   return muckled
 end
