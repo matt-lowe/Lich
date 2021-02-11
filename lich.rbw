@@ -10785,6 +10785,8 @@ main_thread = Thread.new {
             data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSX') }
          elsif ARGV.include?('--shattered')
             data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSF') }
+         elsif ARGV.include?('--test')
+            data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GST') }
          else
             data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GS3') }
          end
