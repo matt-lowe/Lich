@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.56'
+LICH_VERSION = '4.6.60'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -654,6 +654,11 @@ if defined?(Gtk)
             false # don't repeat timeout
          }
       end
+   end
+
+   # Define a sleep function for GTK to call while idle that lets GTK give up control of the processing for main_thread
+   def gtk_sleep_while_idle()
+      sleep 0.1
    end
 end
 
@@ -3581,7 +3586,7 @@ class Map
    end
    def Map.[](val)
       Map.load unless @@loaded
-      if (val.class == Fixnum) or (val.class == Bignum) or val =~ /^[0-9]+$/
+    if (val.class == Integer) or (val.class == Bignum) or val =~ /^[0-9]+$/
          @@list[val.to_i]
       else
          chkre = /#{val.strip.sub(/\.$/, '').gsub(/\.(?:\.\.)?/, '|')}/i
@@ -4303,7 +4308,7 @@ class Map
                   end
                }
             end
-         elsif destination.class == Fixnum
+      elsif destination.class == Integer
             until pq.size == 0
                v = pq.shift
                break if v == destination
@@ -4615,16 +4620,16 @@ def checkdead
 end
 
 def checkreallybleeding
-   checkbleeding and !(Spell[9909].active? or Spell[9905].active?)
+   checkbleeding and !(Spell[9909].active? || Spell[9905].active?)
 end
 
 def muckled?
-   muckled = checkwebbed or checkdead or checkstunned
+   muckled = checkwebbed || checkdead || checkstunned
    if defined?(checksleeping)
-      muckled = muckled or checksleeping
+      muckled = muckled || checksleeping
    end
    if defined?(checkbound)
-      muckled = muckled or checkbound
+      muckled = muckled || checkbound
    end
    return muckled
 end
@@ -5301,7 +5306,7 @@ def checkstance(num=nil)
          echo "checkstance: invalid argument (#{num}).  Must be off/adv/for/neu/gua/def or 0-100"
          nil
       end
-   elsif (num.class == Fixnum) or (num =~ /^[0-9]+$/ and num = num.to_i)
+  elsif (num.class == Integer) or (num =~ /^[0-9]+$/ and num = num.to_i)
       XMLData.stance_value == num.to_i
    else
       echo "checkstance: invalid argument (#{num}).  Must be off/adv/for/neu/gua/def or 0-100"
@@ -5320,7 +5325,7 @@ end
 def checkencumbrance(string=nil)
    if string.nil?
       XMLData.encumbrance_text
-   elsif (string.class == Fixnum) or (string =~ /^[0-9]+$/ and string = string.to_i)
+  elsif (string.class == Integer) or (string =~ /^[0-9]+$/ and string = string.to_i)
       string <= XMLData.encumbrance_value
    else
       # fixme
@@ -5587,7 +5592,7 @@ end
 def cast(spell, target=nil, results_of_interest=nil)
    if spell.class == Spell
       spell.cast(target, results_of_interest)
-   elsif ( (spell.class == Fixnum) or (spell.to_s =~ /^[0-9]+$/) ) and (find_spell = Spell[spell.to_i])
+  elsif ((spell.class == Integer) or (spell.to_s =~ /^[0-9]+$/) ) and (find_spell = Spell[spell.to_i])
       find_spell.cast(target, results_of_interest)
    elsif (spell.class == String) and (find_spell = Spell[spell])
       find_spell.cast(target, results_of_interest)
@@ -5627,7 +5632,7 @@ end
 
 def matchtimeout(secs, *strings)
    unless script = Script.current then echo("An unknown script thread tried to fetch a game line from the queue, but Lich can't process the call without knowing which script is calling! Aborting...") ; Thread.current.kill ; return false end
-   unless (secs.class == Float || secs.class == Fixnum)
+  unless (secs.class == Float || secs.class == Integer)
       echo('matchtimeout error! You appear to have given it a string, not a #! Syntax:  matchtimeout(30, "You stand up")')
       return false
    end
@@ -6539,8 +6544,8 @@ def sf_to_wiz(line)
       if line =~ /<preset id='speech'>(.*?)<\/preset>/m
          line = line.sub(/<preset id='speech'>.*?<\/preset>/m, "#{$speech_highlight_start}#{$1}#{$speech_highlight_end}")
       end
-      if line =~ /<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?:(.*?)<popStream\/>/m
-         line = line.sub(/<pushStream id="thoughts"[^>]*>(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*[\s\[\]\(\)A-z]+:.*?<popStream\/>/m, "You hear the faint thoughts of #{$1} echo in your mind:\r\n#{$2}#{$3}")
+      if line =~ /<pushStream id="thoughts"[^>]*>(\[[^\\]+\])?\s*(?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?(?:\:|thinks, )(.*?)<popStream\/>/m
+ line = line.sub(/<pushStream id="thoughts"[^>]*>(?:\[[^\\]+\]\s*)?(?:<a[^>]*>)?[A-Z][a-z]+(?:<\/a>)?\s*([\s\[\]\(\)A-z]+)?(?:\:|thinks, )(.*?)<popStream\/>/m, "You hear the faint thoughts of #{$1}#{'-' if $1}#{$2} echo in your mind:\r\n#{$3}#{$4}")
       end
       if line =~ /<pushStream id="voln"[^>]*>\[Voln \- (?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\]\s*(".*")[\r\n]*<popStream\/>/m
          line = line.sub(/<pushStream id="voln"[^>]*>\[Voln \- (?:<a[^>]*>)?([A-Z][a-z]+)(?:<\/a>)?\]\s*(".*")[\r\n]*<popStream\/>/m, "The Symbol of Thought begins to burn in your mind and you hear #{$1} thinking, #{$2}\r\n")
@@ -6990,7 +6995,7 @@ module Buffer
       @@streams[Thread.current.object_id]
    end
    def Buffer.streams=(val)
-      if (val.class != Fixnum) or ((val & 63) == 0)
+    if (val.class != Integer) or ((val & 63) == 0)
          respond "--- Lich: error: invalid streams value\n\t#{$!.caller[0..2].join("\n\t")}"
          return nil
       end
@@ -8026,7 +8031,7 @@ module Games
             Spell.load unless @@loaded
             if val.class == Spell
                val
-            elsif (val.class == Fixnum) or (val.class == String and val =~ /^[0-9]+$/)
+        elsif (val.class == Integer) or (val.class == String and val =~ /^[0-9]+$/)
                @@list.find { |spell| spell.num == val.to_i }
             else
                val = Regexp.escape(val)
@@ -8441,7 +8446,7 @@ module Games
                      cast_cmd += ' target'
                   elsif target.class == GameObj
                      cast_cmd += " ##{target.id}"
-                  elsif target.class == Fixnum
+            elsif target.class == Integer
                      cast_cmd += " ##{target}"
                   else
                      cast_cmd += " #{target}"
@@ -8621,6 +8626,7 @@ module Games
       end
 
       class CMan
+		 @@acrobats_leap		  ||= 0			## added by Doug for Cman update
          @@armor_spike_focus      ||= 0
          @@bearhug                ||= 0
          @@berserk                ||= 0
@@ -8640,6 +8646,7 @@ module Games
          @@cutthroat              ||= 0
          @@dirtkick               ||= 0
          @@disarm_weapon          ||= 0
+		 @@dislodge				  ||= 0			## added by Doug for Cman update
          @@divert                 ||= 0
          @@duck_and_weave         ||= 0
          @@dust_shroud            ||= 0
@@ -8659,7 +8666,7 @@ module Games
          @@ki_focus               ||= 0
          @@kick_mastery           ||= 0
          @@mighty_blow            ||= 0
-         @@multi_fire             ||= 0
+#         @@multi_fire             ||= 0		## removed by Doug for Cman update
          @@mystic_strike          ||= 0
          @@parry_mastery          ||= 0
          @@perfect_self           ||= 0
@@ -8668,6 +8675,7 @@ module Games
          @@punch_mastery          ||= 0
          @@quickstrike            ||= 0
          @@rolling_krynch_stance  ||= 0
+		 @@shadow_dance			  ||= 0			## added by Doug for Cman update
          @@shadow_mastery         ||= 0
          @@shield_bash            ||= 0
          @@shield_charge          ||= 0
@@ -8694,13 +8702,15 @@ module Games
          @@tackle                 ||= 0
          @@tainted_bond           ||= 0
          @@trip                   ||= 0
-         @@truehand               ||= 0
+#         @@truehand               ||= 0		## removed by Doug for Cman update
+		 @@true_strike			  ||= 0			## added by Doug for Cman update
          @@twin_hammerfists       ||= 0
          @@unarmed_specialist     ||= 0
          @@weapon_bonding         ||= 0
          @@vanish                 ||= 0
          @@whirling_dervish       ||= 0
 
+         def CMan.acrobats_leap;			@@acrobats_leap;		  end  ## Cman update add by Doug
          def CMan.armor_spike_focus;        @@armor_spike_focus;      end
          def CMan.bearhug;                  @@bearhug;                end
          def CMan.berserk;                  @@berserk;                end
@@ -8720,6 +8730,7 @@ module Games
          def CMan.cutthroat;                @@cutthroat;              end
          def CMan.dirtkick;                 @@dirtkick;               end
          def CMan.disarm_weapon;            @@disarm_weapon;          end
+         def CMan.dislodge;					@@dislodge;				  end	## Cman update add by Doug
          def CMan.divert;                   @@divert;                 end
          def CMan.duck_and_weave;           @@duck_and_weave;         end
          def CMan.dust_shroud;              @@dust_shroud;            end
@@ -8739,7 +8750,7 @@ module Games
          def CMan.ki_focus;                 @@ki_focus;               end
          def CMan.kick_mastery;             @@kick_mastery;           end
          def CMan.mighty_blow;              @@mighty_blow;            end
-         def CMan.multi_fire;               @@multi_fire;             end
+#         def CMan.multi_fire;               @@multi_fire;             end	## Cman update remove by Doug
          def CMan.mystic_strike;            @@mystic_strike;          end
          def CMan.parry_mastery;            @@parry_mastery;          end
          def CMan.perfect_self;             @@perfect_self;           end
@@ -8748,6 +8759,7 @@ module Games
          def CMan.punch_mastery;            @@punch_mastery;          end
          def CMan.quickstrike;              @@quickstrike;            end
          def CMan.rolling_krynch_stance;    @@rolling_krynch_stance;  end
+         def CMan.shadow_dance;				@@shadow_dance;			  end	## Cman update add by Doug
          def CMan.shadow_mastery;           @@shadow_mastery;         end
          def CMan.shield_bash;              @@shield_bash;            end
          def CMan.shield_charge;            @@shield_charge;          end
@@ -8774,13 +8786,15 @@ module Games
          def CMan.tackle;                   @@tackle;                 end
          def CMan.tainted_bond;             @@tainted_bond;           end
          def CMan.trip;                     @@trip;                   end
-         def CMan.truehand;                 @@truehand;               end
+#         def CMan.truehand;                 @@truehand;               end	## Cman update remove by Doug
+		 def CMan.true_strike;				@@true_strike;			  end	## Cman update add by Doug
          def CMan.twin_hammerfists;         @@twin_hammerfists;       end
          def CMan.unarmed_specialist;       @@unarmed_specialist;     end
          def CMan.vanish;                   @@vanish;                 end
          def CMan.weapon_bonding;           @@weapon_bonding;         end
          def CMan.whirling_dervish;         @@whirling_dervish;       end
 
+         def CMan.acrobats_leap=(val);			  @@acrobats_leap=val;			end	## add by Doug
          def CMan.armor_spike_focus=(val);        @@armor_spike_focus=val;      end
          def CMan.bearhug=(val);                  @@bearhug=val;                end
          def CMan.berserk=(val);                  @@berserk=val;                end
@@ -8800,6 +8814,7 @@ module Games
          def CMan.cutthroat=(val);                @@cutthroat=val;              end
          def CMan.dirtkick=(val);                 @@dirtkick=val;               end
          def CMan.disarm_weapon=(val);            @@disarm_weapon=val;          end
+		 def CMan.dislodge=(val);				  @@dislodge=val;				end	## add by Doug
          def CMan.divert=(val);                   @@divert=val;                 end
          def CMan.duck_and_weave=(val);           @@duck_and_weave=val;         end
          def CMan.dust_shroud=(val);              @@dust_shroud=val;            end
@@ -8819,7 +8834,7 @@ module Games
          def CMan.ki_focus=(val);                 @@ki_focus=val;               end
          def CMan.kick_mastery=(val);             @@kick_mastery=val;           end
          def CMan.mighty_blow=(val);              @@mighty_blow=val;            end
-         def CMan.multi_fire=(val);               @@multi_fire=val;             end
+#         def CMan.multi_fire=(val);               @@multi_fire=val;             end	## Remove by Doug
          def CMan.mystic_strike=(val);            @@mystic_strike=val;          end
          def CMan.parry_mastery=(val);            @@parry_mastery=val;          end
          def CMan.perfect_self=(val);             @@perfect_self=val;           end
@@ -8828,6 +8843,7 @@ module Games
          def CMan.punch_mastery=(val);            @@punch_mastery=val;          end
          def CMan.quickstrike=(val);              @@quickstrike=val;            end
          def CMan.rolling_krynch_stance=(val);    @@rolling_krynch_stance=val;  end
+		 def CMan.shadow_dance=(val);			  @@shadow_dance=val;			end	## add by Doug
          def CMan.shadow_mastery=(val);           @@shadow_mastery=val;         end
          def CMan.shield_bash=(val);              @@shield_bash=val;            end
          def CMan.shield_charge=(val);            @@shield_charge=val;          end
@@ -8854,7 +8870,8 @@ module Games
          def CMan.tackle=(val);                   @@tackle=val;                 end
          def CMan.tainted_bond=(val);             @@tainted_bond=val;           end
          def CMan.trip=(val);                     @@trip=val;                   end
-         def CMan.truehand=(val);                 @@truehand=val;               end
+#         def CMan.truehand=(val);                 @@truehand=val;               end ## remove by Doug
+		 def CMan.true_strike=(val);			  @@true_strike=val;			end	## add by Doug
          def CMan.twin_hammerfists=(val);         @@twin_hammerfists=val;       end
          def CMan.unarmed_specialist=(val);       @@unarmed_specialist=val;     end
          def CMan.vanish=(val);                   @@vanish=val;                 end
@@ -10728,6 +10745,13 @@ if defined?(Gtk)
    begin
       Gtk.queue {
          Gtk::Window.default_icon = GdkPixbuf::Pixbuf.new(:file => 'fly64.png')
+#		 dialog.set_icon(default_icon)
+
+         # Add a function to call for when GTK is idle
+         GLib::Idle.add do
+            gtk_sleep_while_idle
+         end
+
       }
    rescue
       nil # fixme
@@ -10761,6 +10785,8 @@ main_thread = Thread.new {
             data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSX') }
          elsif ARGV.include?('--shattered')
             data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GSF') }
+         elsif ARGV.include?('--test')
+            data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GST') }
          else
             data = entry_data.find { |d| (d[:char_name] == char_name) and (d[:game_code] == 'GS3') }
          end
@@ -10993,6 +11019,8 @@ main_thread = Thread.new {
                                  launch_data = response.sub(/^L\tOK\t/, '').split("\t")
                                  if login_info[:frontend] == 'wizard'
                                     launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+								 elsif login_info[:frontend] == 'avalon'
+                                    launch_data.collect! { |line| line.sub(/GAME=.+/, 'GAME=AVALON') }
                                  end
                                  if login_info[:custom_launch]
                                     launch_data.push "CUSTOMLAUNCH=#{login_info[:custom_launch]}"
