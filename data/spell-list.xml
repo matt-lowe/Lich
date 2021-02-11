@@ -2519,8 +2519,27 @@
    </spell>
    <spell availability='all' name='Encumbrance Boost' number='9081' type='utility'>
       <duration>15</duration>
+      <cast-proc>fput &apos;boost encumbrance&apos;</cast-proc>
       <message type='start'>\[You have activated an Encumbrance Boost.  Your net encumbrance will be reduced by 50 lbs for 15 minutes\.\]</message>
       <message type='end'>\[Your Encumbrance Boost has ended\.\]</message>
+   </spell>
+   <spell availability='all' name='Doubled Experience Boost' number='9082' type='utility'>
+      <duration>15</duration>
+      <cast-proc>fput &apos;boost experience&apos;</cast-proc>
+      <message type='start'>\[You have activated a Doubled Experience Booster!  You will absorb twice as much experience for 15 minutes\.\]</message>
+      <message type='end'>\[Your Doubled Experience Boost has ended\.\]</message>
+   </spell>
+   <spell availability='all' name='Luck Boost' number='9083' type='utility'>
+      <duration>15</duration>
+      <cast-proc>fput &apos;boost luck&apos;</cast-proc>
+      <message type='start'>\[You have activated a Luck Booster!  Your attack rolls will be a little extra lucky for 15 minutes\.\]</message>
+      <message type='end'>\[Your Luck Boost has ended\.\]</message>
+   </spell>
+   <spell availability='all' name='Item Supercharger' number='9084' type='utility'>
+      <duration>15</duration>
+      <cast-proc>fput &apos;boost supercharge&apos;</cast-proc>
+      <message type='start'>\[You have activated an Item Supercharger!  Your combat properties of your items will be super charged for 15 minutes\.\]</message>
+      <message type='end'>\[Your Item Supercharger has ended\.\]</message>
    </spell>
    <spell availability='self-cast' name='Major Loot Boost' number='9100' type='utility'>
       <duration persist-on-death='yes'>15</duration>
