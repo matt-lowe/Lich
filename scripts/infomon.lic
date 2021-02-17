@@ -9,12 +9,14 @@
                game: Gemstone
                tags: core
            required: Lich > 4.6.10
-            version: 1.18.3
+            version: 1.18.4
 
   Version Control:
     Major_change.feature_addition.bugfix
 
     changelog:
+      1.18.4 (2021-02-16):
+        Added spellup code for Beacon of Courage
       1.18.3 (2021-02-10):
         Fixed game code for test instance to GST from GSTest
       1.18.2 (2021-01-06):
@@ -1240,6 +1242,8 @@ while line = get
         Spell[9042].putdown
       elsif spell.num == 9655
         Spell[9656].putup
+      elsif spell.num == 1608
+        Spell[1699].putup
       elsif spell.num == 9627
         Spell[9052].timeleft = 5
         Spell[9052].putup
