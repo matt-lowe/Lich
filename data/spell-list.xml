@@ -1380,8 +1380,8 @@
       <duration span='stackable' multicastable='yes'>20 + Spells.paladin</duration>
       <cost type='mana'>8</cost>
       <bonus type='fof-offset'>0</bonus>
-      <message type='start'>Motes of lambent white-gold light appear and begin to swirl around you, coalescing into a radiant aura.</message>
-      <message type='end'>The aura of lambent white-gold light motes surrounding you dissipates slowly, winking out of existence.</message>
+      <message type='start'>Motes of lambent white-gold light appear and begin to swirl around you, coalescing into a radiant aura.|Wisps of lucent silvered ebon smoke appear and begin to twist around you, coalescing into an incandescent veil.|Fingers of fog-hued mist appear and begin to twirl around you, coalescing into a scintillant miasma.</message>
+      <message type='end'>The (?:aura of lambent white-gold light motes|haze of lucent silvered ebon smoke|miasma of fog-hued mist) surrounding you dissipates slowly, (?:winking out of existence|thinning until nonexistent|waning until completely diminished).</message>
    </spell>
    <spell availability='group' name='Divine Shield' number='1609' type='defense'>
       <duration max="599">599</duration>
@@ -1467,6 +1467,12 @@
       <duration>10</duration>
       <cost type='mana'>50</cost>
    </spell>
+   <spell availability='group' name='Beacon of Courage' number='1699' type='timer'>
+      <duration span='refreshable'>1</duration>
+      <message type='start'>You feel \w+'s protection extend to you as an incandescent veil coalesces around you\.</message>
+      <message type='end'>An incandescent veil fades from you\.</message>
+   </spell>
+
    <spell availability='all' name='Arcane Blast' number='1700' type='attack'>
    </spell>
    <spell availability='all' name='Arcane Decoy' number='1701' type='defense'>
