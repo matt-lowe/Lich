@@ -9,9 +9,13 @@
 	           game: Gemstone
 	           tags: core
 	       required: Lich > 4.6.10
-	        version: 1.16
+	        version: 1.18
 
 	changelog:
+	  1.18
+      fix for spell active not working after changes to spell active command for PSM3
+	  1.17
+      fixes commageddon madness - CHANGE NAME TO INFOMON.LIC and copy over old version to get it going
       1.16 (2018-07-30):
          Rename Core Tap Recovery to match spell active
 		1.15 (2018-07-22):
@@ -214,7 +218,7 @@ else
 				DownstreamHook.remove('infomon_cman')
 				done = true
 				nil
-			elsif server_string =~ /#{Char.name}<\/a>, your Combat Maneuver training is as follows:/
+			elsif server_string =~ /#{Char.name}<\/a>, your Combat Maneuvers are as follows:/
 				hide_lines = true
 				nil
 			else
@@ -1130,7 +1134,7 @@ while line = get
 		elsif line =~ /^Name:\s+[-A-z\s']+Race:\s+([-A-z\s]+)\s+Profession:\s+([-A-z\s]+)/
 			Stats.race = $1.strip
 			Stats.prof = $2.strip
-			if get =~ /Gender:\s+([A-z]+)\s+Age:\s+([0-9]+)\s+Expr:\s+([0-9]+)\s+Level:\s+([0-9]+)/
+			if get =~ /Gender:\s+([A-z]+)\s+Age:\s+([0-9]+)\s+Expr:\s+([0-9,]+)\s+Level:\s+([0-9]+)/
 				Stats.gender = $1
 				Stats.age = $2.to_i
 				Stats.exp = $3.to_i
@@ -1156,7 +1160,7 @@ while line = get
 				nil
 			end
 			CharSettings['cman'] = Hash.new
-		elsif (line =~ /#{Char.name}, your Combat Maneuver training is as follows:/) and defined?(CMan)
+		elsif (line =~ /#{Char.name}, your Combat Maneuvers are as follows:/) and defined?(CMan)
 			begin
 				CharSettings['cman'].keys.each { |cman| CMan[cman] = nil }
 			rescue
@@ -1164,7 +1168,7 @@ while line = get
 			end
 			CharSettings['cman'] = Hash.new
 			get
-			while get =~ /^([A-z\s']+)\s+([a-z0-9]+)\s+([0-9])\s*$/
+			while get =~ /^([A-z\s']+)\s+([a-z0-9]+)\s+([0-9])\s*$|Skill name|\-\-\-\-/
                 cman_rank = $3
 				cman_name = $1.strip.downcase.gsub(/[\s\-]/,'_').gsub("'", "")
 				
@@ -1457,9 +1461,9 @@ while line = get
 			$infomon_cutthroat = true
 		elsif line =~ /^\s*The horrible pain in your vocal cords subsides as you spit out the last of the blood clogging your throat\.$/
 			$infomon_cutthroat = false
-		elsif line == "You currently have the following active spells:"
+		elsif line == "You currently have the following active effects:"
 			while (line = get)
-				if line =~ /([A-z0-9\s\'\(\)\-]+) \.* (([0-9]+)\:([0-9]+)\:([0-9]+)|Indefinite)$/
+				if line =~ /\s\s([A-z0-9\s\'\(\)\-]+) \.* (([0-9]+)\:([0-9]+)\:([0-9]+)|Indefinite)$/
 					spell_name = $1
 					if $2 == 'Indefinite'
 						spell_time = 599.0
@@ -1480,6 +1484,7 @@ while line = get
 					else
 						echo "no spell matches #{spell_name}" if $infomon_debug
 					end
+				elsif line =~ /(Spells:|Cooldowns:|Buffs:|Debuffs:|No cooldowns found.|No debuffs found.|No buffs found.)/
 				elsif line
 					script.downstream_buffer.unshift(line)
 					break
