@@ -894,8 +894,8 @@
    <spell availability='all' name='Tremors' number='909' type='attack/area/utility'>
       <duration span='refreshable' multicastable='no'>20 + Spells.wizard</duration>
       <cost type='mana'>9</cost>
-      <message type='start'>Faint ripples in the (?:ground|dirt) form beneath you for a moment\.</message>
-      <message type='end'>Faint ripples in the (?:ground|dirt) beneath you become apparent before quickly dissipating\.</message>
+      <message type='start'>Faint ripples in the (?:ground|dirt|soil|floor) form beneath you for a moment\.</message>
+      <message type='end'>Faint ripples in the (?:ground|dirt|soil|floor) beneath you become apparent before quickly dissipating\.</message>
    </spell>
    <spell availability='all' name='Major Shock' number='910' stance='yes' type='attack'>
       <cost type='mana'>10</cost>
