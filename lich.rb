@@ -36,7 +36,7 @@
 # Lich is maintained by Matt Lowe (tillmen@lichproject.org)
 #
 
-LICH_VERSION = '4.6.56'
+LICH_VERSION = '4.6.57'
 TESTING = false
 
 if RUBY_VERSION !~ /^2/
@@ -10734,6 +10734,142 @@ if defined?(Gtk)
    end
 end
 
+module EAccess
+  PEM = File.join("#{DATA_DIR}/", "simu.pem")
+#  pp PEM
+  PACKET_SIZE = 8192
+
+  def self.pem_exist?
+    File.exist? PEM
+  end
+
+  def self.download_pem(hostname = "eaccess.play.net", port = 7910)
+    # Create an OpenSSL context
+    ctx = OpenSSL::SSL::SSLContext.new
+    # Get remote TCP socket
+    sock = TCPSocket.new(hostname, port)
+    # pass that socket to OpenSSL
+    ssl = OpenSSL::SSL::SSLSocket.new(sock, ctx)
+    # establish connection, if possible
+    ssl.connect
+    # write the .pem to disk
+    File.write(EAccess::PEM, ssl.peer_cert)
+  end
+
+  def self.verify_pem(conn)
+    #return if conn.peer_cert.to_s = File.read(EAccess::PEM)
+    if !(conn.peer_cert.to_s == File.read(EAccess::PEM))
+      Lich.log "Exception, \nssl peer certificate did not match #{EAccess::PEM}\nwas:\n#{conn.peer_cert}"
+      download_pem
+    else
+      return true
+  end
+#     fail Exception, "\nssl peer certificate did not match #{EAccess::PEM}\nwas:\n#{conn.peer_cert}"
+  end
+
+  def self.socket(hostname = "eaccess.play.net", port = 7910)
+    download_pem unless pem_exist?
+    socket = TCPSocket.open(hostname, port)
+    cert_store              = OpenSSL::X509::Store.new
+    ssl_context             = OpenSSL::SSL::SSLContext.new
+    ssl_context.cert_store  = cert_store
+    ssl_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
+    cert_store.add_file(EAccess::PEM) if pem_exist?
+    ssl_socket = OpenSSL::SSL::SSLSocket.new(socket, ssl_context)
+    ssl_socket.sync_close = true
+    EAccess.verify_pem(ssl_socket.connect)
+    return ssl_socket
+  end
+
+  def self.auth(password:, account:, character: nil, game_code: nil, legacy: false)
+    conn = EAccess.socket()
+    # it is vitally important to verify self-signed certs
+    # because there is no chain-of-trust for them
+    EAccess.verify_pem(conn)
+    conn.puts "K\n"
+    hashkey = EAccess.read(conn)
+    #pp "hash=%s" % hashkey
+    password = password.split('').map { |c| c.getbyte(0) }
+    hashkey = hashkey.split('').map { |c| c.getbyte(0) }
+    password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
+    password = password.map { |c| c.chr }.join
+    conn.puts "A\t#{account}\t#{password}\n"
+    response = EAccess.read(conn)
+    unless login = /KEY\t(?<key>.*)\t/.match(response)
+      eaccess_error = "Error(%s)" % response.split(/\s+/).last
+      return eaccess_error
+    end
+    #pp "A:response=%s" % response
+    conn.puts "M\n"
+    response = EAccess.read(conn)
+    fail Exception, response unless response =~ /^M\t/
+    #pp "M:response=%s" % response
+
+    unless legacy
+      conn.puts "F\t#{game_code}\n"
+      response = EAccess.read(conn)
+      fail Exception, response unless response =~ /NORMAL|PREMIUM|TRIAL|INTERNAL|FREE/
+      #pp "F:response=%s" % response
+      conn.puts "G\t#{game_code}\n"
+      EAccess.read(conn)
+      #pp "G:response=%s" % response
+      conn.puts "P\t#{game_code}\n"
+      EAccess.read(conn)
+      #pp "P:response=%s" % response
+      conn.puts "C\n"
+      response = EAccess.read(conn)
+      #pp "C:response=%s" % response
+      char_code = response.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '')
+        .scan(/[^\t]+\t[^\t^\n]+/)
+        .find { |c| c.split("\t")[1] == character }
+        .split("\t")[0]
+      conn.puts "L\t#{char_code}\tSTORM\n"
+      response = EAccess.read(conn)
+      fail Exception, response unless response =~ /^L\t/
+      #pp "L:response=%s" % response
+      conn.close unless conn.closed?
+      login_info = Hash[response.sub(/^L\tOK\t/, '')
+        .split("\t")
+        .map {|kv|
+          k,v = kv.split("=")
+          [k.downcase, v]
+        }]
+    else
+      login_info = Array.new
+      for game in response.sub(/^M\t/, '').scan(/[^\t]+\t[^\t^\n]+/)
+        game_code, game_name = game.split("\t")
+        #pp "M:response = %s" % response
+        conn.puts "N\t#{game_code}\n"
+        response = EAccess.read(conn)
+        if response =~ /STORM/
+          conn.puts "F\t#{game_code}\n"
+          response = EAccess.read(conn)
+          if response =~ /NORMAL|PREMIUM|TRIAL|INTERNAL|FREE/
+            conn.puts "G\t#{game_code}\n"
+            EAccess.read(conn)
+            conn.puts "P\t#{game_code}\n"
+            EAccess.read(conn)
+            conn.puts "C\n"
+            response = EAccess.read(conn)
+            for code_name in response.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/)
+                char_code, char_name = code_name.split("\t")
+              hash = {:game_code => "#{game_code}", :game_name => "#{game_name}",
+                      :char_code => "#{char_code}", :char_name => "#{char_name}"}
+              login_info.push(hash)
+            end
+          end
+        end
+      end
+    end
+    conn.close unless conn.closed?
+    return login_info
+  end
+
+  def self.read(conn)
+    conn.sysread(PACKET_SIZE)
+  end
+end
+
 main_thread = Thread.new {
           test_mode = false
     $SEND_CHARACTER = '>'
@@ -10769,6 +10905,16 @@ main_thread = Thread.new {
       else
          data = entry_data.find { |d| (d[:char_name] == char_name) }
       end
+
+      unless data
+         data = { char_name: char_name }
+         data[:game_code] = "DR"
+         user_id = ARGV[ARGV.index('--user_id')+1]
+         data[:user_id] = user_id
+         password = ARGV[ARGV.index('--password')+1]
+         data[:password] = password
+      end
+
       if data
          Lich.log "info: using quick game entry settings for #{char_name}"
          msgbox = proc { |msg|
@@ -10786,93 +10932,24 @@ main_thread = Thread.new {
                Lich.log(msg)
             end
          }
-   
-         login_server = nil
-         connect_thread = nil
-         timeout_thread = Thread.new {
-            sleep 30
-            $stdout.puts "error: timed out connecting to eaccess.play.net:7900"
-            Lich.log "error: timed out connecting to eaccess.play.net:7900"
-            connect_thread.kill rescue nil
-            login_server = nil
-         }
-         connect_thread = Thread.new {
-            begin
-               login_server = TCPSocket.new('eaccess.play.net', 7900)
-            rescue
-               login_server = nil
-               $stdout.puts "error connecting to server: #{$!}"
-               Lich.log "error connecting to server: #{$!}"
-            end
-         }
-         connect_thread.join
-         timeout_thread.kill rescue nil
 
-         if login_server
-            login_server.puts "K\n"
-            hashkey = login_server.gets
-            if 'test'[0].class == String
-               password = data[:password].split('').collect { |c| c.getbyte(0) }
-               hashkey = hashkey.split('').collect { |c| c.getbyte(0) }
-            else
-               password = data[:password].split('').collect { |c| c[0] }
-               hashkey = hashkey.split('').collect { |c| c[0] }
-            end
-            password.each_index { |i| password[i] = ((password[i]-32)^hashkey[i])+32 }
-            password = password.collect { |c| c.chr }.join
-            login_server.puts "A\t#{data[:user_id]}\t#{password}\n"
-            password = nil
-            response = login_server.gets
-            login_key = /KEY\t([^\t]+)\t/.match(response).captures.first
-            if login_key
-               login_server.puts "M\n"
-               response = login_server.gets
-               if response =~ /^M\t/
-                  login_server.puts "F\t#{data[:game_code]}\n"
-                  response = login_server.gets
-                  if response =~ /NORMAL|PREMIUM|TRIAL|INTERNAL|FREE/
-                     login_server.puts "G\t#{data[:game_code]}\n"
-                     login_server.gets
-                     login_server.puts "P\t#{data[:game_code]}\n"
-                     login_server.gets
-                     login_server.puts "C\n"
-                     char_code = login_server.gets.sub(/^C\t[0-9]+\t[0-9]+\t[0-9]+\t[0-9]+[\t\n]/, '').scan(/[^\t]+\t[^\t^\n]+/).find { |c| c.split("\t")[1] == data[:char_name] }.split("\t")[0]
-                     login_server.puts "L\t#{char_code}\tSTORM\n"
-                     response = login_server.gets
-                     if response =~ /^L\t/
-                        login_server.close unless login_server.closed?
-                        launch_data = response.sub(/^L\tOK\t/, '').split("\t")
-                        if data[:frontend] == 'wizard'
-                           launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
-                        elsif data[:frontend] == 'avalon'
-                           launch_data.collect! { |line| line.sub(/GAME=.+/, 'GAME=AVALON') }
-                        end
-                        if data[:custom_launch]
-                           launch_data.push "CUSTOMLAUNCH=#{data[:custom_launch]}"
-                           if data[:custom_launch_dir]
-                              launch_data.push "CUSTOMLAUNCHDIR=#{data[:custom_launch_dir]}"
-                           end
-                        end
-                     else
-                        login_server.close unless login_server.closed?
-                        $stdout.puts "error: unrecognized response from server. (#{response})"
-                        Lich.log "error: unrecognized response from server. (#{response})"
-                     end
-                  else
-                     login_server.close unless login_server.closed?
-                     $stdout.puts "error: unrecognized response from server. (#{response})"
-                     Lich.log "error: unrecognized response from server. (#{response})"
-                  end
-               else
-                  login_server.close unless login_server.closed?
-                  $stdout.puts "error: unrecognized response from server. (#{response})"
-                  Lich.log "error: unrecognized response from server. (#{response})"
-               end
-            else
-               login_server.close unless login_server.closed?
-               $stdout.puts "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
-               Lich.log "Something went wrong... probably invalid user id and/or password.\nserver response: #{response}"
-               reconnect_if_wanted.call
+         launch_data_hash = EAccess.auth(
+            account: data[:user_id],
+            password: data[:password],
+            character: data[:char_name],
+            game_code: data[:game_code]
+         )
+
+         launch_data = launch_data_hash.map { |k, v| "#{k.upcase}=#{v}" }
+         if data[:frontend] == 'wizard'
+            launch_data.collect! { |line| line.sub(/GAMEFILE=.+/, 'GAMEFILE=WIZARD.EXE').sub(/GAME=.+/, 'GAME=WIZ').sub(/FULLGAMENAME=.+/, 'FULLGAMENAME=Wizard Front End') }
+         elsif data[:frontend] == 'avalon'
+            launch_data.collect! { |line| line.sub(/GAME=.+/, 'GAME=AVALON') }
+         end
+         if data[:custom_launch]
+            launch_data.push "CUSTOMLAUNCH=#{login_info[:custom_launch]}"
+            if login_info[:custom_launch_dir]
+               launch_data.push "CUSTOMLAUNCHDIR=#{login_info[:custom_launch_dir]}"
             end
          else
             $stdout.puts "error: failed to connect to server"
